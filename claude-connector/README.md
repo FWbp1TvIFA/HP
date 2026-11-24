@@ -1,6 +1,6 @@
 # Happy Home for Claude
 
-A small connector (a remote MCP server) that lets the Claude apps (web, desktop, iPhone and Android) read and add to the family's Happy Home: tasks and chore stars, calendar and weekly activities, homework, the shopping list, spending and budgets, notes, bills, the dinner plan, birthdays and countdowns, alarms, and the Family board. You can ask by typing, by talking, or by sending a photo of a receipt, a school newsletter or a handwritten list.
+A small connector (a remote MCP server) that lets the Claude apps (web, desktop, iPhone and Android) read and add to the family's Happy Home: tasks and chore stars, calendar and weekly activities, homework, the shopping list, spending and budgets, notes, bills, the dinner plan, birthdays and countdowns, alarms, the family's own piano songs, and the Family board. You can ask by typing, by talking, or by sending a photo of a receipt, a school newsletter or a handwritten list.
 
 It lives in its own folder and does not change the app. It runs free on Vercel's Hobby plan.
 
@@ -11,14 +11,14 @@ It lives in its own folder and does not change the app. It runs free on Vercel's
 - **It keeps no database.** The sign-in codes and tokens it gives Claude are encrypted with the `HH_SECRET` key and expire. They contain your Happy Home sign-in, so only this server can use them.
 - **It only works with Claude.** Sign-in results are only ever sent back to Claude's own address (`https://claude.ai/api/mcp/auth_callback`), or to an app on your own computer such as Claude Code. PKCE is required.
 - **How to stop it.** Remove the connector in Claude. To cut off every copy at once, change your Happy Home password; within the hour Claude has to sign in again.
-- **What it never touches.** It never reads or writes wallet cards, moods, mood checks, locations, Chinese and piano practice (`learn`, `songs`), profile photos (`profiles`), notification settings (`notify`, `pushSubs`), or anyone's private `users/` records. It never changes the family's own settings (names, budgets, members). The code only allows the collections listed in `ALLOWED_COLLECTIONS` in `src/family.js`.
+- **What it never touches.** It never reads or writes wallet cards, moods, mood checks, locations, Chinese and piano practice (`learn`, and the `piano-` and `learn-` stars), profile photos (`profiles`), notifications (`notify`, including the reminder list and the helper's state, and each phone's private push address in `pushSubs`), or anyone's private `users/` records. It never changes the family document (names, budgets, members, or the notification helper's `push` settings and sign-in). The code only allows the collections listed in `ALLOWED_COLLECTIONS` in `src/family.js`.
 
 ## Tools Claude gets
 
 | Tool | What it does |
 | --- | --- |
 | `get_overview` | Today's date, the family, Family board messages, overdue and upcoming tasks, the calendar (with weekly activities), homework, dinners, bills due, countdowns, the shopping list, and this month's money |
-| `find_items` | Looks things up and gives their ids: tasks, events, homework, shopping, money, notes, bills, meals, countdowns, board, alarms |
+| `find_items` | Looks things up and gives their ids: tasks, events, homework, shopping, money, notes, bills, meals, countdowns, board, alarms, songs |
 | `money_summary` | A month's spending by category against the budgets, the biggest spends, income, bills still to come, and last month's total |
 | `add_items` | Adds any mix of things in one atomic call, for example everything on a newsletter photo |
 | `update_items` | Changes fields on existing items |
@@ -28,6 +28,8 @@ It lives in its own folder and does not change the app. It runs free on Vercel's
 Every write uses the same fields, defaults and side effects as the app, including `createdAt` and `by` for the Live feed, `doneAt` when something is ticked off, and `remind` when a particular reminder is asked for. Dates are worked out in Australia/Brisbane time.
 
 People can be named the way the family says them: the name shown in the app (such as Dad or Mum), an earlier name the app keeps as `aka`, or mum, mom, mummy, dad, daddy. A whole name always wins over a first name or an earlier name, the mum and dad words only find someone the app calls Mum or Dad, and two people in one answer ("Mum and Dad") are sent back to Claude to choose, because each item belongs to one person or the whole family. New alarms are for the signed-in person unless another person or Family is named, like the app's alarm screen.
+
+Songs for the Piano page are written in the app's own note format (`C C G G | A A G-`). The connector checks them with a copy of the piano page's note reader (`src/songs.js`) and refuses anything the page couldn't read, so a saved song always plays.
 
 ## Setup (once)
 

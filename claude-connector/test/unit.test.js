@@ -230,12 +230,12 @@ test("people: whole names win, the mum and dad words never guess, two people are
 
 test("only the agreed collections can ever be touched", () => {
   const f = new Family({ cfg: {}, fs: null, uid: "u1", fid: "F", settings: { people: [] }, tz: "Australia/Brisbane" });
-  for (const ok of ["tasks", "events", "homework", "shopping", "tx", "notes", "bills", "meals", "countdowns", "board", "alarms", "stars", "shopFreq"]) assert.deepEqual(f.col(ok), ["families", "F", ok]);
-  for (const never of ["wallet", "moods", "moodSessions", "locations", "learn", "profiles", "notify", "pushSubs", "songs", "users"]) {
+  for (const ok of ["tasks", "events", "homework", "shopping", "tx", "notes", "bills", "meals", "countdowns", "board", "alarms", "stars", "shopFreq", "songs"]) assert.deepEqual(f.col(ok), ["families", "F", ok]);
+  for (const never of ["wallet", "moods", "moodSessions", "locations", "learn", "profiles", "notify", "pushSubs", "users"]) {
     assert.throws(() => f.col(never), /not one this connector may touch/, never);
     assert.throws(() => f.doc(never, "x"), /not one this connector may touch/, never);
   }
-  assert.deepEqual([...ALLOWED_COLLECTIONS].sort(), ["alarms", "bills", "board", "countdowns", "events", "homework", "meals", "notes", "shopFreq", "shopping", "stars", "tasks", "tx"]);
+  assert.deepEqual([...ALLOWED_COLLECTIONS].sort(), ["alarms", "bills", "board", "countdowns", "events", "homework", "meals", "notes", "shopFreq", "shopping", "songs", "stars", "tasks", "tx"]);
   // Every type a tool can name maps to an allowed collection.
   for (const c of Object.values(TYPE_COLLECTION)) assert.ok(ALLOWED_COLLECTIONS.includes(c), c);
   assert.match(nowTimeIn("Australia/Brisbane", new Date("2026-11-24T14:05:00Z")), /^00:05$/);
@@ -275,4 +275,26 @@ test("home page and setup-not-finished state", async () => {
   // The Vercel rewrite passes the original path as a query parameter.
   const viaRewrite = await handle(new Request("https://hh.example/api/index?__hh_path=.well-known/oauth-protected-resource/mcp"), {});
   assert.equal((await viaRewrite.json()).resource, "https://hh.example/mcp");
+});
+
+test("songs are read exactly as the app's piano page reads them", async () => {
+  const { parseSong, safeYt, noteCount } = await import("../src/songs.js");
+  assert.equal(noteCount("C C G G | A A G- | F F E E | D D C-"), 14);
+  assert.deepEqual(parseSong("C#5- Bb/ _ do'").notes, [{ midi: 73, beats: 2 }, { midi: 70, beats: 0.5, flat: true }, { midi: null, beats: 1 }, { midi: 72, beats: 1 }]);
+  assert.deepEqual(parseSong("C9 xyz").errors, ['"C9" is too high for a piano.', 'I do not understand "xyz".']);
+  assert.equal(safeYt("https://youtu.be/abc"), "https://youtu.be/abc"); assert.equal(safeYt("http://youtube.com/x"), ""); assert.equal(safeYt("https://evil.example/youtube.com"), "");
+  // When the app's own piano.js is next to the connector (this repo), the copy must give the same answer on everything.
+  const fs = await import("node:fs"), url = await import("node:url");
+  const appFile = url.fileURLToPath(new URL("../../piano.js", import.meta.url));
+  if (!fs.existsSync(appFile)) return;
+  const sandbox = { document: { addEventListener() {}, documentElement: {}, createElement: () => ({ style: {} }), querySelector: () => null }, localStorage: { getItem: () => null, setItem() {} } };
+  sandbox.window = sandbox;
+  const vm = await import("node:vm"); vm.runInNewContext(fs.readFileSync(appFile, "utf8"), sandbox);
+  const app = sandbox.HHPiano.parseSong;
+  const bits = ["C", "D", "E", "F", "G", "A", "B", "c", "b", "#", "b", "'", ",", "4", "5", "3", "-", "/", ".", "_", "R", "|", " ", " ", " ", "do", "re", "sol", "x", "♯", "♭", "—", "’"];
+  let seed = 11; const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  for (let i = 0; i < 5000; i++) {
+    let s = ""; for (let j = Math.floor(rnd() * 30); j > 0; j--) s += bits[Math.floor(rnd() * bits.length)];
+    assert.deepEqual(JSON.parse(JSON.stringify(parseSong(s))), JSON.parse(JSON.stringify(app(s))), JSON.stringify(s));
+  }
 });
