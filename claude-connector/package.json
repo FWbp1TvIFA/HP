@@ -1,0 +1,14 @@
+{
+  "name": "happy-home-claude-connector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lets Claude add to and read from the family's Happy Home app (MCP connector with its own sign-in).",
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "node dev-server.js",
+    "test": "node --test test/unit.test.js"
+  }
+}
