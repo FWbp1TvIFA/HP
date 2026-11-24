@@ -183,6 +183,37 @@ test("people are found by the name in the app, an earlier name, or mum and dad w
   assert.equal(h.who("Akiyo"), 2); assert.equal(h.namesList(), "Jugo, Akiyo, Old (you)"); assert.throws(() => h.who("mum"));
 });
 
+test("people: whole names win, the mum and dad words never guess, two people are refused", () => {
+  const fam = (people, uid = "u1") => new Family({ cfg: {}, fs: null, uid, fid: "F", settings: { people }, tz: "Australia/Brisbane" });
+  // A child called John still wins over Dad, whose earlier name was John Smith; the same for Sam and Sam Lee.
+  const a = fam([{ id: 1, name: "Dad", aka: "John Smith", uid: "u1" }, { id: 2, name: "Mum", aka: "Mary Smith" }, { id: 3, name: "John" }]);
+  for (const [said, id] of [["John", 3], ["john's", 3], ["John Smith", 1], ["Dad", 1], ["my dad", 1], ["Mary", 2], ["mummy", 2]]) assert.equal(a.who(said), id, said);
+  const b = fam([{ id: 1, name: "John Smith", uid: "u1" }, { id: 2, name: "John" }, { id: 3, name: "Amy" }, { id: 4, name: "Sam Lee" }, { id: 5, name: "Sam" }]);
+  for (const [said, id] of [["John", 2], ["john smith", 1], ["Sam", 5], ["sam lee", 4], ["Amy", 3]]) assert.equal(b.who(said), id, said);
+  // "My Linh" is a name, not "my" + "Linh".
+  const c = fam([{ id: 1, name: "Dad", aka: "Minh", uid: "u1" }, { id: 2, name: "Mum", aka: "Lan" }, { id: 3, name: "My Linh" }, { id: 4, name: "The Kid" }]);
+  for (const [said, id] of [["My Linh", 3], ["my linh's", 3], ["The Kid", 4], ["the dad", 1], ["my mum", 2], ["me", 1]]) assert.equal(c.who(said), id, said);
+  assert.equal(fam([{ id: 1, name: "Old", uid: "u1" }, { id: 2, name: "My Linh Nguyen" }]).who("My Linh"), 2);
+  // With nobody called Mum, "my mom" is a question for the person, never a child called Momoko.
+  const d = fam([{ id: 1, name: "Hiroshi", uid: "u1" }, { id: 2, name: "Akiyo" }, { id: 3, name: "Jugo" }, { id: 4, name: "Momoko" }]);
+  for (const said of ["my mom", "our mom", "the mom", "mom", "Mum", "dad"]) assert.throws(() => d.who(said), /I don't know who/, said);
+  assert.equal(d.who("Momo"), 4);
+  // Short starts of real names still work, and the mum and dad words don't get in the way.
+  const e = fam([{ id: 1, name: "Dad", uid: "u1" }, { id: 2, name: "Mum" }, { id: 3, name: "Molly" }, { id: 4, name: "Max" }, { id: 5, name: "Patrick" }]);
+  for (const [said, id] of [["mo", 3], ["ma", 4], ["pa", 5], ["mu", 2], ["da", 1], ["mom", 2], ["papa", 1]]) assert.equal(e.who(said), id, said);
+  const g = fam([{ id: 1, name: "Old", uid: "u1" }, { id: 2, name: "Akiyo" }, { id: 3, name: "Jugo" }]);
+  for (const [said, id] of [["J", 3], ["a", 2], ["O", 1]]) assert.equal(g.who(said), id, said);
+  const h = fam([{ id: 1, name: "Dad", aka: "Nyein Chan", uid: "u1" }, { id: 2, name: "Mum", aka: "Akiyo" }, { id: 3, name: "Jugo" }]);
+  for (const [said, id] of [["D", 1], ["M", 2], ["J", 3], ["Nyein", 1], ["ny", 1]]) assert.equal(h.who(said), id, said);
+  assert.throws(() => h.who("N"), /I don't know who/);
+  // Happy Home keeps one person on each item, so a list of people is sent back with the choices.
+  for (const said of ["Mum and Dad", "Akiyo & Jugo", "Nyein, Akiyo", "my mum + my dad", "Nyein Chan and Akiyo"]) {
+    assert.throws(() => h.who(said), /is more than one person[\s\S]*The family is: Jugo, Mum/, said);
+    assert.throws(() => h.who(said, { allowFamily: true }), /"Family" for everyone/, said);
+  }
+  assert.equal(h.who("Mum and mummy"), 2);
+});
+
 test("only the agreed collections can ever be touched", () => {
   const f = new Family({ cfg: {}, fs: null, uid: "u1", fid: "F", settings: { people: [] }, tz: "Australia/Brisbane" });
   for (const ok of ["tasks", "events", "homework", "shopping", "tx", "notes", "bills", "meals", "countdowns", "board", "alarms", "stars", "shopFreq"]) assert.deepEqual(f.col(ok), ["families", "F", ok]);

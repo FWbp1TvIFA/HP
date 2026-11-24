@@ -86,16 +86,36 @@ export class Family {
       throw new UserError(`This needs one person, not the whole family. Choose one of: ${this.namesList()}.`);
     }
     if (PRONOUNS.includes(s)) return this.meId;
+    const unknown = () => new UserError(`I don't know who "${raw.slice(0, 40)}" is in Happy Home. The family is: ${this.namesList()}${allowFamily ? ', or "Family" for everyone' : ""}.`);
+    const low = v => String(v ?? "").trim().toLowerCase();
+    const people = this.peopleRaw.map(p => {
+      const name = low(p.name), extra = ROLE_WORDS[name] || [];
+      // For a part of a name, use real names only: "mo" is Molly, not Mum because of "mom".
+      return { id: p.id, name, aka: low(p.aka), first: name.split(/\s+/)[0], names: namesOf(p), partial: namesOf(p).filter(n => n === name || !extra.includes(n)) };
+    });
+    const one = list => (list.length === 1 ? list[0].id : null);
+    // Whole names first, then the current first name, then earlier first names and the mum and dad words,
+    // so a child called John still wins over Dad whose earlier name was John Smith.
+    const whole = t => one(people.filter(p => p.name === t)) ?? one(people.filter(p => p.aka && p.aka === t))
+      ?? one(people.filter(p => p.first === t)) ?? one(people.filter(p => p.names.includes(t)));
+    let id = whole(s);                                        // "My Linh" is a name, not "my" + "Linh"
+    if (id !== null) return id;
     const t = s.replace(/^(?:my|our|the)\s+/, "");            // "my mum" -> "mum"
-    const people = this.peopleRaw.map(p => ({ id: p.id, names: namesOf(p) }));
-    const exact = people.filter(p => p.names.includes(t));
-    if (exact.length === 1) return exact[0].id;
-    const starts = people.filter(p => p.names.some(n => (t.length >= 2 && n.startsWith(t)) || t.startsWith(n + " ")));
+    if (t !== s && (id = whole(t)) !== null) return id;
+    // "Mum and Dad", "Akiyo & Jugo": Happy Home keeps one person on each item.
+    const parts = t.split(/\s*(?:,|&|\+|\band\b)\s*/).filter(Boolean);
+    if (parts.length > 1) {
+      const found = [...new Set(parts.map(x => whole(x.replace(/^(?:my|our|the)\s+/, ""))).filter(x => x !== null))];
+      if (found.length > 1) throw new UserError(`"${raw.slice(0, 40)}" is more than one person. Each item in Happy Home is for one person${allowFamily ? ', or "Family" for everyone' : ""}. The family is: ${this.namesList()}.`);
+    }
+    // The mum and dad words only ever match someone the app calls Mum or Dad, never "Momoko".
+    if (Object.values(ROLE_WORDS).flat().includes(t)) throw unknown();
+    const starts = people.filter(p => p.partial.some(n => ((t.length >= 2 || n === p.name) && n.startsWith(t)) || (t !== s && n.startsWith(s)) || t.startsWith(n + " ")));
     if (starts.length === 1) return starts[0].id;
     const words = t.split(/\s+/);
-    const word = people.filter(p => p.names.some(n => words.includes(n)));
+    const word = people.filter(p => p.partial.some(n => words.includes(n)));
     if (word.length === 1) return word[0].id;
-    throw new UserError(`I don't know who "${raw.slice(0, 40)}" is in Happy Home. The family is: ${this.namesList()}${allowFamily ? ', or "Family" for everyone' : ""}.`);
+    throw unknown();
   }
 
   money(n) {

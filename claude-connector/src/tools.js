@@ -386,7 +386,7 @@ async function addItems(f, args) {
   });
 
   each("alarms", a => {
-    const rec = { ...alarmFields(f, { title: text(a.title, 120, "Title") || "Alarm", time: need(timeArg(a.time), "time (HH:MM)"), who: f.who(a.who, { allowFamily: true, fallback: 0 }), days: weekdays(a.weekly_on_days) || [], date: dateArg(a.date, f, f.today) }), on: true, createdAt: now, by };
+    const rec = { ...alarmFields(f, { title: text(a.title, 120, "Title") || "Alarm", time: need(timeArg(a.time), "time (HH:MM)"), who: f.who(a.who, { allowFamily: true, fallback: f.meId }), days: weekdays(a.weekly_on_days) || [], date: dateArg(a.date, f, f.today) }), on: true, createdAt: now, by };
     const id = newId(); writes.push(f.fs.create(f.doc("alarms", id), rec)); done.push("Alarm: " + show(f, "alarms", { ...rec, id }));
   });
   each("board", m => {
@@ -477,6 +477,7 @@ async function updateItems(f, args) {
             const date = has("date") ? need(dateArg(c.date, f, null), "date") : (cur.date && cur.date >= f.today ? cur.date : f.today);
             const a = alarmFields(f, { title: "", time: need(has("time") ? fields.time : cur.time, "time (HH:MM)"), who: 0, days, date });
             fields.time = a.time; fields.days = a.days; fields.date = a.date;
+            if (!has("on")) fields.on = true;   // saving a new time in the app switches the alarm back on
           }
           break; }
         case "shopping":
@@ -586,6 +587,7 @@ async function deleteItems(f, args) {
   const writes = [], out = [];
   docs.forEach(x => {
     const path = f.doc(TYPE_COLLECTION[type], x.id);
+    if (skipDate && type === "alarms" && Array.isArray(x.days) && x.days.length) throw new UserError(`${show(f, "alarms", x)} rings every week, and an alarm can't skip just one day. To stop it for now, use update_items with on: false. Nothing was deleted.`);
     if (skipDate && type === "events" && isRep(x)) {
       writes.push(f.fs.patch(path, { skip: [...new Set([...(x.skip || []), skipDate])] }));
       out.push(`Skipped just ${niceDate(skipDate, f.today)} for ${show(f, "events", x)}`);
@@ -601,7 +603,7 @@ async function deleteItems(f, args) {
 /* ---------------- tool definitions (descriptions use the family's own names) ---------------- */
 export function toolDefinitions(f) {
   const names = f ? f.namesList({ you: false }) : "a family member's name";
-  const me = f && f.myName ? ` Defaults to the signed-in person (${f.myName}).` : " Defaults to the signed-in person.";
+  const me = f && f.myName ? `. Defaults to the signed-in person (${f.myName})` : ". Defaults to the signed-in person";
   const who = extra => ({ type: "string", description: `Who it's for: ${names}${extra || ""}.` });
   const cats = f ? f.categories.join(", ") : "the family's categories";
   // No "today is" here: the tool list can be kept for days, and get_overview gives today's date.
@@ -668,7 +670,7 @@ export function toolDefinitions(f) {
           bills: { type: "array", description: "Regular bills and subscriptions.", items: { type: "object", required: ["name", "amount"], additionalProperties: false, properties: {
             name: { type: "string", description: "e.g. Electricity, Netflix, Rent" }, amount: { type: "number" },
             every: { type: "string", enum: EVERY, description: "How often. Default month." }, next_due: date("Next due date, default today"),
-            category: { type: "string", description: `Default Bills. One of: ${cats}.` }, who: who(" (who pays)" + me.replace(".", "")),
+            category: { type: "string", description: `Default Bills. One of: ${cats}.` }, who: who(" (who pays)" + me),
             paid_automatically: { type: "boolean", description: "Direct debit: the app records it by itself on the due date." } } } },
           meals: { type: "array", description: "Dinner plan, one per date. Replaces any dinner already planned that night.", items: { type: "object", required: ["title", "date"], additionalProperties: false, properties: {
             date: date("Night"), title: { type: "string", description: "What's for dinner." }, ingredients: { type: "array", items: { type: "string" } },
@@ -678,7 +680,7 @@ export function toolDefinitions(f) {
             title: { type: "string", description: "What it's for, e.g. 'Leave for swimming'. Default Alarm." }, time: { type: "string", description: "Time as 24-hour HH:MM, e.g. 06:45." },
             weekly_on_days: { type: "array", items: { type: "string", enum: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] }, description: "Ring every week on these days. Leave out for a one-time alarm." },
             date: date("For a one-time alarm: the day (default today, or tomorrow if that time has passed)"),
-            who: who(", or Family (the default) for everyone") } } },
+            who: who(", or Family for everyone" + me) } } },
           board: { type: "array", description: "Short messages for the whole family on the Family board on the app's Today screen, e.g. 'Home late tonight, dinner in the fridge'. Posted as the signed-in person.", items: { type: "object", required: ["text"], additionalProperties: false, properties: {
             text: { type: "string", description: "The message (up to 500 characters)." } } } },
           countdowns: { type: "array", description: "Birthdays, anniversaries, trips and other days to count down to.", items: { type: "object", required: ["title", "date"], additionalProperties: false, properties: {
@@ -712,7 +714,7 @@ export function toolDefinitions(f) {
       description: "Permanently delete items from Happy Home for the whole family. Only use when the person clearly asked to delete those exact items; say what you will delete first if there's any doubt. For a weekly activity, give only_this_date to skip one day instead of deleting every week.",
       inputSchema: { type: "object", required: ["type", "ids"], additionalProperties: false, properties: {
         type: type(), ids: { type: "array", items: { type: "string" } },
-        only_this_date: date("For weekly activities only: skip just this day") } },
+        only_this_date: date("For weekly calendar activities only (not alarms): skip just this day") } },
       annotations: { title: "Delete items", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false }, run: deleteItems,
     },
   ];
@@ -721,5 +723,5 @@ export function toolDefinitions(f) {
 export const SERVER_INSTRUCTIONS = `Happy Home is this family's shared organiser app (tasks and chores with stars, calendar and weekly activities, homework, shopping list, spending and budgets, notes, bills, dinner plan, birthdays and countdowns, alarms). Everything you add appears for the whole family in the app straight away.
 - Call get_overview first when you need today's date, the family's names, or what's already planned. Dates are YYYY-MM-DD in the family's time zone (Australia/Brisbane); money is in the family's currency (Australian dollars).
 - When the person shares a photo (receipt, school newsletter, invitation, timetable, recipe, handwritten list), pull out the details and save them with one add_items call, then say briefly what you added. Don't invent dates, times or amounts that aren't shown or said; ask when unsure.
-- People can be named the way the family says them: their name in the app (for example Dad, Mum), an earlier name, or mum, mom, dad, daddy.
+- People can be named the way the family says them: their name in the app (for example Dad, Mum), an earlier name, or mum, mom, dad, daddy. Each item is for one person (or Family where that is offered), so for "Mum and Dad" ask which one, or use Family.
 - To change, tick off or delete something, get its id from find_items or get_overview first. Only delete when asked.`;
