@@ -6,7 +6,7 @@ import { newId } from "./crypto.js";
 import { safeId, MAX_WRITES } from "./firebase.js";
 
 /* ---------------- shared bits ---------------- */
-export const TYPE_COLLECTION = { tasks: "tasks", events: "events", homework: "homework", shopping: "shopping", money: "tx", notes: "notes", bills: "bills", meals: "meals", countdowns: "countdowns", board: "board" };
+export const TYPE_COLLECTION = { tasks: "tasks", events: "events", homework: "homework", shopping: "shopping", money: "tx", notes: "notes", bills: "bills", meals: "meals", countdowns: "countdowns", board: "board", alarms: "alarms" };
 const TYPE_LIST = Object.keys(TYPE_COLLECTION);
 const DAYN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_INDEX = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
@@ -14,6 +14,18 @@ const EVERY = ["week", "fortnight", "month", "quarter", "year"];
 const REPEAT = ["none", "daily", "weekly", "monthly"];
 const KINDS = ["birthday", "anniversary", "trip", "other"];
 const STAR_CHOICES = [0, 1, 2, 3, 5, 10];
+// The app's reminder choices, in minutes before the time (-1 = no reminder).
+const LEADS = [-1, 0, 5, 10, 15, 30, 60, 120, 1440];
+const leadText = n => +n < 0 ? "no reminder" : +n === 0 ? "reminder at the time" : +n === 1440 ? "reminder 1 day before" : +n >= 60 ? `reminder ${+n / 60} hour${+n === 60 ? "" : "s"} before` : `reminder ${+n} min before`;
+/** undefined = not given; null = the family's usual reminder; otherwise one of the app's choices. */
+const remindArg = v => {
+  if (v === undefined) return undefined;
+  if (v === null || v === "" || (typeof v === "string" && /^(usual|default|normal)$/i.test(v.trim()))) return null;
+  if (v === false || (typeof v === "string" && /^(none|no|off|never)$/i.test(v.trim()))) return -1;
+  const n = typeof v === "number" ? v : /^-?\d+$/.test(String(v).trim()) ? +String(v).trim() : NaN;
+  if (!LEADS.includes(n)) throw new UserError(`remind_minutes_before must be one of ${LEADS.join(", ")} (-1 means no reminder), or left out for the usual reminder.`);
+  return n;
+};
 
 const wrap = fn => { try { return fn(); } catch (e) { if (e instanceof UserInputError) throw new UserError(e.message); throw e; } };
 const text = (v, max, label) => {
@@ -49,7 +61,7 @@ const ids = (v, label = "ids") => {
 };
 const typeArg = (v, allowed = TYPE_LIST) => {
   const s = String(v || "").toLowerCase().trim();
-  const alias = { task: "tasks", event: "events", calendar: "events", spending: "money", tx: "money", transactions: "money", note: "notes", bill: "bills", meal: "meals", dinner: "meals", countdown: "countdowns", shop: "shopping", message: "board", messages: "board", "family board": "board" }[s] || s;
+  const alias = { task: "tasks", event: "events", calendar: "events", spending: "money", tx: "money", transactions: "money", note: "notes", bill: "bills", meal: "meals", dinner: "meals", countdown: "countdowns", alarm: "alarms", shop: "shopping", message: "board", messages: "board", "family board": "board" }[s] || s;
   if (!allowed.includes(alias)) throw new UserError(`Type must be one of: ${allowed.join(", ")}.`);
   return alias;
 };
@@ -71,11 +83,13 @@ function weekdays(v) {
 function show(f, type, x, opts = {}) {
   const id = ` [id: ${x.id}]`;
   switch (type) {
-    case "tasks": return `${x.done ? "✓ " : ""}${x.title} (${f.name(x.who)})${x.due ? ", due " + niceDate(x.due, f.today) : ", any time"}${x.time ? " at " + niceTime(x.time) : ""}${x.repeat && x.repeat !== "none" ? ", repeats " + x.repeat : ""}${+x.points > 0 ? `, ★${+x.points} stars` : ""}${id}`;
+    case "tasks": return `${x.done ? "✓ " : ""}${x.title} (${f.name(x.who)})${x.due ? ", due " + niceDate(x.due, f.today) : ", any time"}${x.time ? " at " + niceTime(x.time) : ""}${x.repeat && x.repeat !== "none" ? ", repeats " + x.repeat : ""}${+x.points > 0 ? `, ★${+x.points} stars` : ""}${rem(x)}${id}`;
     case "events":
-      if (isRep(x) && !opts.occurrence) return `Every ${daysText(x.days)}${x.time ? " at " + niceTime(x.time) : ""}: ${x.title}${x.place ? " at " + x.place : ""} (${f.name(x.who)}), from ${niceDate(x.date, f.today)}${x.until ? " until " + niceDate(x.until, f.today) : ""}${x.skip?.length ? `, skipping ${x.skip.length} date(s)` : ""}${id}`;
-      return `${niceDate(x.date, f.today)}${x.time ? " " + niceTime(x.time) : ""}: ${x.title}${x.place ? " at " + x.place : ""} (${f.name(x.who)})${isRep(x) ? ", weekly activity" : ""}${id}`;
-    case "homework": return `${x.done ? "✓ " : ""}${x.subject || "Homework"}: ${x.title} (${f.name(x.who)})${x.due ? ", due " + niceDate(x.due, f.today) : ""}${x.time ? " at " + niceTime(x.time) : ""}${!x.done && x.due && x.due < f.today ? " (overdue)" : ""}${id}`;
+      if (isRep(x) && !opts.occurrence) return `Every ${daysText(x.days)}${x.time ? " at " + niceTime(x.time) : ""}: ${x.title}${x.place ? " at " + x.place : ""} (${f.name(x.who)}), from ${niceDate(x.date, f.today)}${x.until ? " until " + niceDate(x.until, f.today) : ""}${x.skip?.length ? `, skipping ${x.skip.length} date(s)` : ""}${rem(x)}${id}`;
+      return `${niceDate(x.date, f.today)}${x.time ? " " + niceTime(x.time) : ""}: ${x.title}${x.place ? " at " + x.place : ""} (${f.name(x.who)})${isRep(x) ? ", weekly activity" : ""}${rem(x)}${id}`;
+    case "homework": return `${x.done ? "✓ " : ""}${x.subject || "Homework"}: ${x.title} (${f.name(x.who)})${x.due ? ", due " + niceDate(x.due, f.today) : ""}${x.time ? " at " + niceTime(x.time) : ""}${!x.done && x.due && x.due < f.today ? " (overdue)" : ""}${rem(x)}${id}`;
+    case "alarms": { const weekly = Array.isArray(x.days) && x.days.length > 0;
+      return `⏰ ${x.time ? niceTime(x.time) : "no time"} ${x.title || "Alarm"}, ${weekly ? "every " + daysText(x.days) : x.date ? niceDate(x.date, f.today) : "once"} (${+x.who ? f.name(x.who) : "everyone"})${x.on === false ? ", switched off" : ""}${id}`; }
     case "shopping": return `${x.done ? "✓ " : ""}${x.name}${x.qty ? " (" + x.qty + ")" : ""}${id}`;
     case "money": return `${niceDate(x.date, f.today)}: ${x.type === "in" ? "+" : "-"}${f.money(x.amount)} ${x.cat || ""}${x.note ? " — " + x.note : ""} (${f.name(x.who)})${id}`;
     case "notes": {
@@ -91,6 +105,7 @@ function show(f, type, x, opts = {}) {
   }
   return JSON.stringify(x);
 }
+const rem = x => x.remind === undefined || x.remind === null || !x.time ? "" : ", " + leadText(x.remind);
 function agoText(ms) {
   const m = Math.round((Date.now() - (+ms || 0)) / 60000);
   if (!(+ms > 0)) return "some time ago";
@@ -116,10 +131,10 @@ async function getOverview(f, args) {
   const days = Math.min(31, Math.max(1, Math.round(+args.days || 7)));
   const end = addDays(f.today, days - 1), month = f.today.slice(0, 7);
   const famPath = ["families", f.fid];
-  const [tasks, events, homework, shopping, bills, meals, countdowns, tx, board] = await Promise.all([
+  const [tasks, events, homework, shopping, bills, meals, countdowns, tx, board, alarms] = await Promise.all([
     f.fs.list(f.col("tasks")), f.fs.list(f.col("events")), f.fs.list(f.col("homework")), f.fs.list(f.col("shopping")),
     f.fs.list(f.col("bills")), f.fs.range(famPath, "meals", "date", f.today, end), f.fs.list(f.col("countdowns")),
-    f.fs.range(famPath, "tx", "date", month + "-01", month + "-31"), f.fs.list(f.col("board")),
+    f.fs.range(famPath, "tx", "date", month + "-01", month + "-31"), f.fs.list(f.col("board")), f.fs.list(f.col("alarms")),
   ]);
   const out = [];
   out.push(`Happy Home — today is ${longDate(f.today)} (${f.tz} time).`);
@@ -136,6 +151,8 @@ async function getOverview(f, args) {
   const c1 = cap(occ, 60);
   sec(days === 1 ? "Calendar today" : `Calendar, next ${days} days`, c1.shown.map(e => show(f, "events", e, { occurrence: true })), c1.more);
   sec("Homework to do", homework.filter(h => !h.done && (!h.due || h.due <= end)).sort((a, b) => (a.due || "").localeCompare(b.due || "")).map(h => show(f, "homework", h)));
+  const ringing = alarms.filter(a => a.on !== false && ((Array.isArray(a.days) && a.days.length) || !a.date || a.date >= f.today)).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  sec("Alarms switched on", ringing.map(a => show(f, "alarms", a)));
   const dinners = meals.filter(m => m.date >= f.today && m.date <= end).sort(byDateTime);
   sec("Dinner plan", dinners.map(m => show(f, "meals", m)));
   const billsDue = bills.filter(b => b.next && b.next <= end).sort((a, b) => a.next.localeCompare(b.next));
@@ -201,8 +218,8 @@ async function findItems(f, args) {
     return rows.length ? `${rows.length} family board post${rows.length === 1 ? "" : "s"}, newest first:\n${bullets(c.shown.map(x => show(f, type, x)), c.more)}` : "The family board is empty.";
   }
   rows = await f.fs.list(f.col(col));
-  const field = { tasks: "due", homework: "due", bills: "next", meals: "date", countdowns: "date", shopping: null, notes: null }[type];
-  const searchFields = { tasks: ["title"], homework: ["title", "subject"], shopping: ["name", "qty"], notes: ["title", "body"], bills: ["name", "cat"], meals: ["title", "ingredients"], countdowns: ["title", "kind"] }[type];
+  const field = { tasks: "due", homework: "due", bills: "next", meals: "date", countdowns: "date", shopping: null, notes: null, alarms: null }[type];
+  const searchFields = { tasks: ["title"], homework: ["title", "subject"], shopping: ["name", "qty"], notes: ["title", "body"], bills: ["name", "cat"], meals: ["title", "ingredients"], countdowns: ["title", "kind"], alarms: ["title"] }[type];
   rows = rows.filter(x => matches(x, searchFields) && whoOk(x));
   if (["tasks", "homework", "shopping"].includes(type) && !includeDone) rows = rows.filter(x => !x.done);
   if (type === "meals" && !from && !to) rows = rows.filter(x => (x.date || x.id) >= f.today);
@@ -210,10 +227,11 @@ async function findItems(f, args) {
   if (type === "notes") rows.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updated || 0) - (a.updated || 0));
   else if (type === "countdowns") rows.sort((a, b) => String(countdownNext(a, f.today)).localeCompare(String(countdownNext(b, f.today))));
   else if (type === "shopping") rows.sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || (a.createdAt || 0) - (b.createdAt || 0));
+  else if (type === "alarms") rows.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
   else if (field) rows.sort((a, b) => String(a[field] || "9999").localeCompare(String(b[field] || "9999")) || (a.time || "99").localeCompare(b.time || "99"));
   const c = cap(rows, limit);
   const full = type === "notes" && c.shown.length <= 5;   // whole notes only for a few; otherwise previews keep the reply small
-  const what = { tasks: includeDone ? "tasks" : "open tasks", homework: includeDone ? "homework items" : "homework items still to do", shopping: includeDone ? "shopping items" : "items on the shopping list", notes: "notes", bills: "bills", meals: "planned dinners", countdowns: "countdowns" }[type];
+  const what = { tasks: includeDone ? "tasks" : "open tasks", homework: includeDone ? "homework items" : "homework items still to do", shopping: includeDone ? "shopping items" : "items on the shopping list", notes: "notes", bills: "bills", meals: "planned dinners", countdowns: "countdowns", alarms: "alarms" }[type];
   return rows.length ? `${rows.length} ${what}${search ? ` matching "${search}"` : ""}:\n${bullets(c.shown.map(x => show(f, type, x, { full })), c.more)}` : `No ${what}${search ? ` matching "${search}"` : ""}.`;
 }
 
@@ -267,7 +285,7 @@ async function addItems(f, args) {
     if (!REPEAT.includes(repeat)) throw new UserError(`repeat must be one of ${REPEAT.join(", ")}.`);
     const points = t.stars === undefined || t.stars === null ? 0 : +t.stars;
     if (!STAR_CHOICES.includes(points)) throw new UserError(`stars must be one of ${STAR_CHOICES.join(", ")}.`);
-    const rec = { title, who: f.who(t.who, { fallback: f.meId }), due: dateArg(t.due, f, f.today), time: timeArg(t.time), repeat, points, done: false, createdAt: now, by };
+    const rec = { title, who: f.who(t.who, { fallback: f.meId }), due: dateArg(t.due, f, f.today), time: timeArg(t.time), repeat, points, ...remindField(t), done: false, createdAt: now, by };
     const id = newId(); writes.push(f.fs.create(f.doc("tasks", id), rec)); done.push("Task: " + show(f, "tasks", { ...rec, id }));
   });
   each("events", e => {
@@ -275,7 +293,7 @@ async function addItems(f, args) {
     const days = weekdays(e.weekly_on_days);
     let date = dateArg(e.date, f, days?.length ? f.today : undefined);
     if (!date) throw new UserError("date is missing (YYYY-MM-DD).");
-    const base = { title, who: f.who(e.who, { allowFamily: true, fallback: 0 }), time: timeArg(e.time), place: text(e.place, 300, "Place") };
+    const base = { title, who: f.who(e.who, { allowFamily: true, fallback: 0 }), time: timeArg(e.time), place: text(e.place, 300, "Place"), ...remindField(e) };
     let rec;
     if (days && days.length) {
       for (let i = 0; i < 7 && !days.includes(dow(date)); i++) date = addDays(date, 1);
@@ -287,7 +305,7 @@ async function addItems(f, args) {
   });
   each("homework", h => {
     const title = need(text(h.title, 300, "Title"), "Title");
-    const rec = { subject: text(h.subject, 60, "Subject") || "Homework", title, who: f.who(h.who, { fallback: f.kidId }), due: dateArg(h.due, f, addDays(f.today, 1)), time: timeArg(h.time), done: false, createdAt: now, by };
+    const rec = { subject: text(h.subject, 60, "Subject") || "Homework", title, who: f.who(h.who, { fallback: f.kidId }), due: dateArg(h.due, f, addDays(f.today, 1)), time: timeArg(h.time), ...remindField(h), done: false, createdAt: now, by };
     const id = newId(); writes.push(f.fs.create(f.doc("homework", id), rec)); done.push("Homework: " + show(f, "homework", { ...rec, id }));
   });
 
@@ -367,6 +385,10 @@ async function addItems(f, args) {
     const id = newId(); writes.push(f.fs.create(f.doc("countdowns", id), rec)); done.push("Countdown: " + show(f, "countdowns", { ...rec, id }));
   });
 
+  each("alarms", a => {
+    const rec = { ...alarmFields(f, { title: text(a.title, 120, "Title") || "Alarm", time: need(timeArg(a.time), "time (HH:MM)"), who: f.who(a.who, { allowFamily: true, fallback: 0 }), days: weekdays(a.weekly_on_days) || [], date: dateArg(a.date, f, f.today) }), on: true, createdAt: now, by };
+    const id = newId(); writes.push(f.fs.create(f.doc("alarms", id), rec)); done.push("Alarm: " + show(f, "alarms", { ...rec, id }));
+  });
   each("board", m => {
     const msg = need(text(m.text, 500, "Message"), "text");
     const rec = { text: msg, who: f.meId, at: now, ack: {}, createdAt: now, by };
@@ -379,11 +401,24 @@ async function addItems(f, args) {
   return `Added to Happy Home (it shows in the app straight away):\n${bullets(done)}`;
 }
 
+// A reminder is only stored when one was asked for; without it the app uses the family's usual setting.
+function remindField(x) { const r = remindArg(x.remind_minutes_before); return r === undefined || r === null ? {} : { remind: r }; }
+/** An alarm the way the app saves it: weekly on set days (no date), or once on a date. A time that has
+ *  already passed today moves to tomorrow, like the app. */
+function alarmFields(f, { title, time, who, days, date }) {
+  if (days.length) return { title, time, who, days, date: "" };
+  if (!date) date = f.today;
+  if (date < f.today) throw new UserError("that date has already passed.");
+  if (date === f.today && time <= f.nowTime) date = addDays(f.today, 1);
+  return { title, time, who, days: [], date };
+}
+
 /* ---------------- tool: update_items ---------------- */
 const CHANGE_FIELDS = {
-  tasks: ["title", "who", "due", "time", "repeat", "stars"],
-  events: ["title", "who", "date", "time", "place", "weekly_on_days", "until"],
-  homework: ["title", "subject", "who", "due", "time"],
+  tasks: ["title", "who", "due", "time", "repeat", "stars", "remind_minutes_before"],
+  events: ["title", "who", "date", "time", "place", "weekly_on_days", "until", "remind_minutes_before"],
+  homework: ["title", "subject", "who", "due", "time", "remind_minutes_before"],
+  alarms: ["title", "time", "who", "weekly_on_days", "date", "on"],
   shopping: ["name", "qty"],
   money: ["amount", "type", "category", "date", "who", "note"],
   notes: ["title", "text", "pinned"],
@@ -416,8 +451,9 @@ async function updateItems(f, args) {
       const c = p.ch, fields = {};
       const has = key => Object.prototype.hasOwnProperty.call(c, key);
       if (has("title")) fields.title = p.type === "notes" ? text(c.title, 200, "Title") : need(text(c.title, 300, "Title"), "Title");
-      if (has("who")) fields.who = f.who(c.who, { allowFamily: p.type === "events", fallback: cur.who });
+      if (has("who")) fields.who = f.who(c.who, { allowFamily: p.type === "events" || p.type === "alarms", fallback: cur.who });
       if (has("time")) fields.time = timeArg(c.time);
+      if (has("remind_minutes_before")) fields.remind = remindArg(c.remind_minutes_before) ?? null;   // null = the usual reminder
       switch (p.type) {
         case "tasks":
           if (has("due")) fields.due = dateArg(c.due, f, "");
@@ -434,6 +470,15 @@ async function updateItems(f, args) {
           if (has("subject")) fields.subject = text(c.subject, 60, "Subject") || "Homework";
           if (has("due")) fields.due = dateArg(c.due, f, "");
           break;
+        case "alarms": {
+          if (has("on")) { if (typeof c.on !== "boolean") throw new UserError("on must be true or false."); fields.on = c.on; }
+          if (has("time") || has("weekly_on_days") || has("date")) {
+            const days = has("weekly_on_days") ? (weekdays(c.weekly_on_days) || []) : (has("date") ? [] : Array.isArray(cur.days) ? cur.days : []);
+            const date = has("date") ? need(dateArg(c.date, f, null), "date") : (cur.date && cur.date >= f.today ? cur.date : f.today);
+            const a = alarmFields(f, { title: "", time: need(has("time") ? fields.time : cur.time, "time (HH:MM)"), who: 0, days, date });
+            fields.time = a.time; fields.days = a.days; fields.date = a.date;
+          }
+          break; }
         case "shopping":
           if (has("name")) { fields.name = capFirst(need(text(c.name, 120, "Name"), "Name")); fields.aisle = ""; }  // the app works the aisle out again from the new name
           if (has("qty")) fields.qty = text(c.qty, 40, "Quantity");
@@ -505,7 +550,7 @@ async function markDone(f, args) {
       return;
     }
     if (!!x.done === doneFlag) { out.push(`${show(f, type, x)} was already ${doneFlag ? "done" : "not done"}.`); return; }
-    const fields = { done: doneFlag };
+    const fields = { done: doneFlag, doneAt: doneFlag ? now : null };   // the app's Live feed shows who finished what, and when
     if (type === "tasks") {
       const starId = `t-${x.id}-${x.due || ""}`;
       if (doneFlag && +x.points > 0) writes.push(f.fs.set(f.doc("stars", starId), { who: x.who, pts: +x.points, date: f.today, title: x.title, task: x.id }));
@@ -555,13 +600,14 @@ async function deleteItems(f, args) {
 
 /* ---------------- tool definitions (descriptions use the family's own names) ---------------- */
 export function toolDefinitions(f) {
-  const names = f ? f.people.map(p => p.name).join(", ") : "a family member's name";
+  const names = f ? f.namesList({ you: false }) : "a family member's name";
   const me = f && f.myName ? ` Defaults to the signed-in person (${f.myName}).` : " Defaults to the signed-in person.";
   const who = extra => ({ type: "string", description: `Who it's for: ${names}${extra || ""}.` });
   const cats = f ? f.categories.join(", ") : "the family's categories";
   // No "today is" here: the tool list can be kept for days, and get_overview gives today's date.
   const date = d => ({ type: "string", description: `${d} as YYYY-MM-DD. Words like "tomorrow" or "friday" also work.` });
   const time = { type: "string", description: "Time as 24-hour HH:MM, e.g. 15:30. Leave out for no time." };
+  const remind = { type: "integer", enum: LEADS, description: "Only when the person asks for a particular reminder: minutes before the time (0 = at the time, 60 = an hour, 1440 = a day; -1 = no reminder). Needs a time. Leave out for the family's usual reminder." };
   const type = (list = TYPE_LIST) => ({ type: "string", enum: list, description: "What kind of item." });
   const ro = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
   return [
@@ -573,7 +619,7 @@ export function toolDefinitions(f) {
     },
     {
       name: "find_items", title: "Find items",
-      description: "Look things up in Happy Home and get their ids (needed to change, tick off or delete them). Types: tasks, events (calendar), homework, shopping, money (spending and income), notes, bills, meals (dinner plan), countdowns, board (Family board messages). For events, give from/to to see every occurrence in that window; without dates you get upcoming events and weekly activities. For money, the default range is this month.",
+      description: "Look things up in Happy Home and get their ids (needed to change, tick off or delete them). Types: tasks, events (calendar), homework, shopping, money (spending and income), notes, bills, meals (dinner plan), countdowns, board (Family board messages), alarms. For events, give from/to to see every occurrence in that window; without dates you get upcoming events and weekly activities. For money, the default range is this month.",
       inputSchema: {
         type: "object", required: ["type"], additionalProperties: false,
         properties: {
@@ -595,22 +641,22 @@ export function toolDefinitions(f) {
     {
       name: "add_items",
       title: "Add to Happy Home",
-      description: `Add one or many things to Happy Home in a single call: tasks, calendar events or weekly activities, homework, shopping items, spending or income, notes, bills, dinners, countdowns (birthdays, trips) and Family board messages. Great for photos: read a receipt into money, a school newsletter or invitation into events and homework, a recipe into meals plus shopping, a handwritten list into shopping. Only include details the person said or that are visible; ask if something important (like a date or amount) is unclear. Everyone in the family sees new items in the app straight away. Family: ${names}.`,
+      description: `Add one or many things to Happy Home in a single call: tasks, calendar events or weekly activities, homework, shopping items, spending or income, notes, bills, dinners, countdowns (birthdays, trips), alarms and Family board messages. Great for photos: read a receipt into money, a school newsletter or invitation into events and homework, a recipe into meals plus shopping, a handwritten list into shopping. Only include details the person said or that are visible; ask if something important (like a date or amount) is unclear. Everyone in the family sees new items in the app straight away. Family: ${names}.`,
       inputSchema: {
         type: "object", additionalProperties: false,
         properties: {
           tasks: { type: "array", description: "Jobs and chores.", items: { type: "object", required: ["title"], additionalProperties: false, properties: {
-            title: { type: "string" }, who: who(me), due: date("Due date, default today"), time,
+            title: { type: "string" }, who: who(me), due: date("Due date, default today"), time, remind_minutes_before: remind,
             repeat: { type: "string", enum: REPEAT, description: "Repeat after it's ticked off. Default none." },
             stars: { type: "integer", enum: STAR_CHOICES, description: "Chore stars earned when done (0, 1, 2, 3, 5 or 10). Default 0." } } } },
           events: { type: "array", description: "Calendar entries. For something every week (like swimming every Tuesday and Thursday) give weekly_on_days instead of adding many copies.", items: { type: "object", required: ["title"], additionalProperties: false, properties: {
             title: { type: "string" }, date: date("Date (for weekly activities, the first day; default today)"), time, place: { type: "string" },
             who: who(", or Family (the default) for everyone"),
             weekly_on_days: { type: "array", items: { type: "string", enum: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] }, description: "Makes it a weekly activity on these days." },
-            until: date("Last day of a weekly activity (optional)") } } },
+            until: date("Last day of a weekly activity (optional)"), remind_minutes_before: remind } } },
           homework: { type: "array", items: { type: "object", required: ["title"], additionalProperties: false, properties: {
             title: { type: "string", description: "What to do, e.g. 'Spelling list 12'." }, subject: { type: "string", description: "e.g. Maths, English, Science, HASS, Japanese. Default Homework." },
-            who: who(f ? `. Defaults to ${f.name(f.kidId)}` : ""), due: date("Due date, default tomorrow"), time } } },
+            who: who(f ? `. Defaults to ${f.name(f.kidId)}` : ""), due: date("Due date, default tomorrow"), time, remind_minutes_before: remind } } },
           shopping: { type: "array", description: "Items for the shared shopping list. Items already on the list are not doubled.", items: { type: "object", required: ["name"], additionalProperties: false, properties: {
             name: { type: "string", description: "e.g. Milk" }, qty: { type: "string", description: "Optional amount, e.g. 2, 1kg, 2 packs." } } } },
           money: { type: "array", description: "Spending (default) or income, e.g. from a receipt. One entry per receipt unless asked to split.", items: { type: "object", required: ["amount"], additionalProperties: false, properties: {
@@ -628,6 +674,11 @@ export function toolDefinitions(f) {
             date: date("Night"), title: { type: "string", description: "What's for dinner." }, ingredients: { type: "array", items: { type: "string" } },
             cook: { type: "string", description: `Who's cooking: ${names}.` } } } },
           add_meal_ingredients_to_shopping: { type: "boolean", description: "Also put the meals' ingredients on the shopping list. Default false." },
+          alarms: { type: "array", description: "Alarms in the Happy Home app, once or on set days every week (wake-up, leave for school, medicine). They ring on the family's phones only while the app is open, so say that, and for something that must not be missed suggest the phone's own alarm as well.", items: { type: "object", required: ["time"], additionalProperties: false, properties: {
+            title: { type: "string", description: "What it's for, e.g. 'Leave for swimming'. Default Alarm." }, time: { type: "string", description: "Time as 24-hour HH:MM, e.g. 06:45." },
+            weekly_on_days: { type: "array", items: { type: "string", enum: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] }, description: "Ring every week on these days. Leave out for a one-time alarm." },
+            date: date("For a one-time alarm: the day (default today, or tomorrow if that time has passed)"),
+            who: who(", or Family (the default) for everyone") } } },
           board: { type: "array", description: "Short messages for the whole family on the Family board on the app's Today screen, e.g. 'Home late tonight, dinner in the fridge'. Posted as the signed-in person.", items: { type: "object", required: ["text"], additionalProperties: false, properties: {
             text: { type: "string", description: "The message (up to 500 characters)." } } } },
           countdowns: { type: "array", description: "Birthdays, anniversaries, trips and other days to count down to.", items: { type: "object", required: ["title", "date"], additionalProperties: false, properties: {
@@ -639,7 +690,7 @@ export function toolDefinitions(f) {
     },
     {
       name: "update_items", title: "Change items",
-      description: "Change existing items (find their ids first with find_items or get_overview). Fields you can change — tasks: title, who, due, time, repeat, stars; events: title, who, date, time, place, weekly_on_days (empty list = one-off), until; homework: title, subject, who, due, time; shopping: name, qty; money: amount, type, category, date, who, note; notes: title, text, pinned; bills: name, amount, every, next_due, category, who, paid_automatically; meals (id is the date): title, ingredients, cook; countdowns: title, date, kind, every_year; board: text. To tick things off use mark_done.",
+      description: "Change existing items (find their ids first with find_items or get_overview). Fields you can change — tasks: title, who, due, time, repeat, stars, remind_minutes_before; events: title, who, date, time, place, weekly_on_days (empty list = one-off), until, remind_minutes_before; homework: title, subject, who, due, time, remind_minutes_before; alarms: title, time, who, weekly_on_days, date, on (false switches it off); shopping: name, qty; money: amount, type, category, date, who, note; notes: title, text, pinned; bills: name, amount, every, next_due, category, who, paid_automatically; meals (id is the date): title, ingredients, cook; countdowns: title, date, kind, every_year; board: text. To tick things off use mark_done.",
       inputSchema: {
         type: "object", required: ["updates"], additionalProperties: false,
         properties: { updates: { type: "array", items: { type: "object", required: ["type", "id", "changes"], additionalProperties: false, properties: {
@@ -667,7 +718,8 @@ export function toolDefinitions(f) {
   ];
 }
 
-export const SERVER_INSTRUCTIONS = `Happy Home is this family's shared organiser app (tasks and chores with stars, calendar and weekly activities, homework, shopping list, spending and budgets, notes, bills, dinner plan, birthdays and countdowns). Everything you add appears for the whole family in the app straight away.
+export const SERVER_INSTRUCTIONS = `Happy Home is this family's shared organiser app (tasks and chores with stars, calendar and weekly activities, homework, shopping list, spending and budgets, notes, bills, dinner plan, birthdays and countdowns, alarms). Everything you add appears for the whole family in the app straight away.
 - Call get_overview first when you need today's date, the family's names, or what's already planned. Dates are YYYY-MM-DD in the family's time zone (Australia/Brisbane); money is in the family's currency (Australian dollars).
 - When the person shares a photo (receipt, school newsletter, invitation, timetable, recipe, handwritten list), pull out the details and save them with one add_items call, then say briefly what you added. Don't invent dates, times or amounts that aren't shown or said; ask when unsure.
+- People can be named the way the family says them: their name in the app (for example Dad, Mum), an earlier name, or mum, mom, dad, daddy.
 - To change, tick off or delete something, get its id from find_items or get_overview first. Only delete when asked.`;
