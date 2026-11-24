@@ -34,13 +34,19 @@ const ICON={
  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
  wallet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2.5"/><path d="M3 10h18M6 3h12"/><circle cx="16.5" cy="15" r="1.2"/></svg>',
  mood:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01"/></svg>',
+ meal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v8a3 3 0 0 0 6 0V3M7 3v18M17 21V3c-2.2 1.2-3.5 3.6-3.5 7s1.3 4 3.5 4"/></svg>',
+ cake:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V12a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9M2 21h20M4 15c1.5 1 3 1 4 0s2.5-1 4 0 3 1 4 0 2.5-1 4 0M12 10V6M12 3.5v.01"/></svg>',
+ bill:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>',
+ search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+ mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+ spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>',
  back:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>'
 };
 
 /* ---------- view state ---------- */
 let tab="home", listTab="tasks", listWho="all", moneyMonth=thisMonth(), calDay=TODAY(), calMonth=thisMonth();
-const routes=["home","calendar","lists","money","more","notes","calc","location","wallet","mood"];
-const parentTab={notes:"more",calc:"more",location:"more",wallet:"more",mood:"more"};
+const routes=["home","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates"];
+const parentTab={notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"money",meals:"more",dates:"more"};
 if(routes.includes(location.hash.slice(1)))tab=location.hash.slice(1);
 let authMode="signin", authErr="", busy=false;
 
@@ -55,7 +61,7 @@ const checkBtn=(on,act,id)=>`<button class="check ${on?"on":""}" data-act="${act
 function tm(t){if(!t)return"";const [h,m]=t.split(":").map(Number);return new Date(2000,0,1,h,m).toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"}).replace(" ","\u00a0")}
 function duePill(due,done,time){if(!due)return"";const now=new Date(),nowT=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");const late=!done&&(due<TODAY()||(due===TODAY()&&time&&time<nowT)),today=due===TODAY();return `<span class="pill ${late?"late":today?"today":""}">${late?"Late · ":""}${nice(due)}${time?" · "+tm(time):""}</span>`}
 const row=(col,id,inner,done)=>`<div class="swipe" data-col="${col}" data-id="${id}"><div class="act" data-act="swipeDel">Delete</div><div class="item ${done?"done":""}">${inner}</div></div>`;
-function taskItem(t){return row("tasks",t.id,`${checkBtn(t.done,"toggle",t.id)}<div class="grow tap" data-act="edit" data-col="tasks" data-id="${t.id}"><div class="t">${esc(t.title)}</div><div class="m">${esc(pname(t.who))}${t.repeat&&t.repeat!=="none"?" · repeats "+t.repeat:""}</div></div>${duePill(t.due,t.done,t.time)}`,t.done)}
+function taskItem(t){return row("tasks",t.id,`${checkBtn(t.done,"toggle",t.id)}<div class="grow tap" data-act="edit" data-col="tasks" data-id="${t.id}"><div class="t">${esc(t.title)}</div><div class="m">${esc(pname(t.who))}${t.repeat&&t.repeat!=="none"?" · repeats "+t.repeat:""}${+t.points>0?` · <span class="star">★ ${+t.points}</span>`:""}</div></div>${duePill(t.due,t.done,t.time)}`,t.done)}
 function hwItem(h){return row("homework",h.id,`${checkBtn(h.done,"toggleHw",h.id)}<div class="grow tap" data-act="edit" data-col="homework" data-id="${h.id}"><div class="t">${esc(h.title)}</div><div class="m">${esc(h.subject)} · ${esc(pname(h.who))}</div></div>${duePill(h.due,h.done,h.time)}`,h.done)}
 function eventItem(e,showDate){return row("events",e.id,`<span class="time">${e.time?tm(e.time):"All day"}</span>${dot(e.who)}<div class="grow tap" data-act="edit" data-col="events" data-id="${e.id}"><div class="t">${esc(e.title)}</div><div class="m">${showDate?nice(e.date)+" · ":""}${esc(pname(e.who))}${e.place?" · "+esc(e.place):""}</div></div>`)}
 function txItem(x){const n=x.type==="in"?x.amount:-x.amount;return row("tx",x.id,`${dot(x.who)}<div class="grow"><div class="t">${esc(x.note||x.cat)}</div><div class="m">${esc(x.cat)} · ${nice(x.date)} · ${esc(pname(x.who))}</div></div><span class="num ${n>0?"pos":""}" style="font-weight:600">${money(n,true)}</span>`)}
@@ -72,12 +78,25 @@ function viewHome(){
   const next=sortEv(S().events.filter(e=>e.date>t&&e.date<=addDays(t,7))).slice(0,4);
   const m=monthStats(thisMonth()), left=m.inc-m.out;
   const shopLeft=S().shopping.filter(s=>!s.done).length;
+  const nowT=String(new Date().getHours()).padStart(2,"0")+":"+String(new Date().getMinutes()).padStart(2,"0");
+  const upNext=ev.find(e=>e.time&&e.time>=nowT);
+  const billsDue=billsSorted().filter(b=>b.next&&b.next<=addDays(t,3));
+  const dinner=mealOn(t), cds=countdownsSoon(2).filter(c=>daysUntil(c.nd)<=60);
   return `${moodRequestBanner()}${syncNote()}
+  <section class="card qacard"><form id="qaForm" class="quick qa" autocomplete="off"><span class="qaic">${ICON.spark}</span><input id="qa" placeholder="Add anything… e.g. Dentist Fri 3pm" aria-label="Quick add" enterkeyhint="done" autocomplete="off" autocorrect="on">${hasMic?`<button type="button" class="qamic" data-act="voice" aria-label="Speak">${ICON.mic}</button>`:""}<button type="submit">Add</button></form>
+   <div id="qaPrev" class="qaprev" hidden></div><div class="qatip" id="qaTip">Type or tap the microphone on your keyboard and just say it. The app works out if it's a task, event, shopping or spending.</div></section>
+  ${upNext?`<button class="upnext" data-act="edit" data-col="events" data-id="${upNext.id}"><span class="label">Up next · ${tm(upNext.time)}</span><b>${esc(upNext.title)}</b><span>${esc(pname(upNext.who))}${upNext.place?" · "+esc(upNext.place):""}${(()=>{const [h,m]=upNext.time.split(":").map(Number),d=new Date();d.setHours(h,m,0,0);const mins=Math.round((d-Date.now())/6e4);return mins<=0?" · now":mins<60?" · in "+mins+" min":" · in "+Math.floor(mins/60)+" h "+(mins%60?mins%60+" min":"")})()}</span></button>`:""}
+  ${billsDue.length?`<section class="card"><div class="row between"><h2>Bills due</h2><button class="link" data-go="bills">All bills</button></div><div class="list" style="margin-top:6px">${billsDue.map(billRow).join("")}</div></section>`:""}
   <section class="card"><div class="row between"><h2>Today's plan</h2><span class="sub">${new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"})}</span></div>
    <div class="list" style="margin-top:6px">${ev.length?ev.map(e=>eventItem(e)).join(""):`<div class="empty">Nothing on the calendar today. Tap + to add an event.</div>`}</div></section>
   <section class="card"><div class="row between"><h2>To do now</h2><button class="link" data-go="lists" data-list="tasks">All tasks</button></div>
    <div class="list" style="margin-top:6px">${due.length?due.map(taskItem).join(""):`<div class="empty">All caught up.</div>`}</div></section>
   ${hw.length?`<section class="card"><div class="row between"><h2>Homework due soon</h2><button class="link" data-go="lists" data-list="homework">All homework</button></div><div class="list" style="margin-top:6px">${hw.map(hwItem).join("")}</div></section>`:""}
+  ${Object.values(starsThisWeek()).some(v=>v>0)?scoreboard():""}
+  <div class="two">
+   <button class="tile" data-go="meals"><span class="label">Dinner tonight</span><b>${dinner?esc(dinner.title):"Not planned"}</b><span>${dinner&&dinner.cook?esc(pname(dinner.cook))+" cooking":"Tap to plan the week"}</span></button>
+   ${cds.length?`<button class="tile" data-go="dates"><span class="label">${esc(cdLabel(cds[0]))}</span><b>${esc(cds[0].title)}</b><span>${nice(cds[0].nd)}</span></button>`:`<button class="tile" data-act="addCountdown"><span class="label">Countdown</span><b>Add a date</b><span>Birthdays, trips, holidays</span></button>`}
+  </div>
   <div class="two">
    <button class="tile" data-go="money"><span class="label">Money left</span><b class="num ${left<0?"neg":""}">${money(left)}</b><span>this month</span></button>
    <button class="tile" data-go="lists" data-list="shopping"><span class="label">Shopping</span><b class="num">${shopLeft} item${shopLeft===1?"":"s"}</b><span>still to buy</span></button>
@@ -129,16 +148,19 @@ function viewLists(){
   if(listTab==="tasks"){
     const list=sortTasks(S().tasks.filter(t=>listWho==="all"||t.who==listWho));
     const open=list.filter(t=>!t.done),done=list.filter(t=>t.done);
-    body=`${whoChips()}<section class="card"><h2>To do <span class="sub">(${open.length})</span></h2><div class="list" style="margin-top:6px">${open.length?open.map(taskItem).join(""):`<div class="empty">Nothing to do. Tap + to add a task or chore.</div>`}</div></section>
+    body=`${whoChips()}${scoreboard()}<section class="card"><h2>To do <span class="sub">(${open.length})</span></h2><div class="list" style="margin-top:6px">${open.length?open.map(taskItem).join(""):`<div class="empty">Nothing to do. Tap + to add a task or chore.</div>`}</div></section>
     ${list.length?swipeHint():""}
     ${done.length?`<section class="card"><div class="row between"><h2>Done</h2><button class="link" data-act="clearDone">Clear done</button></div><div class="list" style="margin-top:6px">${done.map(taskItem).join("")}</div></section>`:""}`;
   }
   if(listTab==="shopping"){
     const open=S().shopping.filter(s=>!s.done),got=S().shopping.filter(s=>s.done);
     const item=s=>row("shopping",s.id,`${checkBtn(s.done,"toggleShop",s.id)}<div class="grow"><div class="t">${esc(s.name)}</div><div class="m">Added by ${esc(pname(s.who))}</div></div>${s.qty?`<span class="qty">${esc(s.qty)}</span>`:""}`,s.done);
+    const order=[...AISLES.map(a=>a[0]),"Other"],groups={};open.forEach(s=>{const k=s.aisle||aisleOf(s.name);(groups[k]=groups[k]||[]).push(s)});
+    const usual=usualItems();
     body=`<form class="quick" id="shopForm"><input id="shopInput" placeholder="Add an item, e.g. Eggs 12" aria-label="Add shopping item" autocomplete="off" enterkeyhint="done"><button type="submit">Add</button></form>
+    ${usual.length?`<div class="usual"><span class="label">Usual items · tap to add</span><div class="chips">${usual.map(u=>`<button class="chip" data-act="reAdd" data-k="${esc(u.name)}">+ ${esc(u.name)}</button>`).join("")}</div></div>`:""}
     <section class="card"><h2>This week's shopping <span class="sub">(${open.length})</span></h2>
-    <div class="list" style="margin-top:6px">${open.length?open.map(item).join(""):`<div class="empty">The list is empty. Add what you need above.</div>`}</div></section>
+    ${open.length?order.filter(k=>groups[k]).map(k=>`<div class="aisle">${esc(k)}</div><div class="list">${groups[k].map(item).join("")}</div>`).join(""):`<div class="list" style="margin-top:6px"><div class="empty">The list is empty. Add what you need above, or say "buy milk and eggs" in Quick add on Today.</div></div>`}</section>
     ${got.length?`<section class="card"><div class="row between"><h2>In the trolley</h2><button class="link" data-act="newWeek">Start new week</button></div><div class="list" style="margin-top:6px">${got.map(item).join("")}</div></section>`:""}`;
   }
   if(listTab==="homework"){
@@ -161,18 +183,27 @@ function viewMoney(){
   return `<div class="row between"><button class="iconbtn" data-act="mPrev" aria-label="Previous month">‹</button><h2>${label}</h2><button class="iconbtn" data-act="mNext" aria-label="Next month">›</button></div>
   <section class="card"><div class="trio"><div><div class="label">In</div><div class="v num pos">${money(m.inc)}</div></div><div><div class="label">Spent</div><div class="v num">${money(m.out)}</div></div><div><div class="label">Left</div><div class="v num ${m.inc-m.out<0?"neg":""}">${money(m.inc-m.out)}</div></div></div>
    <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:14px">${byWho.map(x=>`<span class="row" style="gap:6px">${dot(x.p.id)}<span class="sub num">${esc(x.p.name)} spent ${money(x.v)}</span></span>`).join("")}</div></section>
+  ${billsCard()}
   <section class="card"><div class="row between"><h2>Budgets</h2><button class="link" data-act="budgets">Edit</button></div>
    <div class="stack" style="gap:12px;margin-top:10px">${cats.length?cats.map(c=>{const sp=m.byCat[c]||0,b=+budgets[c]||0,pct=b?Math.min(100,sp/b*100):100,over=b&&sp>b;
      return `<div><div class="row between"><span>${esc(c)}</span><span class="num sub">${money(sp)}${b?" of "+money(b):""}</span></div><div class="bar ${over||!b?"over":""}"><i style="width:${b?pct:0}%"></i></div>${over?`<div class="sub neg" style="margin-top:2px">${money(sp-b)} over budget</div>`:""}</div>`}).join(""):`<div class="empty">No budgets yet. Tap Edit to set monthly limits.</div>`}</div></section>
   <section class="card"><h2>Entries</h2><div class="list" style="margin-top:6px">${tx.length?tx.map(txItem).join(""):`<div class="empty">No entries this month. Tap + to add one.</div>`}</div></section>`;
 }
 
+function billsCard(){
+  const list=billsSorted(),total=list.reduce((a,b)=>a+perMonth(b),0),soon=list.slice(0,3);
+  return `<section class="card"><div class="row between"><h2>Bills & subscriptions</h2><button class="link" data-go="bills">${list.length?"See all":"Set up"}</button></div>
+   ${list.length?`<div class="sub" style="margin-top:2px">${money(total)} a month · ${money(total*12)} a year</div><div class="list" style="margin-top:6px">${soon.map(billRow).join("")}</div>`:`<div class="empty">Track rent, power, phone and subscriptions. See what's due and record payments in one tap.</div><button class="ghost" data-act="addBill" style="width:100%">Add a bill</button>`}</section>`;
+}
 /* ---------- More ---------- */
 const backBar=`<button class="back" data-go="more">${ICON.back}More</button>`;
 function viewMore(){
   const tile=(go,icon,title,sub)=>`<button class="tile" data-go="${go}">${icon}<b>${title}</b><span>${sub}</span></button>`;
   const cards=S().wallet.length+S().myWallet.length;
   return `<div class="tiles">
+   ${tile("meals",ICON.meal,"Dinner plan",(()=>{const m=mealOn(TODAY());return m?"Tonight: "+esc(m.title):"Plan the week's dinners"})())}
+   ${tile("dates",ICON.cake,"Dates",(()=>{const c=countdownsSoon(1)[0];return c?esc(c.title)+" · "+esc(cdLabel(c)):"Birthdays and trips"})())}
+   ${tile("bills",ICON.bill,"Bills",S().bills.length?S().bills.length+" bill"+(S().bills.length===1?"":"s")+" tracked":"Rent, power, subscriptions")}
    ${tile("mood",ICON.mood,"Mood","Check in, or a 5-minute family check")}
    ${tile("wallet",ICON.wallet,"Wallet",cards+" card"+(cards===1?"":"s")+" and passes")}
    ${tile("notes",ICON.note,"Notes",S().notes.length+" note"+(S().notes.length===1?"":"s"))}
@@ -465,8 +496,250 @@ function authErrorText(e){const c=e&&e.code||"";return c.includes("invalid-verif
   :c.includes("email-already-in-use")?"There's already an account with that email. Tap Sign in instead.":c.includes("weak-password")?"Use a password with at least 6 characters.":c.includes("invalid-email")?"That email address doesn't look right."
   :c.includes("network")?"You seem to be offline. Connect to the internet and try again.":c.includes("permission-denied")||c.includes("not-found")?"That family code didn't work. Check it with the person who set up the family.":"Something went wrong. Please try again."}
 
+/* ---------- quick add: type a sentence, the app works out what it is ---------- */
+const WEEKDAYS=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+const MONTHS=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+const EVENTISH=/\b(appointment|appt|dentist|doctor|gp|vet|party|meeting|training|practice|lesson|class|dinner|lunch|breakfast|brunch|birthday|game|match|flight|pickup|pick up|drop off|visit|concert|movie|cinema|swimming|soccer|football|footy|netball|cricket|basketball|tennis|piano|guitar|tutor|haircut|interview|wedding|bbq|church|temple|excursion|camp|holiday|recital|assembly|parent teacher)\b/i;
+const reEsc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+function parseQuick(txt){
+  let s=" "+txt.trim()+" ";const out={kind:null,title:"",who:null,date:null,time:null,amount:null,items:null,subject:null};
+  const cut=re=>{const m=s.match(re);if(m){s=s.replace(re," ");}return m};
+  // shopping: "buy milk, eggs and bread"
+  let m=s.match(/^\s*(buy|get|shop|shopping)\s*:?\s+(.+)$/i);
+  if(m){out.kind="shop";out.items=m[2].split(/\s*(?:,|\band\b|&|\+)\s*/i).map(x=>x.trim()).filter(Boolean);return out}
+  // money: "$45 petrol", "spent 12.50 on lunch", "paid 80 electricity"
+  m=s.match(/\$\s?(\d+(?:\.\d{1,2})?)/)||s.match(/\b(?:spent|paid)\s+\$?(\d+(?:\.\d{1,2})?)/i);
+  if(m){out.kind="money";out.amount=+m[1];s=s.replace(m[0]," ").replace(/\b(spent|paid|on|for)\b/gi," ");}
+  // person
+  for(const p of people()){const re=new RegExp("\\s(?:for\\s+|with\\s+)?"+reEsc(p.name)+"(?:'s)?(?=\\s)","i");if(re.test(s)){out.who=p.id;s=s.replace(re," ");break}}
+  // time
+  const tmm=cut(/\s(?:at\s+|@\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)(?=\s)/i)||cut(/\s(?:at\s+|@\s*)(\d{1,2})(?:[:.](\d{2}))?(?=\s)/i)||cut(/\s(\d{1,2})[:](\d{2})(?=\s)/);
+  if(tmm){let h=+tmm[1];const mi=+(tmm[2]||0),ap=(tmm[3]||"").toLowerCase();if(ap==="pm"&&h<12)h+=12;if(ap==="am"&&h===12)h=0;if(!ap&&h>=1&&h<=7)h+=12;if(h<24&&mi<60)out.time=String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0")}
+  if(cut(/\s(?:this\s+)?(morning)(?=\s)/i)&&!out.time)out.time="09:00";
+  if(cut(/\s(?:this\s+)?(tonight|evening)(?=\s)/i)){out.date=out.date||TODAY();if(!out.time)out.time="18:00"}
+  // date
+  const t=TODAY();
+  if(cut(/\s(?:on\s+)?today(?=\s)/i))out.date=t;
+  else if(cut(/\s(?:on\s+)?(?:tomorrow|tmr|tmrw|tomoz)(?=\s)/i))out.date=addDays(t,1);
+  else if((m=cut(/\s(?:on\s+)?(next\s+)?(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day|nesday|rsday|urday|sday)?(?=\s)/i))){
+    const want=WEEKDAYS.findIndex(w=>w.startsWith(m[2].toLowerCase().slice(0,3)));const now=new Date(t+"T12:00:00").getDay();let diff=(want-now+7)%7;if(diff===0)diff=7;if(m[1])diff+=diff<7?7:0;out.date=addDays(t,diff)}
+  else if((m=cut(/\sin\s+(\d+|a|an|one|two|three)\s+(day|days|week|weeks)(?=\s)/i))){const n={a:1,an:1,one:1,two:2,three:3}[m[1].toLowerCase()]||+m[1];out.date=addDays(t,n*(m[2].startsWith("week")?7:1))}
+  else if(cut(/\snext\s+week(?=\s)/i))out.date=addDays(t,7);
+  else if((m=cut(/\s(?:on\s+)?(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?(?=\s)/))){let y=m[3]?+m[3]:+t.slice(0,4);if(y<100)y+=2000;const d=new Date(y,+m[2]-1,+m[1],12);if(!m[3]&&iso(d)<t)d.setFullYear(y+1);out.date=iso(d)}
+  else if((m=cut(new RegExp("\\s(?:on\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+("+MONTHS.join("|")+")[a-z]*(?=\\s)","i"))||cut(new RegExp("\\s(?:on\\s+)?("+MONTHS.join("|")+")[a-z]*\\s+(\\d{1,2})(?:st|nd|rd|th)?(?=\\s)","i")))){
+    const a=isNaN(+m[1])?[m[2],m[1]]:[m[1],m[2]];const mo=MONTHS.indexOf(a[1].slice(0,3).toLowerCase());const y=+t.slice(0,4);const d=new Date(y,mo,+a[0],12);if(iso(d)<t)d.setFullYear(y+1);out.date=iso(d)}
+  // homework
+  if(!out.kind&&/\bhomework\b|\bassignment\b|\bworksheet\b/i.test(s)){out.kind="homework";s=s.replace(/\bhomework\b/i," ");
+    const subj=["Maths","Math","English","Science","HASS","History","Geography","Art","Music","Japanese","PE","Spelling","Reading"].find(x=>new RegExp("\\b"+x+"\\b","i").test(s));if(subj){out.subject=subj==="Math"?"Maths":subj;s=s.replace(new RegExp("\\b"+subj+"\\b","i")," ")}}
+  if(!out.kind&&/\b(remind me to|todo|to do|task)\b/i.test(s)){out.kind="task";s=s.replace(/\b(remind me to|todo|to do|task)\b:?/i," ")}
+  if(!out.kind)out.kind=(out.time||EVENTISH.test(s))?"event":"task";
+  out.title=s.replace(/\s+(on|at|by|for|in|the)\s*$/i,"").replace(/^\s*(on|at|by|for)\s+/i,"").replace(/\s+/g," ").trim();
+  out.title=out.title.charAt(0).toUpperCase()+out.title.slice(1);
+  return out;
+}
+function quickPreview(q){
+  if(!q||(!q.title&&!q.items))return"";
+  const bits={shop:()=>`Shopping: ${q.items.map(esc).join(", ")}`,
+    money:()=>`Spending ${money(q.amount||0)}${q.title?" · "+esc(q.title):""} · ${pname(q.who||meId())}`,
+    event:()=>`Event: ${esc(q.title||"Untitled")} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""} · ${pname(q.who??0)}`,
+    task:()=>`Task: ${esc(q.title||"Untitled")} · ${pname(q.who||meId())} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""}`,
+    homework:()=>`Homework: ${esc(q.subject||"Homework")} · ${esc(q.title||"")} · due ${nice(q.date||addDays(TODAY(),1))}`}[q.kind];
+  return bits?bits():"";
+}
+function saveQuick(q){
+  if(q.kind==="shop"){q.items.forEach(n=>addShopItem(n));toast(q.items.length>1?q.items.length+" items added to shopping":"Added to shopping");return}
+  if(!q.title&&q.kind!=="money")return toast("Type what it is, e.g. Dentist Friday 3pm");
+  if(q.kind==="money"){if(!(q.amount>0))return;const cat=guessCat(q.title);ST.add("tx",{type:"out",amount:Math.round(q.amount*100)/100,cat,who:q.who||meId(),date:q.date||TODAY(),note:q.title});toast("Spending added to "+cat);return}
+  if(q.kind==="event"){const d=q.date||TODAY();ST.add("events",{title:q.title,who:q.who??0,date:d,time:q.time||"",place:""});toast("Added to the calendar for "+nice(d));return}
+  if(q.kind==="homework"){ST.add("homework",{subject:q.subject||"Homework",title:q.title||q.subject||"Homework",who:q.who||(people()[2]?.id||meId()),due:q.date||addDays(TODAY(),1),time:q.time||"",done:false});toast("Homework added");return}
+  ST.add("tasks",{title:q.title,who:q.who||meId(),due:q.date||TODAY(),time:q.time||"",repeat:"none",done:false});toast("Task added for "+nice(q.date||TODAY()));
+}
+const CAT_WORDS={Groceries:/grocer|woolies|woolworths|coles|aldi|iga|supermarket|market|food shop/i,Transport:/petrol|fuel|uber|taxi|bus|train|parking|toll|opal|go card|car|rego|servo/i,Bills:/electric|power|gas bill|water|internet|phone|rent|insurance|bill|netflix|spotify|subscription/i,School:/school|uniform|book|excursion|tuition|fees|stationery/i,"Eating out":/lunch|dinner|breakfast|cafe|coffee|restaurant|takeaway|pizza|mcdonald|kfc|sushi|pho|maccas|bubble tea/i,Health:/doctor|dentist|chemist|pharmacy|medicine|physio|gp|optometrist/i,Fun:/movie|cinema|game|toy|gift|present|holiday|concert|netflix|zoo|park/i};
+function guessCat(t){const cats=SET().categories||[];for(const [c,re] of Object.entries(CAT_WORDS))if(re.test(t||"")&&cats.includes(c))return c;return cats.includes("Other")?"Other":(cats[0]||"Other")}
+
+/* ---------- shopping helpers: aisles and usual items ---------- */
+const AISLES=[["Fruit & veg",/apple|banana|orange|lemon|lime|grape|berr|melon|mango|pear|peach|plum|kiwi|avocado|tomato|potato|onion|garlic|ginger|carrot|lettuce|spinach|kale|cabbage|broccoli|cauli|capsicum|cucumber|zucchini|pumpkin|mushroom|corn|bean sprout|herb|coriander|parsley|basil|spring onion|celery|salad|fruit|veg|bok choy|eggplant/i],
+ ["Meat & fish",/chicken|beef|pork|lamb|mince|steak|sausage|bacon|ham|fish|salmon|tuna|prawn|seafood|turkey|meat/i],
+ ["Dairy & eggs",/milk|cheese|yoghurt|yogurt|butter|cream|egg|custard/i],
+ ["Bakery",/bread|roll|bun|wrap|bagel|croissant|muffin|cake|loaf|tortilla/i],
+ ["Frozen",/frozen|ice cream|peas|chips|fries|ice block/i],
+ ["Pantry",/rice|pasta|noodle|flour|sugar|salt|pepper|oil|sauce|soy|vinegar|cereal|oats|honey|jam|peanut|spread|tin|can|beans|soup|stock|spice|curry|biscuit|cracker|snack|chocolate|lolly|nuts|coffee|tea|milo|baking/i],
+ ["Drinks",/water|juice|soft drink|coke|soda|cordial|beer|wine|sparkling/i],
+ ["Household",/toilet paper|loo roll|paper towel|tissue|detergent|dishwash|washing|bleach|spray|sponge|bin bag|garbage|foil|glad wrap|cling|battery|batteries|light bulb|cleaner/i],
+ ["Personal care",/shampoo|conditioner|soap|body wash|toothpaste|toothbrush|deodorant|razor|sunscreen|nappy|nappies|wipes|pad|tampon|lotion|floss/i]];
+const aisleOf=n=>(AISLES.find(([,re])=>re.test(n||""))||["Other"])[0];
+const normName=n=>String(n||"").trim().toLowerCase().replace(/\s+/g," ");
+function addShopItem(raw){
+  const v=String(raw||"").trim();if(!v)return;
+  const m=v.match(/^(.*?)\s+(?:x\s*)?(\d+(?:\.\d+)?\s*(?:kg|g|l|ml|pack|packs|bunch|dozen)?)$/i)||v.match(/^(\d+(?:\.\d+)?\s*(?:kg|g|l|ml|pack|packs|bunch|dozen|x)?)\s+(.*)$/i);
+  let name=v,qty="";if(m){if(/^\d/.test(m[1])){qty=m[1].replace(/\s*x$/i,"");name=m[2]}else{name=m[1];qty=m[2]}}
+  name=name.charAt(0).toUpperCase()+name.slice(1);
+  const dupe=S().shopping.find(s=>!s.done&&normName(s.name)===normName(name));
+  if(dupe){if(qty&&qty!==dupe.qty)ST.patch("shopping",dupe.id,{qty});return}
+  ST.add("shopping",{name,qty,done:false,who:meId(),aisle:aisleOf(name)});
+  const key=normName(name).replace(/[^a-z0-9]+/g,"-").slice(0,60)||"item",f=S().shopFreq.find(x=>x.id===key);
+  ST.put("shopFreq",key,{name,count:(f?.count||0)+1,last:Date.now()});
+}
+function usualItems(){
+  const on=new Set(S().shopping.filter(s=>!s.done).map(s=>normName(s.name)));
+  return [...S().shopFreq].filter(f=>!on.has(normName(f.name))).sort((a,b)=>(b.count-a.count)||((b.last||0)-(a.last||0))).slice(0,10);
+}
+
+/* ---------- bills & subscriptions ---------- */
+const EVERY={week:["Every week",7],fortnight:["Every 2 weeks",14],month:["Every month",0],quarter:["Every 3 months",0],year:["Every year",0]};
+function nextDue(d,every){if(every==="week")return addDays(d,7);if(every==="fortnight")return addDays(d,14);const x=new Date(d+"T12:00:00"),day=x.getDate();x.setDate(1);x.setMonth(x.getMonth()+(every==="quarter"?3:every==="year"?12:1));const last=new Date(x.getFullYear(),x.getMonth()+1,0).getDate();x.setDate(Math.min(day,last));return iso(x)}
+const perMonth=b=>({week:52/12,fortnight:26/12,month:1,quarter:1/3,year:1/12}[b.every]||1)*(+b.amount||0);
+const billsSorted=()=>[...S().bills].sort((a,b)=>(a.next||"").localeCompare(b.next||""));
+function billRow(b){const t=TODAY(),late=b.next<t,soon=b.next<=addDays(t,3);
+  return row("bills",b.id,`<div class="billic">${esc((b.name||"?").slice(0,1).toUpperCase())}</div><div class="grow tap" data-act="editBill" data-id="${b.id}"><div class="t">${esc(b.name)}</div><div class="m">${EVERY[b.every]?.[0]||""}${b.auto?" · paid automatically":""}</div></div>
+   <div style="text-align:right"><div class="num" style="font-weight:600">${money(+b.amount||0)}</div><span class="pill ${late?"late":soon?"today":""}">${late?"Overdue · ":""}${nice(b.next)}</span></div>
+   <button class="mini" data-act="payBill" data-id="${b.id}">Paid</button>`)}
+function payBill(id){const b=S().bills.find(x=>x.id===id);if(!b)return;
+  ST.put("tx","bill-"+b.id+"-"+(b.next||TODAY()),{type:"out",amount:+b.amount||0,cat:b.cat||"Bills",who:b.who||meId(),date:TODAY(),note:b.name,createdAt:Date.now(),by:meId()});
+  let n=nextDue(b.next||TODAY(),b.every);while(n<=TODAY())n=nextDue(n,b.every);ST.patch("bills",id,{next:n,lastPaid:TODAY()});toast(`${b.name} paid. Next one ${nice(n)}`)}
+function autoPayBills(){ // bills marked "paid automatically" record themselves when their day comes
+  const t=TODAY();S().bills.filter(b=>b.auto&&b.next&&b.next<=t&&b.lastPaid!==b.next).forEach(b=>{
+    let d=b.next;const updates=[];while(d<=t){updates.push(d);d=nextDue(d,b.every)}
+    updates.forEach(day=>ST.put("tx","bill-"+b.id+"-"+day,{type:"out",amount:+b.amount||0,cat:b.cat||"Bills",who:b.who||meId(),date:day,note:b.name+" (automatic)",createdAt:Date.now(),by:meId()}));
+    ST.patch("bills",b.id,{next:d,lastPaid:updates[updates.length-1]});
+  });
+}
+function billSheet(id){
+  const b=id?S().bills.find(x=>x.id===id):null,cats=SET().categories||[];
+  openSheet(`${sheetHead(b?"Edit bill":"Add a bill or subscription")}<form id="f" class="stack" style="gap:12px">
+   <div class="field"><label for="b_name">Name</label><input id="b_name" required placeholder="e.g. Electricity, Netflix, Rent" value="${esc(b?.name||"")}"></div>
+   <div class="two"><div class="field"><label for="b_amt">Amount (${esc(SET().currency||"$")})</label><input id="b_amt" type="number" inputmode="decimal" step="0.01" min="0" required value="${b?.amount??""}"></div>
+    <div class="field"><label for="b_every">How often</label><select id="b_every">${Object.entries(EVERY).map(([k,[n]])=>`<option value="${k}" ${(b?.every||"month")===k?"selected":""}>${n}</option>`).join("")}</select></div></div>
+   <div class="two"><div class="field"><label for="b_next">Next due</label><input id="b_next" type="date" required value="${b?.next||TODAY()}"></div>
+    <div class="field"><label for="b_cat">Category</label><select id="b_cat">${cats.map(c=>`<option ${(b?.cat||"Bills")===c?"selected":""}>${esc(c)}</option>`).join("")}</select></div></div>
+   <div class="field"><label for="b_who">Who pays</label><select id="b_who">${whoOptions(b?.who||meId())}</select></div>
+   <label class="checkrow" for="b_auto"><input type="checkbox" id="b_auto" ${b?.auto?"checked":""}> Paid automatically (direct debit). Record it on the due date by itself.</label>
+   <button class="primary" type="submit">Save</button>${b?`<button type="button" class="link" id="b_del" style="color:var(--bad);align-self:center">Delete</button>`:""}</form>`,sh=>{
+    const v=i=>sh.querySelector("#"+i).value;
+    sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const amt=parseFloat(v("b_amt"));if(!v("b_name").trim()||!(amt>=0))return;
+      const rec={name:v("b_name").trim(),amount:Math.round(amt*100)/100,every:v("b_every"),next:v("b_next")||TODAY(),cat:v("b_cat"),who:+v("b_who"),auto:sh.querySelector("#b_auto").checked};
+      if(b){ST.patch("bills",b.id,rec);toast("Bill updated")}else{ST.add("bills",rec);toast("Bill added")}closeSheet();render()};
+    const d=sh.querySelector("#b_del");if(d)d.onclick=()=>{if(d.dataset.arm){ST.del("bills",b.id);closeSheet();toast("Deleted");render()}else{d.dataset.arm=1;d.textContent="Tap again to delete"}};
+  });
+}
+function viewBills(){
+  const list=billsSorted(),total=list.reduce((a,b)=>a+perMonth(b),0);
+  return `<button class="back" data-go="money">${ICON.back}Money</button>
+  <section class="card"><div class="trio"><div><div class="label">Per month</div><div class="v num">${money(total)}</div></div><div><div class="label">Per year</div><div class="v num">${money(total*12)}</div></div><div><div class="label">Bills</div><div class="v num">${list.length}</div></div></div></section>
+  <section class="card"><div class="row between"><h2>Bills & subscriptions</h2><button class="link" data-act="addBill">+ Add</button></div>
+   <div class="list" style="margin-top:6px">${list.length?list.map(billRow).join(""):`<div class="empty">Add rent, power, phone, internet, insurance and subscriptions. You'll see what's due on Today, and one tap records the payment.</div>`}</div></section>
+  ${list.length?swipeHint():""}`;
+}
+
+/* ---------- meal planner ---------- */
+let mealWeek=null;
+const weekStart=d=>{const x=new Date(d+"T12:00:00");return addDays(d,-((x.getDay()+6)%7))};
+const mealOn=d=>S().meals.find(m=>m.id===d);
+function viewMeals(){
+  const ws=mealWeek||weekStart(TODAY()),days=[...Array(7)].map((_,i)=>addDays(ws,i));
+  const label=new Date(ws+"T12:00:00").toLocaleDateString("en-AU",{day:"numeric",month:"short"})+" – "+new Date(days[6]+"T12:00:00").toLocaleDateString("en-AU",{day:"numeric",month:"short"});
+  const ingr=days.flatMap(d=>(mealOn(d)?.ingredients||[]));
+  return `${backBar}<div class="row between"><button class="iconbtn" data-act="mealPrev" aria-label="Previous week">‹</button><h2>${label}</h2><button class="iconbtn" data-act="mealNext" aria-label="Next week">›</button></div>
+  <section class="card"><h2>Dinners this week</h2><div class="list" style="margin-top:6px">${days.map(d=>{const m=mealOn(d),dt=new Date(d+"T12:00:00");
+    return `<button class="item mealrow ${d===TODAY()?"is-today":""}" data-act="editMeal" data-d="${d}"><span class="mday2"><b>${dt.toLocaleDateString("en-AU",{weekday:"short"})}</b><span>${dt.getDate()}</span></span><div class="grow" style="text-align:left"><div class="t">${m?esc(m.title):`<span class="sub">Not planned</span>`}</div>${m&&m.ingredients?.length?`<div class="m">${esc(m.ingredients.join(", "))}</div>`:""}${m&&m.cook?`<div class="m">Cook: ${esc(pname(m.cook))}</div>`:""}</div></button>`}).join("")}</div></section>
+  ${ingr.length?`<button class="primary" data-act="mealsToShop">Add ${ingr.length} ingredients to shopping</button>`:`<p class="sub" style="text-align:center">Tap a day to plan a dinner and list what you need. Then add it all to shopping in one tap.</p>`}`;
+}
+function mealSheet(d){
+  const m=mealOn(d),past=[...new Map(S().meals.filter(x=>x.title).map(x=>[x.title.toLowerCase(),x])).values()];
+  openSheet(`${sheetHead(new Date(d+"T12:00:00").toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"short"}))}<form id="f" class="stack" style="gap:12px">
+   <div class="field"><label for="ml_t">Dinner</label><input id="ml_t" list="pastMeals" placeholder="e.g. Chicken curry" value="${esc(m?.title||"")}"><datalist id="pastMeals">${past.map(x=>`<option value="${esc(x.title)}">`).join("")}</datalist></div>
+   <div class="field"><label for="ml_i">What you need (comma separated)</label><textarea id="ml_i" rows="3" placeholder="e.g. chicken thighs, curry paste, coconut milk, rice">${esc((m?.ingredients||[]).join(", "))}</textarea></div>
+   <div class="field"><label for="ml_c">Who's cooking</label><select id="ml_c"><option value="">Not decided</option>${people().map(p=>`<option value="${p.id}" ${m?.cook==p.id?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div>
+   <button class="primary" type="submit">Save</button>${m?`<button type="button" class="link" id="ml_del" style="color:var(--bad);align-self:center">Clear this day</button>`:""}</form>`,sh=>{
+    const t=sh.querySelector("#ml_t"),ing=sh.querySelector("#ml_i");
+    t.onchange=()=>{const p=past.find(x=>x.title.toLowerCase()===t.value.trim().toLowerCase());if(p&&!ing.value.trim())ing.value=(p.ingredients||[]).join(", ")};
+    sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const title=t.value.trim();if(!title){ST.del("meals",d);closeSheet();render();return}
+      ST.put("meals",d,{title,ingredients:ing.value.split(/\s*[,\n]\s*/).map(x=>x.trim()).filter(Boolean),cook:+sh.querySelector("#ml_c").value||0,date:d,updated:Date.now()});closeSheet();toast("Dinner planned");render()};
+    const del=sh.querySelector("#ml_del");if(del)del.onclick=()=>{ST.del("meals",d);closeSheet();render()};
+  });
+}
+function mealsToShop(){const ws=mealWeek||weekStart(TODAY());const before=S().shopping.filter(s=>!s.done).length;
+  [...Array(7)].map((_,i)=>addDays(ws,i)).flatMap(d=>mealOn(d)?.ingredients||[]).forEach(addShopItem);
+  setTimeout(()=>{const n=S().shopping.filter(s=>!s.done).length-before;toast(n>0?n+" added to shopping":"Already on the shopping list")},50)}
+
+/* ---------- countdowns (birthdays, holidays, trips) ---------- */
+function cdNext(c){if(!c.yearly)return c.date;const t=TODAY(),y=+t.slice(0,4);let d=y+c.date.slice(4);if(d<t)d=(y+1)+c.date.slice(4);return d}
+const daysUntil=d=>Math.round((new Date(d+"T12:00:00")-new Date(TODAY()+"T12:00:00"))/864e5);
+function countdownsSoon(n){return S().countdowns.map(c=>({...c,nd:cdNext(c)})).filter(c=>c.nd>=TODAY()).sort((a,b)=>a.nd.localeCompare(b.nd)).slice(0,n)}
+function cdLabel(c){const k=daysUntil(c.nd);const age=c.yearly&&c.kind==="birthday"&&+c.date.slice(0,4)>1900?` (turns ${+c.nd.slice(0,4)-+c.date.slice(0,4)})`:"";return k===0?"Today!"+age:k===1?"Tomorrow"+age:k+" days"+age}
+function countdownSheet(id){
+  const c=id?S().countdowns.find(x=>x.id===id):null;
+  openSheet(`${sheetHead(c?"Edit date":"A date to remember")}<form id="f" class="stack" style="gap:12px">
+   <div class="field"><label for="c_t">What</label><input id="c_t" required placeholder="e.g. Jugo's birthday, Japan trip" value="${esc(c?.title||"")}"></div>
+   <div class="two"><div class="field"><label for="c_d">Date</label><input id="c_d" type="date" required value="${c?.date||""}"></div>
+    <div class="field"><label for="c_k">Type</label><select id="c_k">${[["birthday","Birthday"],["anniversary","Anniversary"],["trip","Trip or holiday"],["other","Other"]].map(([k,n])=>`<option value="${k}" ${(c?.kind||"birthday")===k?"selected":""}>${n}</option>`).join("")}</select></div></div>
+   <label class="checkrow" for="c_y"><input type="checkbox" id="c_y" ${c?(c.yearly?"checked":""):"checked"}> Every year</label>
+   <button class="primary" type="submit">Save</button>${c?`<button type="button" class="link" id="c_del" style="color:var(--bad);align-self:center">Delete</button>`:""}</form>`,sh=>{
+    const k=sh.querySelector("#c_k"),y=sh.querySelector("#c_y");k.onchange=()=>{y.checked=k.value==="birthday"||k.value==="anniversary"};
+    sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const rec={title:sh.querySelector("#c_t").value.trim(),date:sh.querySelector("#c_d").value,kind:k.value,yearly:y.checked};if(!rec.title||!rec.date)return;
+      if(c)ST.patch("countdowns",c.id,rec);else ST.add("countdowns",rec);closeSheet();toast("Saved");render()};
+    const d=sh.querySelector("#c_del");if(d)d.onclick=()=>{ST.del("countdowns",c.id);closeSheet();render()};
+  });
+}
+
+/* ---------- chores & stars ---------- */
+const weekKey=()=>weekStart(TODAY());
+function starsThisWeek(){const ws=weekKey(),tot={};S().stars.filter(s=>s.date>=ws).forEach(s=>{tot[s.who]=(tot[s.who]||0)+(+s.pts||0)});return tot}
+function giveStars(task){if(!(+task.points>0))return;ST.put("stars","t-"+task.id+"-"+(task.due||""),{who:task.who,pts:+task.points,date:TODAY(),title:task.title,task:task.id})}
+function takeStars(task){const s=S().stars.find(x=>x.task===task.id&&x.id==="t-"+task.id+"-"+(task.due||""));if(s)ST.del("stars",s.id)}
+function scoreboard(){
+  const any=S().tasks.some(t=>+t.points>0)||S().stars.length;if(!any)return"";
+  const tot=starsThisWeek(),max=Math.max(1,...Object.values(tot));
+  return `<section class="card"><div class="row between"><h2>Stars this week</h2><span class="sub">Since Monday</span></div><div class="stack" style="gap:10px;margin-top:10px">${people().map(p=>{const v=tot[p.id]||0;return `<div class="row" style="gap:10px">${dot(p.id)}<div class="grow"><div class="row between"><span>${esc(p.name)}</span><b class="num">★ ${v}</b></div><div class="bar"><i style="width:${v/max*100}%"></i></div></div></div>`}).join("")}</div></section>`;
+}
+
+/* ---------- search ---------- */
+function searchSheet(){
+  openSheet(`${sheetHead("Search")}<input id="q" class="searchbox" type="search" placeholder="Search tasks, events, notes, money…" autocomplete="off" enterkeyhint="search"><div id="qr" class="list" style="margin-top:8px"></div>`,sh=>{
+    const q=sh.querySelector("#q"),out=sh.querySelector("#qr");q.focus();
+    const run=()=>{const s=q.value.trim().toLowerCase();if(s.length<2){out.innerHTML=`<div class="empty">Type at least 2 letters.</div>`;return}
+      const has=(...f)=>f.some(x=>String(x||"").toLowerCase().includes(s));const res=[];
+      S().events.filter(e=>has(e.title,e.place)).forEach(e=>res.push(["Event",e.title,nice(e.date)+(e.time?" · "+tm(e.time):""),`data-act="edit" data-col="events" data-id="${e.id}"`,e.date]));
+      S().tasks.filter(t=>has(t.title)).forEach(t=>res.push(["Task",t.title,(t.done?"Done · ":"")+(t.due?nice(t.due):""),`data-act="edit" data-col="tasks" data-id="${t.id}"`,t.due||""]));
+      S().homework.filter(h=>has(h.title,h.subject)).forEach(h=>res.push(["Homework",h.subject+": "+h.title,h.due?nice(h.due):"",`data-act="edit" data-col="homework" data-id="${h.id}"`,h.due||""]));
+      S().notes.filter(n=>has(n.title,n.body)).forEach(n=>res.push(["Note",n.title||"Untitled",(n.body||"").slice(0,60),`data-act="openNote" data-id="${n.id}"`,""]));
+      S().shopping.filter(x=>has(x.name)).forEach(x=>res.push(["Shopping",x.name,x.done?"In the trolley":"On the list",`data-go="lists" data-list="shopping"`,""]));
+      S().tx.filter(x=>has(x.note,x.cat)).forEach(x=>res.push(["Money",(x.note||x.cat)+" "+money(x.type==="in"?x.amount:-x.amount,true),nice(x.date),`data-go="money"`,x.date]));
+      S().bills.filter(b=>has(b.name)).forEach(b=>res.push(["Bill",b.name+" "+money(+b.amount||0),"Next "+nice(b.next),`data-act="editBill" data-id="${b.id}"`,""]));
+      allCards().filter(c=>has(c.name,c.holder)).forEach(c=>res.push(["Wallet",c.name,c.shared?"Shared":"Just me",`data-act="openCard" data-id="${c.id}"`,""]));
+      S().meals.filter(m=>has(m.title,(m.ingredients||[]).join(" "))).forEach(m=>res.push(["Dinner",m.title,nice(m.id),`data-act="editMeal" data-d="${m.id}"`,m.id]));
+      S().countdowns.filter(c=>has(c.title)).forEach(c=>res.push(["Date",c.title,nice(cdNext(c)),`data-act="editCountdown" data-id="${c.id}"`,""]));
+      out.innerHTML=res.length?res.slice(0,40).map(([k,t,m,attr])=>`<button class="item sres" ${attr}><span class="pill">${k}</span><div class="grow" style="text-align:left"><div class="t">${esc(t)}</div><div class="m">${esc(m)}</div></div></button>`).join(""):`<div class="empty">Nothing found for “${esc(q.value)}”.</div>`};
+    q.oninput=run;run();
+  });
+}
+
+/* ---------- add to iPhone calendar (.ics) ---------- */
+function icsFor(e){
+  const d=e.date.replace(/-/g,""),p=n=>String(n).padStart(2,"0"),stamp=new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d+/,"");
+  let when;if(e.time){const [h,m]=e.time.split(":").map(Number);const end=new Date(2000,0,1,h+1,m);when=`DTSTART:${d}T${p(h)}${p(m)}00\r\nDTEND:${(end.getDate()>1?addDays(e.date,1):e.date).replace(/-/g,"")}T${p(end.getHours())}${p(end.getMinutes())}00`}
+  else when=`DTSTART;VALUE=DATE:${d}\r\nDTEND;VALUE=DATE:${addDays(e.date,1).replace(/-/g,"")}`;
+  const clean=s=>String(s||"").replace(/[\\;,]/g,m=>"\\"+m).replace(/\n/g,"\\n");
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Happy Home//EN\r\nBEGIN:VEVENT\r\nUID:${e.id}@happyhome\r\nDTSTAMP:${stamp}\r\n${when}\r\nSUMMARY:${clean(e.title)}\r\n${e.place?"LOCATION:"+clean(e.place)+"\r\n":""}BEGIN:VALARM\r\nTRIGGER:-PT30M\r\nACTION:DISPLAY\r\nDESCRIPTION:${clean(e.title)}\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`;
+}
+function exportEvent(e){
+  const blob=new Blob([icsFor(e)],{type:"text/calendar"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download=(e.title||"event").replace(/[^\w\- ]+/g,"").slice(0,40)+".ics";a.rel="noopener";a.style.display="none";document.body.appendChild(a);a.click();
+  setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},4000);
+}
+
+/* ---------- important dates view ---------- */
+function viewDates(){
+  const list=S().countdowns.map(c=>({...c,nd:cdNext(c)})).sort((a,b)=>(a.nd||"").localeCompare(b.nd||""));
+  const up=list.filter(c=>c.nd>=TODAY()),past=list.filter(c=>c.nd<TODAY());
+  const item=c=>`<button class="item cdrow" data-act="editCountdown" data-id="${c.id}"><span class="cdnum"><b>${c.nd>=TODAY()?daysUntil(c.nd):"✓"}</b><span>${c.nd>=TODAY()?(daysUntil(c.nd)===1?"day":"days"):"past"}</span></span><div class="grow" style="text-align:left"><div class="t">${esc(c.title)}</div><div class="m">${nice(c.nd)}${c.yearly?" · every year":""}${c.yearly&&c.kind==="birthday"&&+c.date.slice(0,4)>1900&&c.nd>=TODAY()?" · turns "+(+c.nd.slice(0,4)-+c.date.slice(0,4)):""}</div></div></button>`;
+  return `${backBar}<section class="card"><div class="row between"><h2>Coming up</h2><button class="link" data-act="addCountdown">+ Add</button></div>
+   <div class="list" style="margin-top:6px">${up.length?up.map(item).join(""):`<div class="empty">Add birthdays, anniversaries, holidays and trips. The next ones show on Today with a countdown.</div>`}</div></section>
+  ${past.length?`<section class="card"><h2>Past</h2><div class="list" style="margin-top:6px">${past.map(item).join("")}</div></section>`:""}`;
+}
+
 /* ---------- render ---------- */
-const TITLES={home:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood"};
+const TITLES={home:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates"};
 let rendering=false;
 function render(){
   if(rendering)return;rendering=true;
@@ -479,27 +752,38 @@ function render(){
     }
     nav.hidden=false;head.hidden=false;
     const keepShop=$("#shopInput"),shopVal=keepShop&&keepShop.value,shopFocus=keepShop&&document.activeElement===keepShop;
-    const keepNote=$("#moodNote"),noteVal=keepNote&&keepNote.value;
+    const keepNote=$("#moodNote"),noteVal=keepNote&&keepNote.value;const keepQ=$("#qa"),qVal=keepQ&&keepQ.value,qFocus=keepQ&&document.activeElement===keepQ;
     $("#title").textContent=TITLES[tab];
     const me=person(meId());
     $("#subtitle").textContent=tab==="home"?(me?"Hello, "+me.name:""):"";
-    $("#view").innerHTML={home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood}[tab]();
+    $("#view").innerHTML={home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates}[tab]();
     const active=parentTab[tab]||tab;
     document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===active));
     if(shopVal&&$("#shopInput"))$("#shopInput").value=shopVal; if(shopFocus&&$("#shopInput"))$("#shopInput").focus();
-    if(noteVal&&$("#moodNote"))$("#moodNote").value=noteVal;
+    if(noteVal&&$("#moodNote"))$("#moodNote").value=noteVal;if(qVal&&$("#qa")){$("#qa").value=qVal;showQuick()}if(qFocus&&$("#qa"))$("#qa").focus();
     bindForms();
   }finally{rendering=false}
 }
 function bindForms(){
   const sf=$("#shopForm");if(sf)sf.onsubmit=e=>{e.preventDefault();const v=$("#shopInput").value.trim();if(!v)return;
-    const m=v.match(/^(.*?)\s+(?:x\s*)?(\d+(?:\.\d+)?\s*(?:kg|g|l|L|ml|pack|packs|bunch|dozen)?)$/i);
-    $("#shopInput").value="";ST.add("shopping",{name:(m?m[1]:v).trim(),qty:m?m[2]:"",done:false,who:meId()});$("#shopInput").focus()};
+    $("#shopInput").value="";v.split(/\s*,\s*/).filter(Boolean).forEach(addShopItem);$("#shopInput").focus()};
+  const qf=$("#qaForm");if(qf){const q=$("#qa");q.oninput=showQuick;qf.onsubmit=e=>{e.preventDefault();const v=q.value.trim();if(!v){q.focus();return}
+    saveQuick(parseQuick(v));q.value="";showQuick();q.blur()}}
   const af=$("#authForm");if(af)af.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";const em=$("#a_email").value.trim(),pw=$("#a_pw").value;
     try{authMode==="signup"?await ST.signUp(em,pw):await ST.signIn(em,pw)}catch(err){authErr=err&&err.code==="hh/mfa-needed"?"":authErrorText(err)}busy=false;render();const mc=$("#m_code");mc&&mc.focus()};
   const mf=$("#mfaForm");if(mf)mf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.finishMfaSignIn($("#m_code").value)}catch(err){authErr=authErrorText(err)}busy=false;render()};
   const nf=$("#newFam");if(nf)nf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.createFamily({myName:$("#n_me").value.trim(),otherNames:[$("#n_2").value.trim(),$("#n_3").value.trim()],currency:$("#n_cur").value.trim()})}catch(err){authErr=authErrorText(err)}busy=false;render()};
   const jf=$("#joinFam");if(jf)jf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.joinFamily($("#j_code").value)}catch(err){authErr=authErrorText(err)}busy=false;render()};
+}
+function showQuick(){const q=$("#qa"),p=$("#qaPrev"),tip=$("#qaTip");if(!q||!p)return;const v=q.value.trim();const h=v.length>1?quickPreview(parseQuick(v)):"";p.hidden=!h;p.innerHTML=h?`<span class="label">Will add</span> ${h}`:"";if(tip)tip.hidden=!!v}
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition, hasMic=!!SR;
+function voiceAdd(){
+  const q=$("#qa");if(!q)return;
+  try{const r=new SR();r.lang="en-AU";r.interimResults=true;r.maxAlternatives=1;const btn=$(".qamic");btn&&btn.classList.add("on");toast("Listening… say it now");
+    r.onresult=e=>{q.value=[...e.results].map(x=>x[0].transcript).join(" ");showQuick()};
+    r.onerror=()=>{btn&&btn.classList.remove("on");q.focus();toast("Use the microphone on your keyboard instead")};
+    r.onend=()=>{btn&&btn.classList.remove("on");if(q.value.trim())q.focus()};r.start()}
+  catch(e){q.focus();toast("Use the microphone on your keyboard instead")}
 }
 function go(t){tab=t;try{history.replaceState(null,"","#"+t)}catch(e){location.hash=t}render();scrollTo(0,0)}
 
@@ -522,7 +806,8 @@ function addSheet(kind,preset,edit){
   let body="";
   if(kind==="task")body=`<div class="field"><label for="f_title">What needs doing?</label><input id="f_title" required placeholder="e.g. Take bins out"></div>
    <div class="two"><div class="field"><label for="f_who">Who</label><select id="f_who">${whoOptions(me)}</select></div><div class="field"><label for="f_due">Date</label><input id="f_due" type="date" value="${TODAY()}"></div></div>
-   <div class="two"><div class="field"><label for="f_time">Time (optional)</label><input id="f_time" type="time"></div><div class="field"><label for="f_rep">Repeat</label><select id="f_rep"><option value="none">Doesn't repeat</option><option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option></select></div></div>`;
+   <div class="two"><div class="field"><label for="f_time">Time (optional)</label><input id="f_time" type="time"></div><div class="field"><label for="f_rep">Repeat</label><select id="f_rep"><option value="none">Doesn't repeat</option><option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option></select></div></div>
+   <div class="field"><label for="f_pts">Stars for doing it (chores)</label><select id="f_pts"><option value="0">No stars</option>${[1,2,3,5,10].map(n=>`<option value="${n}">★ ${n}</option>`).join("")}</select></div>`;
   if(kind==="money")body=`<div class="seg" id="f_type"><button type="button" class="on" data-t="out">Spent</button><button type="button" data-t="in">Received</button></div>
    <div class="two"><div class="field"><label for="f_amt">Amount (${esc(SET().currency||"$")})</label><input id="f_amt" type="number" inputmode="decimal" step="0.01" min="0" required placeholder="0.00" value="${preset.amount??""}"></div><div class="field"><label for="f_date">Date</label><input id="f_date" type="date" value="${TODAY()}"></div></div>
    <div class="two"><div class="field"><label for="f_cat">Category</label><select id="f_cat">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}<option>Salary</option></select></div><div class="field"><label for="f_who">Who</label><select id="f_who">${whoOptions(me)}</select></div></div>
@@ -540,21 +825,21 @@ function addSheet(kind,preset,edit){
   openSheet(`${sheetHead(edit?{task:"Edit task",homework:"Edit homework",event:"Edit event"}[kind]:"Add")}${edit?"":pick}<form id="f" class="stack" style="gap:12px">${body}<button class="primary" type="submit">Save</button>${edit?`<button type="button" class="link" id="f_del" style="color:var(--bad);align-self:center">Delete</button>`:""}</form>`,sh=>{
     sh.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>addSheet(b.dataset.kind,preset));
     if(edit){const set=(id,val)=>{const el=sh.querySelector("#"+id);if(el&&val!=null)el.value=val};
-      set("f_title",edit.title);set("f_who",edit.who);set("f_due",edit.due);set("f_time",edit.time||"");set("f_rep",kind==="event"?"0":(edit.repeat||"none"));set("f_subj",edit.subject);set("f_date",edit.date);set("f_place",edit.place||"");
-      if(kind==="event"){const r=sh.querySelector("#f_rep");r&&r.closest(".field").remove()}
+      set("f_title",edit.title);set("f_who",edit.who);set("f_due",edit.due);set("f_time",edit.time||"");set("f_rep",kind==="event"?"0":(edit.repeat||"none"));set("f_subj",edit.subject);set("f_date",edit.date);set("f_place",edit.place||"");set("f_pts",String(+edit.points||0));
+      if(kind==="event"){const r=sh.querySelector("#f_rep");r&&r.closest(".field").remove();const b=document.createElement("button");b.type="button";b.className="ghost";b.textContent="Add to iPhone Calendar";b.onclick=()=>{exportEvent(edit);toast("Opening Calendar…")};sh.querySelector("#f_del").before(b)}
       const col={task:"tasks",homework:"homework",event:"events"}[kind],d=sh.querySelector("#f_del");
       d.onclick=()=>{if(d.dataset.arm){ST.del(col,edit.id);closeSheet();toast("Deleted");render()}else{d.dataset.arm=1;d.textContent="Tap again to delete"}};}
     let type="out";
     sh.querySelectorAll("#f_type button").forEach(b=>b.onclick=()=>{type=b.dataset.t;sh.querySelectorAll("#f_type button").forEach(x=>x.classList.toggle("on",x===b));sh.querySelector("#f_cat").value=type==="in"?"Salary":cats[0]});
     const first=sh.querySelector("#f_subj,#f_title,#f_amt");if(!edit&&first)first.focus();
     sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const v=id=>(sh.querySelector("#"+id)?.value??"");
-      if(kind==="task"){if(!v("f_title").trim())return;const rec={title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time"),repeat:v("f_rep")};if(edit){ST.patch("tasks",edit.id,rec);toast("Task updated")}else{ST.add("tasks",{...rec,done:false});toast("Task added")}}
+      if(kind==="task"){if(!v("f_title").trim())return;const rec={title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time"),repeat:v("f_rep"),points:+v("f_pts")||0};if(edit){ST.patch("tasks",edit.id,rec);toast("Task updated")}else{ST.add("tasks",{...rec,done:false});toast("Task added")}}
       if(kind==="money"){const a=parseFloat(v("f_amt"));if(!(a>0))return;ST.add("tx",{type,amount:Math.round(a*100)/100,cat:v("f_cat"),who:+v("f_who"),date:v("f_date")||TODAY(),note:v("f_note").trim()});moneyMonth=monthKey(v("f_date")||TODAY());toast(type==="in"?"Income added":"Spending added")}
       if(kind==="event"&&edit){if(!v("f_title").trim())return;const d0=v("f_date")||TODAY();ST.patch("events",edit.id,{title:v("f_title").trim(),who:+v("f_who"),date:d0,time:v("f_time"),place:v("f_place").trim()});calDay=d0;calMonth=monthKey(d0);toast("Event updated")}
       else if(kind==="event"){if(!v("f_title").trim())return;const d0=v("f_date")||TODAY(),step=+v("f_rep"),n=step?8:1;
         for(let i=0;i<n;i++)ST.add("events",{title:v("f_title").trim(),who:+v("f_who"),date:addDays(d0,i*step),time:v("f_time"),place:v("f_place").trim()});
         calDay=d0;calMonth=monthKey(d0);toast(n>1?n+" events added":"Event added")}
-      if(kind==="shop"){if(!v("f_title").trim())return;ST.add("shopping",{name:v("f_title").trim(),qty:v("f_qty").trim(),done:false,who:meId()});toast("Added to shopping")}
+      if(kind==="shop"){if(!v("f_title").trim())return;addShopItem(v("f_title").trim()+(v("f_qty").trim()?" "+v("f_qty").trim():""));toast("Added to shopping")}
       if(kind==="homework"){if(!v("f_title").trim())return;const rec={subject:v("f_subj").trim()||"Homework",title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time")};if(edit){ST.patch("homework",edit.id,rec);toast("Homework updated")}else{ST.add("homework",{...rec,done:false});toast("Homework added")}}
       if(kind==="note"){if(!v("f_title").trim()&&!v("f_body").trim())return;ST.add("notes",{title:v("f_title").trim(),body:v("f_body"),who:meId(),updated:Date.now(),pinned:false});toast("Note saved")}
       closeSheet();
@@ -662,7 +947,7 @@ function rollRepeat(t){
   const step=t.repeat==="daily"?1:t.repeat==="weekly"?7:0;
   const next=s=>{if(step)return addDays(s,step);const x=new Date(s+"T12:00:00");x.setMonth(x.getMonth()+1);return iso(x)};
   let d=next(t.due);while(d<TODAY())d=next(d);
-  ST.add("tasks",{title:t.title,who:t.who,due:d,time:t.time||"",repeat:t.repeat,done:false});
+  ST.add("tasks",{title:t.title,who:t.who,due:d,time:t.time||"",repeat:t.repeat,points:+t.points||0,done:false});
 }
 
 /* ---------- swipe to delete (tracks the finger 1:1, projects momentum on release) ---------- */
@@ -698,17 +983,28 @@ function rollRepeat(t){
 /* ---------- clicks ---------- */
 document.addEventListener("click",e=>{
   const sw=e.target.closest(".swipe");if(sw&&sw.dataset.justSwiped){e.preventDefault();return}
-  const g=e.target.closest("[data-go]");if(g){if(g.dataset.list)listTab=g.dataset.list;go(g.dataset.go);return}
+  const g=e.target.closest("[data-go]");if(g){if(g.closest("#sheetHost"))closeSheet();if(g.dataset.list)listTab=g.dataset.list;go(g.dataset.go);return}
   const tb=e.target.closest(".tab");if(tb){go(tb.dataset.tab);return}
   const a=e.target.closest("[data-act]");if(!a)return;const id=a.dataset.id,act=a.dataset.act;
   const flip=(col,msg)=>{const t=S()[col].find(x=>x.id===id);if(!t)return;ST.patch(col,id,{done:!t.done});if(!t.done&&msg)toast(msg);return t};
   switch(act){
     case"close":return closeSheet();
+    case"voice":return voiceAdd();
+    case"search":return searchSheet();
+    case"addBill":return billSheet();
+    case"editBill":closeSheet();return billSheet(id);
+    case"payBill":{const b=S().bills.find(x=>x.id===id);if(b&&b.lastPaid===TODAY()&&!a.dataset.arm){a.dataset.arm=1;a.textContent="Again?";toast("Already paid today. Tap again to pay the next one early");return}return payBill(id)}
+    case"mealPrev":case"mealNext":mealWeek=addDays(mealWeek||weekStart(TODAY()),act==="mealNext"?7:-7);break;
+    case"editMeal":closeSheet();return mealSheet(a.dataset.d);
+    case"mealsToShop":return mealsToShop();
+    case"addCountdown":return countdownSheet();
+    case"editCountdown":closeSheet();return countdownSheet(id);
+    case"reAdd":addShopItem(a.dataset.k);toast(a.dataset.k+" added");return;
     case"twoStep":return twoStepSheet();
     case"mfaCancel":ST.cancelMfa();authErr="";return render();
-    case"edit":{const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event"}[col],null,r);return}
+    case"edit":{closeSheet();const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event"}[col],null,r);return}
     case"swipeDel":{const w=a.closest(".swipe");ST.del(w.dataset.col,w.dataset.id);toast("Deleted");return}
-    case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was});if(!was){toast("Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}
+    case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was});if(was)takeStars(snap);if(!was){giveStars(snap);toast(+snap.points>0?`Done! ★ ${+snap.points} for ${pname(snap.who)}`:"Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}
     case"toggleHw":return void flip("homework","Homework finished!");
     case"toggleShop":return void flip("shopping");
     case"clearDone":ST.delMany("tasks",S().tasks.filter(x=>x.done).map(x=>x.id));return;
@@ -723,8 +1019,8 @@ document.addEventListener("click",e=>{
     case"addEventDay":return addSheet("event",{date:calDay});
     case"budgets":return budgetSheet();
     case"settings":return settingsSheet();
-    case"openNote":return noteSheet(id);
-    case"openCard":return cardSheet(id);
+    case"openNote":closeSheet();return noteSheet(id);
+    case"openCard":closeSheet();return cardSheet(id);
     case"addCard":return cardForm();
     case"editCard":closeSheet();return cardForm(id);
     case"key":return calcKey(a.dataset.k);
@@ -754,6 +1050,7 @@ document.addEventListener("click",e=>{
 });
 $("#fab").onclick=()=>addSheet();
 $("#btnSettings").onclick=settingsSheet;
+$("#btnSearch").onclick=searchSheet;
 addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(routes.includes(h)&&h!==tab){tab=h;render()}});
 addEventListener("online",render);addEventListener("offline",render);
 document.addEventListener("keydown",e=>{
@@ -774,6 +1071,8 @@ ST.onChange(()=>{
   moodTick();render();
 });
 setInterval(()=>{if(tab==="mood"&&activeSession())render();moodTick()},1000);
+let autoPayDay=null;setInterval(()=>{if(ST.phase==="ready"&&autoPayDay!==TODAY()&&Date.now()-bootAt>6000){autoPayDay=TODAY();try{autoPayBills()}catch(e){}}},3000);
+const bootAt=Date.now();
 ST.init();
 if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 })();

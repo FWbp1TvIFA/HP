@@ -6,7 +6,7 @@
 (function () {
   "use strict";
   const LOCAL_KEY = "happyhome.v2";
-  const FAMILY_COLS = ["tasks", "events", "tx", "shopping", "homework", "notes", "wallet", "moods", "locations", "moodSessions"];
+  const FAMILY_COLS = ["tasks", "events", "tx", "shopping", "homework", "notes", "wallet", "moods", "locations", "moodSessions", "bills", "meals", "countdowns", "shopFreq", "stars"];
   const PRIVATE_COLS = ["myWallet", "myMoodResults"]; // stored under users/{uid}/
   const PRIVATE_PATH = { myWallet: "wallet", myMoodResults: "moodResults" };
   const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
