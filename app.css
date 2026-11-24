@@ -384,3 +384,9 @@ header.top .iconbtn+.iconbtn{margin-left:-4px}
 .swipe .act{opacity:0}
 .swipe.open .act,.swipe.dragging .act{opacity:1}
 .item .time{min-width:62px;white-space:nowrap}
+.seg.mini2{padding:2px}
+.seg.mini2 button{padding:5px 10px;font-size:.78rem}
+.pdays{display:grid;grid-template-columns:repeat(14,1fr);gap:3px}
+.pdays span{aspect-ratio:1;border-radius:6px;background:var(--sunk);color:var(--muted);font-size:.6rem;display:grid;place-items:center;font-weight:600}
+.pdays span.on{background:var(--accent);color:var(--on-accent)}
+.pdays span.today{outline:2px solid var(--accent);outline-offset:1px}

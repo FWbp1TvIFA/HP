@@ -78,7 +78,7 @@ const dow=d=>new Date(d+"T12:00:00").getDay();
 const isRep=e=>e.repeat==="weekly"&&Array.isArray(e.days)&&e.days.length;
 function evOn(d){const wd=dow(d);return S().events.filter(e=>isRep(e)?(d>=e.date&&(!e.until||d<=e.until)&&e.days.includes(wd)&&!(e.skip||[]).includes(d)):e.date===d).map(e=>isRep(e)?{...e,date:d,start:e.date}:e)}
 function evRange(a,b){const out=[];for(let d=a;d<=b;d=addDays(d,1))out.push(...evOn(d));return out}
-const repText=e=>isRep(e)?"Every "+[...e.days].sort((a,b)=>((a+6)%7)-((b+6)%7)).map(i=>DAYN[i]).join(", "):"";
+const repText=e=>!isRep(e)?"":e.days.length===7?"Every day":[...e.days].sort().join()==="1,2,3,4,5"?"Every weekday":[...e.days].sort().join()==="0,6"?"Every weekend":isRep(e)?"Every "+[...e.days].sort((a,b)=>((a+6)%7)-((b+6)%7)).map(i=>DAYN[i]).join(", "):"";
 const isUrl=v=>/^https?:\/\/\S+$/i.test(String(v||"").trim());
 const placeTxt=p=>isUrl(p)?p.replace(/^https?:\/\/(www\.)?/i,"").split("/")[0]:p;
 const joinBtn=e=>isUrl(e.place)?`<a class="mini join" href="${esc(e.place.trim())}" target="_blank" rel="noopener">Open</a>`:"";
@@ -114,7 +114,7 @@ function viewHome(){
   </div>
   <div class="two">${learnTodayCard()}${(()=>{const k=kidId(),nx=sortEv(evRange(t,addDays(t,6)).filter(e=>isRep(e)&&+e.who===k)).filter(e=>e.date>t||!e.time||e.time>=nowT)[0];return nx?`<button class="tile" data-go="activities"><span class="label">${esc(pname(k))}'s next class</span><b>${esc(nx.title)}</b><span>${nice(nx.date)}${nx.time?" · "+tm(nx.time):""}</span></button>`:`<button class="tile" data-go="activities"><span class="label">Activities</span><b>Weekly classes</b><span>Swimming, lessons, sport</span></button>`})()}</div>
   <div class="two">
-   <button class="tile" data-go="money"><span class="label">Money left</span><b class="num ${left<0?"neg":""}">${money(left)}</b><span>this month</span></button>
+   <button class="tile" data-go="money"><span class="label">Money left</span><b class="num ${left<0?"neg":""}">${left<0?"−":""}${money(left)}</b><span>this month</span></button>
    <button class="tile" data-go="lists" data-list="shopping"><span class="label">Shopping</span><b class="num">${shopLeft} item${shopLeft===1?"":"s"}</b><span>still to buy</span></button>
   </div>
   <section class="card"><div class="row between"><h2>Coming up this week</h2><button class="link" data-go="calendar">Calendar</button></div>
@@ -528,7 +528,7 @@ function authErrorText(e){const c=e&&e.code||"";return c.includes("invalid-verif
 /* ---------- quick add: type a sentence, the app works out what it is ---------- */
 const WEEKDAYS=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
 const MONTHS=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-const EVENTISH=/\b(appointment|appt|dentist|doctor|gp|vet|party|meeting|training|practice|lesson|class|dinner|lunch|breakfast|brunch|birthday|game|match|flight|pickup|pick up|drop off|visit|concert|movie|cinema|swimming|soccer|football|footy|netball|cricket|basketball|tennis|piano|guitar|tutor|haircut|interview|wedding|bbq|church|temple|excursion|camp|holiday|recital|assembly|parent teacher)\b/i;
+const EVENTISH=/\b(appointment|appt|dentist|doctor|gp|vet|party|meeting|training|practice|lesson|class|dinner|lunch|breakfast|brunch|birthday|game|match|flight|pickup|pick up|drop off|visit|concert|movie|cinema|swimming|swim|yoga|gym|dance|ballet|karate|taekwondo|playdate|sleepover|soccer|football|footy|netball|cricket|basketball|tennis|piano|guitar|tutor|haircut|interview|wedding|bbq|church|temple|excursion|camp|holiday|recital|assembly|parent teacher)\b/i;
 const reEsc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
 function parseQuick(txt){
   let s=" "+txt.trim()+" ";const out={kind:null,title:"",who:null,date:null,time:null,amount:null,items:null,subject:null};
@@ -538,21 +538,32 @@ function parseQuick(txt){
   if(m){out.kind="shop";out.items=m[2].split(/\s*(?:,|\band\b|&|\+)\s*/i).map(x=>x.trim()).filter(Boolean);return out}
   // money: "$45 petrol", "spent 12.50 on lunch", "paid 80 electricity"
   m=s.match(/\$\s?(\d+(?:\.\d{1,2})?)/)||s.match(/\b(?:spent|paid)\s+\$?(\d+(?:\.\d{1,2})?)/i);
-  if(m){out.kind="money";out.amount=+m[1];s=s.replace(m[0]," ").replace(/\b(spent|paid|on|for)\b/gi," ");}
+  if(m){out.kind="money";out.amount=+m[1];s=s.replace(m[0]," ").replace(/\b(spent|paid|bought|on|for)\b/gi," ");}
   // person
-  for(const p of people()){const re=new RegExp("\\s(?:for\\s+|with\\s+)?"+reEsc(p.name)+"(?:'s)?(?=\\s)","i");if(re.test(s)){out.who=p.id;s=s.replace(re," ");break}}
+  for(const p of people()){const first=p.name.split(/\s+/)[0];for(const nm of [p.name,first]){
+    if(new RegExp("\\b(?:pick\\s*up|drop\\s*off|collect|call|meet|ring|text|visit|help)\\s+"+reEsc(nm)+"\\b","i").test(s)){out.keepWho=p.id;break}
+    const pos=new RegExp("\\s"+reEsc(nm)+"'s(?=\\s)","i");if(pos.test(s)){out.who=p.id;break}
+    const re=new RegExp("\\s(?:for\\s+|with\\s+)?"+reEsc(nm)+"(?=\\s)","i");if(re.test(s)){out.who=p.id;s=s.replace(re," ");break}}
+    if(out.who||out.keepWho)break}
   // time
   const tmm=cut(/\s(?:at\s+|@\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)(?=\s)/i)||cut(/\s(?:at\s+|@\s*)(\d{1,2})(?:[:.](\d{2}))?(?=\s)/i)||cut(/\s(\d{1,2})[:](\d{2})(?=\s)/);
   if(tmm){let h=+tmm[1];const mi=+(tmm[2]||0),ap=(tmm[3]||"").toLowerCase();if(ap==="pm"&&h<12)h+=12;if(ap==="am"&&h===12)h=0;if(!ap&&h>=1&&h<=7)h+=12;if(h<24&&mi<60)out.time=String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0")}
+  if(cut(/\s(?:at\s+)?(noon|midday|lunchtime)(?=\s)/i)&&!out.time)out.time="12:00";
   if(cut(/\s(?:this\s+)?(morning)(?=\s)/i)&&!out.time)out.time="09:00";
+  if(cut(/\s(?:this\s+)?(afternoon|arvo)(?=\s)/i)&&!out.time)out.time="15:00";
   if(cut(/\s(?:this\s+)?(tonight|evening)(?=\s)/i)){out.date=out.date||TODAY();if(!out.time)out.time="18:00"}
-  // weekly: "swimming every tuesday and thursday 4pm"
+  {const nm=s.match(/\s(?:at\s+night|((?:sun|mon|tues?|wed(?:nes)?|thu(?:rs)?|fri|sat(?:ur)?)(?:day)?s?)\s+night)(?=\s)/i);if(nm){s=s.replace(nm[0]," "+(nm[1]||"")+" ");if(!out.time)out.time="19:00"}}
+  // weekly: "swimming every tuesday and thursday 4pm", "piano wednesdays", "every day"
   const t=TODAY();
+  if(!/\bevery\b/i.test(s))s=s.replace(/\s((?:sun|mon|tues|wednes|thurs|fri|satur)days)(?=\s)/i," every $1");
+  if(cut(/\s(?:every\s*day|each\s+day|daily)(?=\s)/i))out.daily=true;
+  else if(cut(/\s(?:every|each)\s+week(?=\s)/i))out.weekly=true;
   const DW="(?:sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*";
   if((m=cut(new RegExp("\\s(?:on\\s+)?every\\s+("+DW+"(?:\\s*(?:,|and|&)\\s*"+DW+")*)(?=\\s)","i")))){
     out.days=[...new Set(m[1].split(/\s*(?:,|and|&)\s*/i).map(w=>WEEKDAYS.findIndex(x=>x.startsWith(w.toLowerCase().slice(0,3)))).filter(i=>i>=0))];
     if(out.days.length){out.kind="event";let d=t;while(!out.days.includes(dow(d)))d=addDays(d,1);out.date=d}}
   if(cut(/\s(?:on\s+)?today(?=\s)/i))out.date=t;
+  else if(cut(/\s(?:on\s+)?yesterday(?=\s)/i))out.date=addDays(t,-1);
   else if(cut(/\s(?:on\s+)?(?:tomorrow|tmr|tmrw|tomoz)(?=\s)/i))out.date=addDays(t,1);
   else if((m=cut(/\s(?:on\s+)?(next\s+)?(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day|nesday|rsday|urday|sday)?(?=\s)/i))){
     const want=WEEKDAYS.findIndex(w=>w.startsWith(m[2].toLowerCase().slice(0,3)));const now=new Date(t+"T12:00:00").getDay();let diff=(want-now+7)%7;if(diff===0)diff=7;if(m[1])diff+=diff<7?7:0;out.date=addDays(t,diff)}
@@ -562,11 +573,21 @@ function parseQuick(txt){
   else if((m=cut(new RegExp("\\s(?:on\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+("+MONTHS.join("|")+")[a-z]*(?=\\s)","i"))||cut(new RegExp("\\s(?:on\\s+)?("+MONTHS.join("|")+")[a-z]*\\s+(\\d{1,2})(?:st|nd|rd|th)?(?=\\s)","i")))){
     const a=isNaN(+m[1])?[m[2],m[1]]:[m[1],m[2]];const mo=MONTHS.indexOf(a[1].slice(0,3).toLowerCase());const y=+t.slice(0,4);const d=new Date(y,mo,+a[0],12);if(iso(d)<t)d.setFullYear(y+1);out.date=iso(d)}
   // homework
-  if(!out.kind&&/\bhomework\b|\bassignment\b|\bworksheet\b/i.test(s)){out.kind="homework";s=s.replace(/\bhomework\b/i," ");
-    const subj=["Maths","Math","English","Science","HASS","History","Geography","Art","Music","Japanese","PE","Spelling","Reading"].find(x=>new RegExp("\\b"+x+"\\b","i").test(s));if(subj){out.subject=subj==="Math"?"Maths":subj;s=s.replace(new RegExp("\\b"+subj+"\\b","i")," ")}}
+  const HWSUBJ=/\b(maths|math|english|science|hass|history|geography|spelling|reading|japanese|chinese|mandarin)\b/i;
+  if(!out.kind&&(/\bhomework\b|\bassignment\b|\bworksheet\b/i.test(s)||(HWSUBJ.test(s)&&/\b(reading|spelling|test|project|practice|worksheet|questions|essay)\b/i.test(s)&&!out.time))){out.kind="homework";s=s.replace(/\bhomework\b/i," ").replace(/\bdue\b/i," ");
+    const subj=["Maths","Math","English","Science","HASS","History","Geography","Art","Music","Japanese","Chinese","PE","Spelling","Reading"].find(x=>new RegExp("\\b"+x+"\\b","i").test(s));if(subj){out.subject=subj==="Math"?"Maths":subj;s=s.replace(new RegExp("\\b"+subj+"\\b","i")," ")}}
   if(!out.kind&&/\b(remind me to|todo|to do|task)\b/i.test(s)){out.kind="task";s=s.replace(/\b(remind me to|todo|to do|task)\b:?/i," ")}
+  if(!out.time&&EVENTISH.test(s)){const bh=s.match(/\s(\d{1,2})\s*$/);if(bh&&+bh[1]>=1&&+bh[1]<=12){let h=+bh[1];if(h<=7)h+=12;out.time=String(h).padStart(2,"0")+":00";s=s.replace(/\s(\d{1,2})\s*$/," ")}}
+  // a plain list of groceries: "milk eggs bread", "need milk"
+  if(!out.kind&&!out.time&&!out.date){const body=s.replace(/^\s*(need|we need|out of|ran out of|more)\s+/i," ").trim();const parts=body.split(/\s*(?:,|\band\b|&)\s*/i).filter(Boolean);const toks=parts.length>1?parts:body.split(/\s+/);
+    if(toks.length&&toks.length<=8&&toks.every(x=>aisleOf(x)!=="Other")){out.kind="shop";out.items=(parts.length>1||toks.length===1)?toks:toks;return out}}
   if(!out.kind)out.kind=(out.time||EVENTISH.test(s))?"event":"task";
+  if(out.daily&&out.kind==="event"){out.days=[0,1,2,3,4,5,6];out.date=out.date||t}
+  if(out.weekly&&out.kind==="event"&&!out.days){out.days=[dow(out.date||t)];out.date=out.date||t}
+  if(out.kind==="task"&&(out.daily||out.weekly||out.days)){out.repeat=out.daily?"daily":"weekly";if(out.days&&!out.date)out.date=t}
   out.title=s.replace(/\s+(on|at|by|for|in|the)\s*$/i,"").replace(/^\s*(on|at|by|for)\s+/i,"").replace(/\s+/g," ").trim();
+  out.title=out.title.replace(/^(bought|buy)\s+/i,"").replace(/\s+at$/i,"");
+  if(out.kind==="homework"&&!out.title)out.title=out.subject||"Homework";
   out.title=out.title.charAt(0).toUpperCase()+out.title.slice(1);
   return out;
 }
@@ -575,7 +596,7 @@ function quickPreview(q){
   const bits={shop:()=>`Shopping: ${q.items.map(esc).join(", ")}`,
     money:()=>`Spending ${money(q.amount||0)}${q.title?" · "+esc(q.title):""} · ${pname(q.who||meId())}`,
     event:()=>q.days?`Weekly activity: ${esc(q.title||"Untitled")} · ${repText({repeat:"weekly",days:q.days})}${q.time?" · "+tm(q.time):""} · ${pname(q.who??0)}`:`Event: ${esc(q.title||"Untitled")} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""} · ${pname(q.who??0)}`,
-    task:()=>`Task: ${esc(q.title||"Untitled")} · ${pname(q.who||meId())} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""}`,
+    task:()=>`Task: ${esc(q.title||"Untitled")} · ${pname(q.who||meId())} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""}${q.repeat?" · repeats "+(q.repeat==="daily"?"every day":"every week"):""}`,
     homework:()=>`Homework: ${esc(q.subject||"Homework")} · ${esc(q.title||"")} · due ${nice(q.date||addDays(TODAY(),1))}`}[q.kind];
   return bits?bits():"";
 }
@@ -585,7 +606,7 @@ function saveQuick(q){
   if(q.kind==="money"){if(!(q.amount>0))return;const cat=guessCat(q.title);ST.add("tx",{type:"out",amount:Math.round(q.amount*100)/100,cat,who:q.who||meId(),date:q.date||TODAY(),note:q.title});toast("Spending added to "+cat);return}
   if(q.kind==="event"){const d=q.date||TODAY();if(q.days){ST.add("events",{title:q.title,who:q.who??0,date:d,time:q.time||"",place:"",repeat:"weekly",days:q.days.sort(),until:"",skip:[]});toast(q.title+": "+repText({repeat:"weekly",days:q.days}));return}ST.add("events",{title:q.title,who:q.who??0,date:d,time:q.time||"",place:""});toast("Added to the calendar for "+nice(d));return}
   if(q.kind==="homework"){ST.add("homework",{subject:q.subject||"Homework",title:q.title||q.subject||"Homework",who:q.who||kidId(),due:q.date||addDays(TODAY(),1),time:q.time||"",done:false});toast("Homework added");return}
-  ST.add("tasks",{title:q.title,who:q.who||meId(),due:q.date||TODAY(),time:q.time||"",repeat:"none",done:false});toast("Task added for "+nice(q.date||TODAY()));
+  ST.add("tasks",{title:q.title,who:q.who||meId(),due:q.date||TODAY(),time:q.time||"",repeat:q.repeat||"none",done:false});toast("Task added for "+nice(q.date||TODAY()));
 }
 const CAT_WORDS={Groceries:/grocer|woolies|woolworths|coles|aldi|iga|supermarket|market|food shop/i,Transport:/petrol|fuel|uber|taxi|bus|train|parking|toll|opal|go card|car|rego|servo/i,Bills:/electric|power|gas bill|water|internet|phone|rent|insurance|bill|netflix|spotify|subscription/i,School:/school|uniform|book|excursion|tuition|fees|stationery/i,"Eating out":/lunch|dinner|breakfast|cafe|coffee|restaurant|takeaway|pizza|mcdonald|kfc|sushi|pho|maccas|bubble tea/i,Health:/doctor|dentist|chemist|pharmacy|medicine|physio|gp|optometrist/i,Fun:/movie|cinema|game|toy|gift|present|holiday|concert|netflix|zoo|park/i};
 function guessCat(t){const cats=SET().categories||[];for(const [c,re] of Object.entries(CAT_WORDS))if(re.test(t||"")&&cats.includes(c))return c;return cats.includes("Other")?"Other":(cats[0]||"Other")}
@@ -770,9 +791,16 @@ const ZH_DECKS=[
  ["animals","Animals","🐼",[["猫","māo","cat","🐱"],["狗","gǒu","dog","🐶"],["鱼","yú","fish","🐟"],["鸟","niǎo","bird","🐦"],["马","mǎ","horse","🐴"],["牛","niú","cow","🐮"],["猪","zhū","pig","🐷"],["兔子","tùzi","rabbit","🐰"],["熊猫","xióngmāo","panda","🐼"],["老虎","lǎohǔ","tiger","🐯"]]],
  ["food","Food & drink","🥟",[["水","shuǐ","water","💧"],["米饭","mǐfàn","rice","🍚"],["面条","miàntiáo","noodles","🍜"],["苹果","píngguǒ","apple","🍎"],["香蕉","xiāngjiāo","banana","🍌"],["牛奶","niúnǎi","milk","🥛"],["鸡蛋","jīdàn","egg","🥚"],["饺子","jiǎozi","dumplings","🥟"],["茶","chá","tea","🍵"],["蛋糕","dàngāo","cake","🍰"]]],
  ["body","My body","🙂",[["头","tóu","head","🙂"],["眼睛","yǎnjing","eyes","👀"],["耳朵","ěrduo","ears","👂"],["鼻子","bízi","nose","👃"],["嘴","zuǐ","mouth","👄"],["手","shǒu","hand","✋"],["脚","jiǎo","foot","🦶"]]],
- ["everyday","Everyday words","🏫",[["学校","xuéxiào","school","🏫"],["书","shū","book","📖"],["大","dà","big","🐘"],["小","xiǎo","small","🐭"],["喜欢","xǐhuan","to like","❤️"],["吃","chī","to eat","🍽️"],["喝","hē","to drink","🥤"],["看","kàn","to look, watch","👀"],["游泳","yóuyǒng","to swim","🏊"],["今天","jīntiān","today","📅"],["明天","míngtiān","tomorrow","🌅"],["太阳","tàiyáng","sun","☀️"],["月亮","yuèliang","moon","🌙"]]]
+ ["everyday","Everyday words","🏫",[["学校","xuéxiào","school","🏫"],["书","shū","book","📖"],["大","dà","big","🐘"],["小","xiǎo","small","🐭"],["喜欢","xǐhuan","to like","❤️"],["吃","chī","to eat","🍽️"],["喝","hē","to drink","🥤"],["看","kàn","to look, watch","👀"],["游泳","yóuyǒng","to swim","🏊"],["今天","jīntiān","today","📅"],["明天","míngtiān","tomorrow","🌅"],["太阳","tàiyáng","sun","☀️"],["月亮","yuèliang","moon","🌙"]]],
+ ["days","Days & time","📅",[["星期一","xīngqī yī","Monday","1️⃣"],["星期二","xīngqī èr","Tuesday","2️⃣"],["星期三","xīngqī sān","Wednesday","3️⃣"],["星期四","xīngqī sì","Thursday","4️⃣"],["星期五","xīngqī wǔ","Friday","5️⃣"],["星期六","xīngqī liù","Saturday","6️⃣"],["星期天","xīngqī tiān","Sunday","☀️"],["早上","zǎoshang","morning","🌅"],["晚上","wǎnshang","evening","🌃"],["现在","xiànzài","now","⏰"]],2],
+ ["weather","Weather","⛅",[["天气","tiānqì","weather","⛅"],["下雨","xià yǔ","to rain","🌧️"],["下雪","xià xuě","to snow","❄️"],["热","rè","hot","🥵"],["冷","lěng","cold","🥶"],["风","fēng","wind","🌬️"],["云","yún","cloud","☁️"],["晴天","qíngtiān","sunny day","🌞"]],2],
+ ["feelings","Feelings","😊",[["高兴","gāoxìng","happy","😊"],["难过","nánguò","sad","😢"],["累","lèi","tired","😴"],["饿","è","hungry","😋"],["渴","kě","thirsty","🥤"],["生气","shēngqì","angry","😠"],["害怕","hàipà","scared","😨"],["爱","ài","to love","❤️"]],2],
+ ["places","Places & travel","🗺️",[["公园","gōngyuán","park","🏞️"],["医院","yīyuàn","hospital","🏥"],["商店","shāngdiàn","shop","🏪"],["超市","chāoshì","supermarket","🛒"],["游泳池","yóuyǒngchí","swimming pool","🏊"],["中国","Zhōngguó","China","🇨🇳"],["澳大利亚","Àodàlìyà","Australia","🇦🇺"],["日本","Rìběn","Japan","🇯🇵"],["飞机","fēijī","plane","✈️"],["汽车","qìchē","car","🚗"]],2],
+ ["actions","Doing words","🏃",[["走","zǒu","to walk","🚶"],["跑","pǎo","to run","🏃"],["跳","tiào","to jump","🦘"],["说","shuō","to speak","🗣️"],["听","tīng","to listen","🎧"],["写","xiě","to write","✍️"],["读","dú","to read","📚"],["睡觉","shuìjiào","to sleep","🛌"],["玩","wán","to play","🎮"],["来","lái","to come","👋"]],2],
+ ["phrases","Useful sentences","💬",[["你好吗","nǐ hǎo ma","how are you?","🙂"],["我很好","wǒ hěn hǎo","I'm very well","😄"],["我叫","wǒ jiào","my name is…","🏷️"],["你叫什么名字","nǐ jiào shénme míngzi","what's your name?","❓"],["我爱你","wǒ ài nǐ","I love you","💕"],["生日快乐","shēngrì kuàilè","happy birthday","🎂"],["早上好","zǎoshang hǎo","good morning","🌄"],["晚安","wǎn'ān","good night","🌙"],["没关系","méi guānxi","it's OK, never mind","👌"],["加油","jiāyóu","you can do it!","💪"]],2]
 ];
-const ZH_ALL=ZH_DECKS.flatMap(([k,,,w])=>w.map(x=>({zh:x[0],py:x[1],en:x[2],em:x[3],deck:k})));
+const ZH_ALL=ZH_DECKS.flatMap(([k,,,w,lv])=>w.map(x=>({zh:x[0],py:x[1],en:x[2],em:x[3],deck:k,lv:lv||1})));
+const learnLevel=()=>+(learnDoc(learnerId()).level||1);
 let learnTab="chinese", lz=null, lzDeck=null, pianoLabels="letters", pianoGame=null;
 const learnerId=()=>{const v=+ST._localPref("learner");return people().some(p=>p.id===v)?v:(meId()===kidId()?meId():kidId())};
 const learnDoc=id=>S().learn.find(x=>x.id===String(id))||{boxes:{},streak:0,best:0,last:"",total:0,decks:{}};
@@ -784,13 +812,13 @@ const ding=()=>{tone(880,.18,"sine");setTimeout(()=>tone(1318.5,.3,"sine"),120)}
 const bonk=()=>tone(196,.25,"square");
 const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 function pickWords(deck,n){
-  const box=learnDoc(learnerId()).boxes||{},di=w=>ZH_DECKS.findIndex(x=>x[0]===w.deck);const pool=deck?ZH_ALL.filter(w=>w.deck===deck):ZH_ALL;
+  const box=learnDoc(learnerId()).boxes||{},di=w=>ZH_DECKS.findIndex(x=>x[0]===w.deck),lv=learnLevel();const pool=deck?ZH_ALL.filter(w=>w.deck===deck):ZH_ALL.filter(w=>w.lv===lv);
   return shuffle(pool).sort((a,b)=>((box[a.zh]||0)-(box[b.zh]||0))||(deck?0:di(a)-di(b))).slice(0,n);
 }
 function startLearn(mode,deck){
   lzDeck=deck||null;const words=pickWords(deck,mode==="cards"?Math.min(12,ZH_ALL.length):10);
-  const qs=words.map((w,i)=>{const kind=mode==="cards"?"card":["meaning","listen","pick"][i%3];const others=shuffle(ZH_ALL.filter(x=>x.zh!==w.zh&&x.en!==w.en)).slice(0,3);return {w,kind,opts:shuffle([w,...others])}});
-  lz={mode,qs,i:0,right:0,flip:false,answered:null,missed:[]};render();
+  const qs=words.map((w,i)=>{const kind=mode==="cards"?"card":["meaning","listen","pick"][i%3];const others=shuffle(ZH_ALL.filter(x=>x.zh!==w.zh&&x.en!==w.en&&x.lv===w.lv)).slice(0,3);return {w,kind,opts:shuffle([w,...others])}});
+  lz={mode,qs,i:0,right:0,flip:false,answered:null,missed:[],started:Date.now()};render();
   if(qs[0]&&qs[0].kind==="listen")setTimeout(()=>speakZh(qs[0].w.zh),300);
 }
 function learnSave(){
@@ -798,7 +826,9 @@ function learnSave(){
   lz.qs.forEach(q=>{const ok=!lz.missed.includes(q.w.zh);boxes[q.w.zh]=ok?Math.min(5,(boxes[q.w.zh]||0)+1):0});
   const streak=d.last===t?(d.streak||1):d.last===addDays(t,-1)?(d.streak||0)+1:1;
   const decks={...(d.decks||{})};if(lzDeck)decks[lzDeck]=Math.max(decks[lzDeck]||0,lz.right);
-  ST.put("learn",String(id),{boxes,streak,best:Math.max(d.best||0,streak),last:t,total:(d.total||0)+lz.qs.length,decks,who:id,updated:Date.now()});
+  const days={...(d.days||{})},td=days[t]||{n:0,r:0,min:0};days[t]={n:td.n+lz.qs.length,r:td.r+lz.right,min:td.min+Math.max(1,Math.round((Date.now()-(lz.started||Date.now()))/60000))};
+  Object.keys(days).sort().slice(0,-60).forEach(k=>delete days[k]);
+  ST.put("learn",String(id),{boxes,streak,best:Math.max(d.best||0,streak),last:t,total:(d.total||0)+lz.qs.length,decks,days,level:d.level||1,who:id,updated:Date.now()});
   const pts=Math.max(1,Math.round(lz.right/2)),sid="learn-"+id+"-"+t,prev=S().stars.find(x=>x.id===sid);
   ST.put("stars",sid,{who:id,pts:(prev?.pts||0)+pts,date:t,title:"Chinese practice"});
   return {pts,streak};
@@ -813,7 +843,7 @@ function learnNext(knew){
   if(lz.mode==="cards"){if(knew)lz.right++;else lz.missed.push(q.w.zh)}
   lz.i++;lz.flip=false;lz.answered=null;
   if(lz.i>=lz.qs.length){lz.done=learnSave()}
-  else if(lz.qs[lz.i].kind==="listen")setTimeout(()=>speakZh(lz.qs[lz.i].w.zh),250);
+  else if(lz.qs[lz.i].kind==="listen")setTimeout(()=>{if(lz&&!lz.done&&lz.qs[lz.i])speakZh(lz.qs[lz.i].w.zh)},250);
   render();
 }
 function viewLearn(){
@@ -823,9 +853,12 @@ function viewLearn(){
   const id=learnerId(),d=learnDoc(id),st=learnStreak(id),box=d.boxes||{},known=Object.values(box).filter(v=>v>=2).length,did=d.last===TODAY();
   const who=people().length>1?`<div class="chips">${people().map(p=>`<button class="chip ${p.id===id?"on":""}" data-act="learner" data-k="${p.id}">${esc(p.name)}</button>`).join("")}</div>`:"";
   return `${backBar}${seg}${who}
-  <section class="card learnhero"><div class="row between"><div><div class="label">${esc(pname(id))}'s Chinese</div><div class="lbig">${st?"🔥 "+st+" day"+(st===1?"":"s"):"Start a streak"}</div><div class="sub">${did?"Practised today. Well done!":"A few minutes a day keeps the streak going."} ${known} of ${ZH_ALL.length} words learnt.</div></div><div class="lchar">学</div></div>
+  <section class="card learnhero"><div class="row between"><div><div class="label">${esc(pname(id))}'s Chinese</div><div class="lbig">${st?"🔥 "+st+" day"+(st===1?"":"s"):"Start a streak"}</div><div class="sub">${did?"Practised today. Well done!":"A few minutes a day keeps the streak going."} ${known} of ${ZH_ALL.length} words learnt · Level ${learnLevel()}.</div></div><div class="lchar">学</div></div>
    <div class="two" style="margin-top:12px"><button class="primary" data-act="learnGo" data-k="quiz">Today's quiz</button><button class="ghost" data-act="learnGo" data-k="cards">Flashcards</button></div></section>
-  <section class="card"><h2>Pick a topic</h2><div class="decks">${ZH_DECKS.map(([k,n,em,w])=>{const got=w.filter(x=>(box[x[0]]||0)>=2).length;return `<button class="deck" data-act="learnDeck" data-k="${k}"><span class="dem">${em}</span><b>${esc(n)}</b><span class="sub">${got}/${w.length} learnt</span><div class="bar"><i style="width:${got/w.length*100}%"></i></div></button>`}).join("")}</div></section>
+  <section class="card"><div class="row between"><h2>Pick a topic</h2><div class="seg mini2">${[1,2].map(l=>`<button class="${learnLevel()===l?"on":""}" data-act="learnLevel" data-k="${l}">Level ${l}</button>`).join("")}</div></div>
+   <div class="sub" style="margin-top:4px">${learnLevel()===1?"Starter words: hello, numbers, family, colours, animals and more.":"Next steps: days, weather, feelings, places, doing words and whole sentences."} Today's quiz uses this level.</div>
+   <div class="decks">${ZH_DECKS.filter(x=>(x[4]||1)===learnLevel()).map(([k,n,em,w])=>{const got=w.filter(x=>(box[x[0]]||0)>=2).length;return `<button class="deck" data-act="learnDeck" data-k="${k}"><span class="dem">${em}</span><b>${esc(n)}</b><span class="sub">${got}/${w.length} learnt</span><div class="bar"><i style="width:${got/w.length*100}%"></i></div></button>`}).join("")}</div></section>
+  ${learnProgress(id)}
   <section class="card stack" style="gap:6px"><h2>Lessons</h2><div class="sub">Chinese lessons and practice times live in Activities, with a button that opens the lesson website.</div><button class="ghost" data-go="activities">Open Activities</button></section>
   <p class="sub" style="text-align:center">Words are read aloud by the phone's own Chinese voice. Nothing is sent anywhere.</p>`;
 }
@@ -845,6 +878,21 @@ function lessonView(){
   return `${prog}<section class="card stack" style="gap:10px">${ask}</section>
    <div class="opts">${q.opts.map((o,i)=>`<button class="opt ${a!==null?(o.zh===w.zh?"right":i===a?"wrong":"dim"):""}" data-act="learnAns" data-k="${i}">${label(o)}</button>`).join("")}</div>
    ${a!==null?`<section class="card row" style="gap:12px"><span class="lchar">${esc(w.zh)}</span><div class="grow"><div class="t">${esc(w.py)}</div><div class="sub">${w.em} ${esc(w.en)}</div></div><button class="primary" data-act="learnNext">Next</button></section>`:""}`;
+}
+function learnProgress(id){
+  const d=learnDoc(id),days=d.days||{},box=d.boxes||{},t=TODAY();if(!d.last)return"";
+  const last14=[...Array(14)].map((_,i)=>addDays(t,i-13)),wk=last14.slice(7),wkDays=wk.filter(x=>days[x]).length;
+  const n7=wk.reduce((a,x)=>a+(days[x]?.n||0),0),r7=wk.reduce((a,x)=>a+(days[x]?.r||0),0),min7=wk.reduce((a,x)=>a+(days[x]?.min||0),0);
+  const hard=Object.entries(box).filter(([,v])=>v===0).map(([z])=>ZH_ALL.find(w=>w.zh===z)).filter(Boolean).slice(0,8);
+  const lvl=l=>{const ws=ZH_ALL.filter(w=>w.lv===l);return [ws.filter(w=>(box[w.zh]||0)>=2).length,ws.length]};const [a1,b1]=lvl(1),[a2,b2]=lvl(2);
+  return `<section class="card stack" style="gap:10px"><div class="row between"><h2>Progress</h2><span class="sub">For ${esc(pname(id))} and parents</span></div>
+   <div class="trio"><div><div class="label">This week</div><div class="v num">${wkDays}/7 days</div></div><div><div class="label">Right</div><div class="v num">${n7?Math.round(r7/n7*100)+"%":"–"}</div></div><div><div class="label">Best streak</div><div class="v num">${d.best||0} day${(d.best||0)===1?"":"s"}</div></div></div>
+   <div><div class="label" style="margin-bottom:6px">Last 2 weeks</div><div class="pdays">${last14.map(x=>`<span class="${days[x]?"on":""} ${x===t?"today":""}" title="${nice(x)}">${new Date(x+"T12:00:00").toLocaleDateString("en-AU",{weekday:"narrow"})}</span>`).join("")}</div></div>
+   <div class="sub">${min7?"About "+min7+" min of practice this week · ":""}${d.total||0} questions answered in all</div>
+   <div><div class="row between"><span>Level 1</span><span class="sub num">${a1} of ${b1} words</span></div><div class="bar"><i style="width:${a1/b1*100}%"></i></div></div>
+   <div><div class="row between"><span>Level 2</span><span class="sub num">${a2} of ${b2} words</span></div><div class="bar"><i style="width:${a2/b2*100}%"></i></div></div>
+   ${hard.length?`<div><div class="label" style="margin-bottom:6px">Needs more practice</div><div class="chips" style="flex-wrap:wrap">${hard.map(w=>`<button class="chip" data-act="say" data-k="${esc(w.zh)}">${esc(w.zh)} · ${esc(w.en)}</button>`).join("")}</div></div>`:""}
+   ${a1>=b1*0.7&&learnLevel()===1?`<button class="primary" data-act="learnLevel" data-k="2">Ready for Level 2 →</button>`:""}</section>`;
 }
 /* piano: one octave and a bit, labels, a find-the-note game and a song to follow */
 const NOTES=[["C",261.63],["C#",277.18],["D",293.66],["D#",311.13],["E",329.63],["F",349.23],["F#",369.99],["G",392],["G#",415.3],["A",440],["A#",466.16],["B",493.88],["C2",523.25]];
@@ -872,8 +920,9 @@ function pianoKey(n){
 function learnPianoStar(){const id=learnerId(),t=TODAY(),sid="learn-"+id+"-"+t,prev=S().stars.find(x=>x.id===sid);ST.put("stars",sid,{who:id,pts:(prev?.pts||0)+1,date:t,title:"Practice"});toast("★ 1 star for "+pname(id))}
 function learnTodayCard(){
   const k=kidId(),d=learnDoc(k),st=learnStreak(k),did=d.last===TODAY();
-  if(!d.last&&meId()!==k)return `<button class="tile learntile" data-go="learn"><span class="label">${esc(pname(k))}'s Chinese</span><b>学 Start practising</b><span>Flashcards and quizzes read aloud</span></button>`;
-  return `<button class="tile learntile" data-go="learn"><span class="label">${esc(pname(k))}'s Chinese</span><b>${did?"✓ Practised today":"Not practised yet"}</b><span>${st?"🔥 "+st+" day streak":"Tap to start"}</span></button>`;
+  const lbl=meId()===k?"Your Chinese":esc(pname(k))+"'s Chinese";
+  if(!d.last&&meId()!==k)return `<button class="tile learntile" data-go="learn"><span class="label">${lbl}</span><b>学 Start practising</b><span>Flashcards and quizzes read aloud</span></button>`;
+  return `<button class="tile learntile" data-go="learn"><span class="label">${lbl}</span><b>${did?"✓ Practised today":"Not practised yet"}</b><span>${st?"🔥 "+st+" day streak":"Tap to start"}</span></button>`;
 }
 
 /* ---------- weekly activities per person ---------- */
@@ -1174,6 +1223,7 @@ document.addEventListener("click",e=>{
     case"addCountdown":return countdownSheet();
     case"learnTab":learnTab=a.dataset.k;break;
     case"learner":ST._localPref("learner",a.dataset.k);break;
+    case"learnLevel":{const id=learnerId(),{id:_x,...d}=learnDoc(id);ST.put("learn",String(id),{...d,level:+a.dataset.k,who:id,updated:Date.now()});return}
     case"learnGo":startLearn(a.dataset.k,a.dataset.d||null);scrollTo(0,0);return;
     case"learnDeck":{const k=a.dataset.k,box=learnDoc(learnerId()).boxes||{},seen=ZH_ALL.some(w=>w.deck===k&&box[w.zh]!==undefined);startLearn(seen?"quiz":"cards",k);scrollTo(0,0);return}
     case"flip":lz.flip=!lz.flip;if(lz.flip)speakZh(lz.qs[lz.i].w.zh);break;
