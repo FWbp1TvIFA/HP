@@ -436,3 +436,9 @@ header.top .iconbtn+.iconbtn{margin-left:-4px}
 .livetile .livemini{display:flex;gap:4px;height:26px;align-items:center}
 .livetile .livemini i{width:14px;height:14px;border-radius:50%;display:block}
 @media (prefers-reduced-motion: reduce){.livetree .lk-main,.livetree .ring,.livedot{animation:none}}
+.syncbar{display:flex;gap:10px;align-items:flex-start;border-radius:14px;padding:10px 12px;font-size:.85rem}
+.syncbar.off{background:color-mix(in srgb,var(--warn) 16%,var(--surface));color:var(--fg)}
+.syncbar.up{background:var(--accent-soft);color:var(--fg);align-items:center}
+.syncbar .sdot{width:9px;height:9px;border-radius:50%;background:var(--warn);flex:none;margin-top:5px}
+.syncbar .spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--accent);border-top-color:transparent;animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}

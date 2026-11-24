@@ -129,9 +129,13 @@ function boardCard(){
      return row("board",m.id,`${dot(m.who)}<div class="grow"><div class="t bt">${esc(m.text)}</div><div class="m">${esc(pname(m.who))} · ${ago(m.at||m.createdAt)}${ack.length?" · 👍 "+ack.map(i=>esc(pname(i))).join(", "):""}</div></div>${mine?"":`<button class="mini ${iAck?"ghostmini":""}" data-act="boardAck" data-id="${m.id}">${iAck?"👍":"Got it"}</button>`}`)}).join("")}</div>`:""}
    <form id="boardForm" class="quick" style="margin-top:8px" autocomplete="off"><input id="boardIn" placeholder="${msgs.length?"Reply or post a note…":"e.g. Home late tonight, dinner in the fridge"}" maxlength="200" enterkeyhint="send"><button type="submit">Post</button></form></section>`;
 }
-function syncNote(){
-  if(ST.mode==="local")return "";
-  return navigator.onLine?"":`<div class="offline">You're offline. Changes are saved and will sync when you reconnect.</div>`;
+function syncNote(){return ""}
+let wasOffline=!navigator.onLine,hadPending=false;
+function syncBar(){
+  if(ST.mode==="local")return"";
+  if(!navigator.onLine)return `<div class="syncbar off"><span class="sdot"></span><div><b>Offline</b> · everything you add is kept on this phone${ST.pending?" and waiting to upload":""}. It uploads by itself when the internet is back.</div></div>`;
+  if(ST.pending)return `<div class="syncbar up"><span class="spin"></span><div>Uploading your changes…</div></div>`;
+  return"";
 }
 
 /* ---------- Calendar ---------- */
@@ -1033,7 +1037,7 @@ function render(){
     $("#title").textContent=TITLES[tab];
     const me=person(meId());
     $("#subtitle").textContent=tab==="home"?(me?"Hello, "+me.name:""):"";
-    $("#view").innerHTML={home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn,live:viewLive}[tab]();
+    $("#view").innerHTML=syncBar()+{home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn,live:viewLive}[tab]();
     const active=parentTab[tab]||tab;
     document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===active));
     if(shopVal&&$("#shopInput"))$("#shopInput").value=shopVal; if(shopFocus&&$("#shopInput"))$("#shopInput").focus();
@@ -1367,7 +1371,7 @@ $("#fab").onclick=()=>addSheet();
 $("#btnSettings").onclick=settingsSheet;
 $("#btnSearch").onclick=searchSheet;
 addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(routes.includes(h)&&h!==tab){tab=h;render()}});
-addEventListener("online",render);addEventListener("offline",render);
+addEventListener("online",()=>{render();if(wasOffline)toast(ST.pending?"Back online. Uploading your changes…":"Back online")});addEventListener("offline",()=>{wasOffline=true;render();toast("Offline. Keep going, changes are saved on this phone")});
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape")return closeSheet();
   if(tab==="calc"&&!$("#sheetHost").innerHTML&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||"")){
@@ -1383,6 +1387,7 @@ ST.onChange(()=>{
   if(ST.error&&ST.error!==lastErr){toast(ST.error);lastErr=ST.error;setTimeout(()=>{ST.error=null;lastErr=null},4000)}
   if(ST.phase==="ready"&&prevPhase!=="ready"){if(ST._localPref("shareLoc")==="1")startGeo();cleanupMoodSessions();setTimeout(()=>{try{cleanupBoard()}catch(e){}},8000)}
   prevPhase=ST.phase;
+  if(hadPending&&!ST.pending&&navigator.onLine&&wasOffline){wasOffline=false;setTimeout(()=>toast("All changes uploaded ✓"),300)}hadPending=ST.pending;
   moodTick();render();
 });
 setInterval(()=>{if(tab==="mood"&&activeSession())render();moodTick()},1000);
