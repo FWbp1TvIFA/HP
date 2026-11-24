@@ -628,9 +628,9 @@ function twoStepSheet(){
   const on=ST.twoStepOn();
   if(!on&&!ST.emailVerified()){
     openSheet(`${sheetHead("Two-step sign-in")}<div class="stack" style="gap:12px"><p class="sub" style="margin:0">First, confirm your email address (${esc(ST.me.email)}). We'll send you a link. Open it, then come back here.</p>
-     <div class="err" id="t_err" hidden></div><button class="primary" type="button" id="t_send">Send the link</button><button class="ghost" type="button" id="t_check">I've opened the link</button></div>`,sh=>{
+     <div class="sub" id="t_note" hidden></div><div class="err" id="t_err" hidden></div><button class="primary" type="button" id="t_send">Send the link</button><button class="ghost" type="button" id="t_check">I've opened the link</button></div>`,sh=>{
       const err=m=>{const x=sh.querySelector("#t_err");x.hidden=!m;x.textContent=m||""};
-      sh.querySelector("#t_send").onclick=async()=>{try{await ST.sendVerifyEmail();toast("Link sent. Check your email.")}catch(e){err(authErrorText(e))}};
+      sh.querySelector("#t_send").onclick=async ev=>{const btn=ev.currentTarget;btn.disabled=true;try{await ST.sendVerifyEmail();err("");const n=sh.querySelector("#t_note");n.hidden=false;n.textContent="Sent to "+ST.me.email+" at "+new Date().toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"})+". It comes from noreply@happy-family-791f1.firebaseapp.com and often lands in Spam or Junk, so look there too.";btn.textContent="Send again"}catch(e){err(authErrorText(e))}setTimeout(()=>btn.disabled=false,4000)};
       sh.querySelector("#t_check").onclick=async()=>{try{if(await ST.refreshUser())twoStepSheet();else err("Not confirmed yet. Open the link in the email, then try again.")}catch(e){err(authErrorText(e))}};
     });return;
   }

@@ -1,5 +1,5 @@
 /* Happy Home service worker: makes the app open instantly and work offline. */
-const CACHE = "happyhome-v4";
+const CACHE = "happyhome-v5";
 const FILES = ["./", "index.html", "app.css", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
