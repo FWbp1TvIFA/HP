@@ -1,0 +1,9 @@
+# Temporary file: checks whether a workflow file can be pushed. It only runs when started by hand.
+name: Permission test
+on:
+  workflow_dispatch:
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "ok"
