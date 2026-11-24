@@ -20,7 +20,8 @@ const json = (status, body, extra = {}) => new Response(JSON.stringify(body), { 
 export function requestOrigin(request, env = {}) {
   const u = new URL(request.url);
   const xf = (request.headers.get("x-forwarded-proto") || "").split(",")[0].trim().toLowerCase();
-  if (u.protocol === "http:" && (xf === "https" || env.VERCEL)) u.protocol = "https:";
+  const local = u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "[::1]";   // vercel dev
+  if (u.protocol === "http:" && (xf === "https" || (env.VERCEL && env.VERCEL_ENV !== "development" && !local))) u.protocol = "https:";
   return u.origin;
 }
 export function publicBase(request, env = {}) {

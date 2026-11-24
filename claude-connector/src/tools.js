@@ -27,7 +27,8 @@ const need = (v, label) => { if (!v) throw new UserError(`${label} is missing.`)
 const dateArg = (v, f, fallback, label = "Date") => wrap(() => { const d = parseDate(v, f.today); if (d === null) return fallback; return d; });
 const timeArg = v => wrap(() => parseTime(v));
 const amountArg = (v, label = "Amount") => {
-  if (typeof v === "string" && /^\s*\$?\d+,\d{1,2}\s*$/.test(v)) throw new UserError(`${label} "${v.trim()}" is unclear. Send it as a number such as 12.50.`);
+  // "12,50" could be twelve fifty or one thousand two hundred and fifty: don't guess with money.
+  if (typeof v === "string" && /,\d{1,2}$/.test(v.replace(/[^\d,.\-]/g, ""))) throw new UserError(`${label} "${v.trim().slice(0, 40)}" is unclear. Send it as a number such as 12.50.`);
   const n = typeof v === "string" ? parseFloat(v.replace(/[^0-9.\-]/g, "")) : +v;
   if (!isFinite(n) || n <= 0) throw new UserError(`${label} must be a number above 0.`);
   if (n > 10000000) throw new UserError(`${label} looks too big.`);
@@ -253,7 +254,9 @@ async function addItems(f, args) {
     arr.forEach((item, i) => { try { if (!item || typeof item !== "object") throw new UserError("must be an object"); fn(item); } catch (e) { if (e instanceof UserError) problems.push(`${key} #${i + 1}: ${e.message}`); else throw e; } });
   };
   const total = TYPE_LIST.reduce((n, k) => n + (Array.isArray(args[k]) ? args[k].length : 0), 0);
-  const ingredientCount = args.add_meal_ingredients_to_shopping === true && Array.isArray(args.meals) ? args.meals.reduce((n, m) => n + (Array.isArray(m?.ingredients) ? m.ingredients.length : String(m?.ingredients || "").split(",").length), 0) : 0;
+  // Count meal ingredients the same way they are read further down (commas or new lines, 60 a meal at most).
+  const ingParts = m => (Array.isArray(m?.ingredients) ? m.ingredients : String(m?.ingredients || "").split(/[,\n]/)).slice(0, 200).filter(x => x !== undefined && x !== null && String(x).trim());
+  const ingredientCount = args.add_meal_ingredients_to_shopping === true && Array.isArray(args.meals) ? args.meals.reduce((n, m) => n + Math.min(60, ingParts(m).length), 0) : 0;
   if (ingredientCount > 300) throw new UserError("That's too many meal ingredients to put on the shopping list in one go. Nothing was added. Please add the meals in smaller groups.");
   if (!total) throw new UserError("Nothing to add. Put the things to add in tasks, events, homework, shopping, money, notes, bills, meals, countdowns or board.");
   if (total > 200) throw new UserError("That's a lot at once; add at most 200 things per call.");
@@ -349,7 +352,7 @@ async function addItems(f, args) {
     const date = dateArg(m.date, f, f.today);
     if (mealDates.has(date)) throw new UserError(`two dinners for ${date}; one per night.`);
     mealDates.add(date);
-    const ing = (Array.isArray(m.ingredients) ? m.ingredients : String(m.ingredients || "").split(/\s*[,\n]\s*/)).slice(0, 200).map(x => text(x, 120, "Ingredient")).filter(Boolean).slice(0, 60);
+    const ing = (Array.isArray(m.ingredients) ? m.ingredients : String(m.ingredients || "").split(/[,\n]/)).slice(0, 200).map(x => text(x, 120, "Ingredient")).filter(Boolean).slice(0, 60);
     const rec = { title, ingredients: ing, cook: m.cook === undefined || m.cook === null || m.cook === "" ? 0 : f.who(m.cook, { allowFamily: true, fallback: 0 }), date, updated: now };
     writes.push(f.fs.set(f.doc("meals", date), rec)); done.push("Dinner: " + show(f, "meals", { ...rec, id: date }));
     if (args.add_meal_ingredients_to_shopping === true) for (const x of ing) addShop(x, "", "for " + title);
@@ -457,7 +460,7 @@ async function updateItems(f, args) {
           if (has("paid_automatically")) fields.auto = c.paid_automatically === true;
           break;
         case "meals":
-          if (has("ingredients")) fields.ingredients = (Array.isArray(c.ingredients) ? c.ingredients : String(c.ingredients || "").split(/\s*[,\n]\s*/)).map(x => text(x, 120, "Ingredient")).filter(Boolean).slice(0, 60);
+          if (has("ingredients")) fields.ingredients = (Array.isArray(c.ingredients) ? c.ingredients : String(c.ingredients || "").split(/[,\n]/)).map(x => text(x, 120, "Ingredient")).filter(Boolean).slice(0, 60);
           if (has("cook")) fields.cook = f.who(c.cook, { allowFamily: true, fallback: 0 });
           fields.updated = Date.now();
           break;
@@ -491,7 +494,9 @@ async function markDone(f, args) {
   docs.forEach(x => {
     const path = f.doc(TYPE_COLLECTION[type], x.id);
     if (type === "bills") {
-      if (x.lastPaid === f.today) { out.push(`${x.name} was already marked paid today, so nothing was added. Next one due ${niceDate(x.next, f.today)}.`); return; }
+      // A payment saved today always leaves the next date in the future. If someone has since moved it back
+      // (to undo a wrong payment), let them pay again.
+      if (x.lastPaid === f.today && x.next && x.next > f.today) { out.push(`${x.name} was already marked paid today, so nothing was added. Next one due ${niceDate(x.next, f.today)}.`); return; }
       const due = x.next || f.today, every = EVERY.includes(x.every) ? x.every : "month";
       writes.push(f.fs.set(f.doc("tx", `bill-${x.id}-${due}`), { type: "out", amount: +x.amount || 0, cat: x.cat || "Bills", who: x.who || f.meId, date: f.today, note: x.name, createdAt: now, by: f.meId }));
       let n = nextDue(due, every); while (n <= f.today) n = nextDue(n, every);
