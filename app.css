@@ -330,3 +330,15 @@ header.top .iconbtn+.iconbtn{margin-left:-4px}
 .tin,.lg.tin{background:color-mix(in srgb,var(--good) 45%,transparent)} .tout,.lg.tout{background:var(--accent)}
 .tcol:not(.cur) .tout{opacity:.75}
 .lg{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.rep{color:var(--muted);font-size:.85em}
+.mini.join{text-decoration:none;background:var(--accent-soft);color:var(--accent)}
+.daypick{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.daypick button{border:0;background:var(--sunk);border-radius:10px;padding:10px 0;font-size:.8rem;font-weight:600;color:var(--muted)}
+.daypick button.on{background:var(--accent);color:var(--on-accent)}
+.wkgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px}
+.wkday{display:flex;flex-direction:column;gap:4px;min-width:0;background:var(--sunk);border-radius:10px;padding:6px 3px;min-height:64px}
+.wkday b{font-size:.68rem;text-transform:uppercase;color:var(--muted);text-align:center;letter-spacing:.04em}
+.wkday.is-today b{color:var(--accent)}
+.wkev{border:0;background:var(--accent);color:var(--on-accent);border-radius:7px;padding:4px 3px;font-size:.64rem;line-height:1.15;display:flex;flex-direction:column;align-items:center;text-align:center;overflow:hidden}
+.wkev span{font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wkev i{font-style:normal;opacity:.85}

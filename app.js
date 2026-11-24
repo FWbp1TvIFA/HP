@@ -15,11 +15,14 @@ const thisMonth=()=>TODAY().slice(0,7);
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const people=()=>SET().people||[];
+const peopleRaw=()=>SET().people||[];
+// shown with the youngest first (Jugo, Akiyo, then the parent who set it up) unless the family picks another order
+const people=()=>{const raw=peopleRaw(),ord=SET().order;if(Array.isArray(ord)&&ord.length){const pos=id=>{const i=ord.indexOf(id);return i<0?99:i};return [...raw].sort((a,b)=>pos(a.id)-pos(b.id))}return [...raw].reverse()};
+const kidId=()=>(peopleRaw()[2]||peopleRaw()[peopleRaw().length-1])?.id||meId();
 const person=id=>people().find(p=>p.id===+id);
 const pname=id=>id==0?"Family":(person(id)?.name||"Someone");
 const meId=()=>ST.me.personId||1;
-const colorIdx=id=>id==0?0:((people().findIndex(p=>p.id===+id)%3)+1)||0;
+const colorIdx=id=>id==0?0:((peopleRaw().findIndex(p=>p.id===+id)%3)+1)||0;
 const dot=id=>`<span class="dot who-${colorIdx(id)}" aria-hidden="true">${id==0?"All":esc(pname(id).slice(0,1).toUpperCase())}</span>`;
 function money(n,sign){const v=Math.abs(n).toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2});return (sign&&n<0?"−":sign&&n>0?"+":"")+(SET().currency||"$")+v}
 function nice(d){const t=TODAY();if(d===t)return"Today";if(d===addDays(t,1))return"Tomorrow";if(d===addDays(t,-1))return"Yesterday";return new Date(d+"T12:00:00").toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"})}
@@ -35,6 +38,7 @@ const ICON={
  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
  wallet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2.5"/><path d="M3 10h18M6 3h12"/><circle cx="16.5" cy="15" r="1.2"/></svg>',
  mood:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01"/></svg>',
+ swim:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18c2 0 2-1.5 4-1.5s2 1.5 4 1.5 2-1.5 4-1.5 2 1.5 4 1.5 2-1.5 4-1.5M2 22c2 0 2-1.5 4-1.5s2 1.5 4 1.5 2-1.5 4-1.5 2 1.5 4 1.5 2-1.5 4-1.5"/><circle cx="16" cy="6" r="2"/><path d="m6 14 4-5 3 2 3-2"/></svg>',
  meal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v8a3 3 0 0 0 6 0V3M7 3v18M17 21V3c-2.2 1.2-3.5 3.6-3.5 7s1.3 4 3.5 4"/></svg>',
  cake:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V12a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9M2 21h20M4 15c1.5 1 3 1 4 0s2.5-1 4 0 3 1 4 0 2.5-1 4 0M12 10V6M12 3.5v.01"/></svg>',
  bill:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>',
@@ -46,8 +50,8 @@ const ICON={
 
 /* ---------- view state ---------- */
 let tab="home", listTab="tasks", listWho="all", moneyMonth=thisMonth(), calDay=TODAY(), calMonth=thisMonth();
-const routes=["home","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates"];
-const parentTab={notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"money",meals:"more",dates:"more"};
+const routes=["home","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities"];
+const parentTab={notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"money",meals:"more",dates:"more",activities:"more"};
 if(routes.includes(location.hash.slice(1)))tab=location.hash.slice(1);
 let authMode="signin", authErr="", busy=false;
 
@@ -64,10 +68,20 @@ function duePill(due,done,time){if(!due)return"";const now=new Date(),nowT=Strin
 const row=(col,id,inner,done)=>`<div class="swipe" data-col="${col}" data-id="${id}"><div class="act" data-act="swipeDel">Delete</div><div class="item ${done?"done":""}">${inner}</div></div>`;
 function taskItem(t){return row("tasks",t.id,`${checkBtn(t.done,"toggle",t.id)}<div class="grow tap" data-act="edit" data-col="tasks" data-id="${t.id}"><div class="t">${esc(t.title)}</div><div class="m">${esc(pname(t.who))}${t.repeat&&t.repeat!=="none"?" · repeats "+t.repeat:""}${+t.points>0?` · <span class="star">★ ${+t.points}</span>`:""}</div></div>${duePill(t.due,t.done,t.time)}`,t.done)}
 function hwItem(h){return row("homework",h.id,`${checkBtn(h.done,"toggleHw",h.id)}<div class="grow tap" data-act="edit" data-col="homework" data-id="${h.id}"><div class="t">${esc(h.title)}</div><div class="m">${esc(h.subject)} · ${esc(pname(h.who))}</div></div>${duePill(h.due,h.done,h.time)}`,h.done)}
-function eventItem(e,showDate){return row("events",e.id,`<span class="time">${e.time?tm(e.time):"All day"}</span>${dot(e.who)}<div class="grow tap" data-act="edit" data-col="events" data-id="${e.id}"><div class="t">${esc(e.title)}</div><div class="m">${showDate?nice(e.date)+" · ":""}${esc(pname(e.who))}${e.place?" · "+esc(e.place):""}</div></div>`)}
+function eventItem(e,showDate){return row("events",e.id,`<span class="time">${e.time?tm(e.time):"All day"}</span>${dot(e.who)}<div class="grow tap" data-act="edit" data-col="events" data-id="${e.id}" data-d="${e.date}"><div class="t">${esc(e.title)}${isRep(e)?' <span class="rep" title="Repeats">↻</span>':""}</div><div class="m">${showDate?nice(e.date)+" · ":""}${esc(pname(e.who))}${e.place?" · "+esc(placeTxt(e.place)):""}</div></div>${joinBtn(e)}`).replace('class="swipe"',isRep(e)?'class="swipe" data-occ="'+e.date+'"':'class="swipe"')}
 function txItem(x){const n=x.type==="in"?x.amount:-x.amount;return row("tx",x.id,`${dot(x.who)}<div class="grow"><div class="t">${esc(x.note||x.cat)}</div><div class="m">${esc(x.cat)} · ${nice(x.date)} · ${esc(pname(x.who))}</div></div><span class="num ${n>0?"pos":""}" style="font-weight:600">${money(n,true)}</span>`)}
 const sortTasks=a=>a.sort((x,y)=>(!!x.done-!!y.done)||((x.due||"9")+(x.time||"99")>(y.due||"9")+(y.time||"99")?1:-1));
 const sortEv=a=>a.sort((x,y)=>(x.date+(x.time||"00:00")).localeCompare(y.date+(y.time||"00:00")));
+/* weekly activities: one event with repeat:"weekly", days:[0-6 Sun..Sat], optional until and skip dates */
+const DAYN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const dow=d=>new Date(d+"T12:00:00").getDay();
+const isRep=e=>e.repeat==="weekly"&&Array.isArray(e.days)&&e.days.length;
+function evOn(d){const wd=dow(d);return S().events.filter(e=>isRep(e)?(d>=e.date&&(!e.until||d<=e.until)&&e.days.includes(wd)&&!(e.skip||[]).includes(d)):e.date===d).map(e=>isRep(e)?{...e,date:d,start:e.date}:e)}
+function evRange(a,b){const out=[];for(let d=a;d<=b;d=addDays(d,1))out.push(...evOn(d));return out}
+const repText=e=>isRep(e)?"Every "+[...e.days].sort((a,b)=>((a+6)%7)-((b+6)%7)).map(i=>DAYN[i]).join(", "):"";
+const isUrl=v=>/^https?:\/\/\S+$/i.test(String(v||"").trim());
+const placeTxt=p=>isUrl(p)?p.replace(/^https?:\/\/(www\.)?/i,"").split("/")[0]:p;
+const joinBtn=e=>isUrl(e.place)?`<a class="mini join" href="${esc(e.place.trim())}" target="_blank" rel="noopener">Open</a>`:"";
 const swipeHint=()=>`<div class="hint">Swipe left on a row to delete it</div>`;
 
 /* ---------- Today ---------- */
@@ -75,8 +89,8 @@ function viewHome(){
   const t=TODAY();
   const due=sortTasks(S().tasks.filter(x=>!x.done&&x.due&&x.due<=t));
   const hw=sortTasks(S().homework.filter(h=>!h.done&&h.due&&h.due<=addDays(t,1)));
-  const ev=sortEv(S().events.filter(e=>e.date===t));
-  const next=sortEv(S().events.filter(e=>e.date>t&&e.date<=addDays(t,7))).slice(0,4);
+  const ev=sortEv(evOn(t));
+  const next=sortEv(evRange(addDays(t,1),addDays(t,7))).slice(0,5);
   const m=monthStats(thisMonth()), left=m.inc-m.out;
   const shopLeft=S().shopping.filter(s=>!s.done).length;
   const nowT=String(new Date().getHours()).padStart(2,"0")+":"+String(new Date().getMinutes()).padStart(2,"0");
@@ -85,8 +99,8 @@ function viewHome(){
   const dinner=mealOn(t), cds=countdownsSoon(2).filter(c=>daysUntil(c.nd)<=60);
   return `${moodRequestBanner()}${syncNote()}
   <section class="card qacard"><form id="qaForm" class="quick qa" autocomplete="off"><span class="qaic">${ICON.spark}</span><input id="qa" placeholder="Add anything… e.g. Dentist Fri 3pm" aria-label="Quick add" enterkeyhint="done" autocomplete="off" autocorrect="on">${hasMic?`<button type="button" class="qamic" data-act="voice" aria-label="Speak">${ICON.mic}</button>`:""}<button type="submit">Add</button></form>
-   <div id="qaPrev" class="qaprev" hidden></div><div class="qatip" id="qaTip">Type or tap the microphone on your keyboard and just say it. The app works out if it's a task, event, shopping or spending.</div></section>
-  ${upNext?`<button class="upnext" data-act="edit" data-col="events" data-id="${upNext.id}"><span class="label">Up next · ${tm(upNext.time)}</span><b>${esc(upNext.title)}</b><span>${esc(pname(upNext.who))}${upNext.place?" · "+esc(upNext.place):""}${(()=>{const [h,m]=upNext.time.split(":").map(Number),d=new Date();d.setHours(h,m,0,0);const mins=Math.round((d-Date.now())/6e4);return mins<=0?" · now":mins<60?" · in "+mins+" min":" · in "+Math.floor(mins/60)+" h "+(mins%60?mins%60+" min":"")})()}</span></button>`:""}
+   <div id="qaPrev" class="qaprev" hidden></div><div class="qatip" id="qaTip" ${+(ST._localPref("qaUses")||0)>=3?"hidden":""}>Type or tap the microphone on your keyboard and just say it. The app works out if it's a task, event, shopping or spending.</div></section>
+  ${upNext?`<button class="upnext" data-act="edit" data-col="events" data-id="${upNext.id}"><span class="label">Up next · ${tm(upNext.time)}</span><b>${esc(upNext.title)}</b><span>${esc(pname(upNext.who))}${upNext.place?" · "+esc(placeTxt(upNext.place)):""}${(()=>{const [h,m]=upNext.time.split(":").map(Number),d=new Date();d.setHours(h,m,0,0);const mins=Math.round((d-Date.now())/6e4);return mins<=0?" · now":mins<60?" · in "+mins+" min":" · in "+Math.floor(mins/60)+" h "+(mins%60?mins%60+" min":"")})()}</span></button>`:""}
   ${billsDue.length?`<section class="card"><div class="row between"><h2>Bills due</h2><button class="link" data-go="bills">All bills</button></div><div class="list" style="margin-top:6px">${billsDue.map(billRow).join("")}</div></section>`:""}
   <section class="card"><div class="row between"><h2>Today's plan</h2><span class="sub">${new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"})}</span></div>
    <div class="list" style="margin-top:6px">${ev.length?ev.map(e=>eventItem(e)).join(""):`<div class="empty">Nothing on the calendar today. Tap + to add an event.</div>`}</div></section>
@@ -121,7 +135,7 @@ function viewCalendar(){
   const wd=[...Array(7)].map((_,i)=>new Date(2024,0,1+i).toLocaleDateString("en-AU",{weekday:"narrow"}));
   const grid=[...Array(cells)].map((_,i)=>{
     const d=addDays(start,i), dt=new Date(d+"T12:00:00");
-    const evs=S().events.filter(e=>e.date===d);
+    const evs=evOn(d);
     const hw=S().homework.some(h=>h.due===d&&!h.done);
     const special=S().countdowns.some(c=>c.yearly?c.date.slice(5)===d.slice(5):c.date===d)||S().bills.some(b=>b.next===d);
     const whos=[...new Set(evs.map(e=>+e.who))].slice(0,3);
@@ -129,7 +143,7 @@ function viewCalendar(){
     const cls=["mday",monthKey(d)!==calMonth?"out":"",d===TODAY()?"today":"",d===calDay?"sel":""].join(" ");
     return `<button class="${cls}" data-act="day" data-d="${d}" aria-label="${dt.toDateString()}${evs.length?", "+evs.length+" events":""}"><span class="n">${dt.getDate()}</span><span class="dots">${dots}${special?`<i class="sp"></i>`:""}</span></button>`;
   }).join("");
-  const ev=sortEv(S().events.filter(e=>e.date===calDay));
+  const ev=sortEv(evOn(calDay));
   const hwDay=S().homework.filter(h=>h.due===calDay);
   const taskDay=S().tasks.filter(t=>t.due===calDay);
   const dayLabel=new Date(calDay+"T12:00:00").toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"});
@@ -213,6 +227,7 @@ function viewMore(){
   const tile=(go,icon,title,sub)=>`<button class="tile" data-go="${go}">${icon}<b>${title}</b><span>${sub}</span></button>`;
   const cards=S().wallet.length+S().myWallet.length;
   return `<div class="tiles">
+   ${tile("activities",ICON.swim,"Activities",(()=>{const n=S().events.filter(isRep).length;return n?n+" weekly class"+(n===1?"":"es")+" and lessons":"Swimming, lessons, sport"})())}
    ${tile("meals",ICON.meal,"Dinner plan",(()=>{const m=mealOn(TODAY());return m?"Tonight: "+esc(m.title):"Plan the week's dinners"})())}
    ${tile("dates",ICON.cake,"Dates",(()=>{const c=countdownsSoon(1)[0];return c?esc(c.title)+" · "+esc(cdLabel(c)):"Birthdays and trips"})())}
    ${tile("bills",ICON.bill,"Bills",S().bills.length?S().bills.length+" bill"+(S().bills.length===1?"":"s")+" tracked":"Rent, power, subscriptions")}
@@ -529,8 +544,12 @@ function parseQuick(txt){
   if(tmm){let h=+tmm[1];const mi=+(tmm[2]||0),ap=(tmm[3]||"").toLowerCase();if(ap==="pm"&&h<12)h+=12;if(ap==="am"&&h===12)h=0;if(!ap&&h>=1&&h<=7)h+=12;if(h<24&&mi<60)out.time=String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0")}
   if(cut(/\s(?:this\s+)?(morning)(?=\s)/i)&&!out.time)out.time="09:00";
   if(cut(/\s(?:this\s+)?(tonight|evening)(?=\s)/i)){out.date=out.date||TODAY();if(!out.time)out.time="18:00"}
-  // date
+  // weekly: "swimming every tuesday and thursday 4pm"
   const t=TODAY();
+  const DW="(?:sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*";
+  if((m=cut(new RegExp("\\s(?:on\\s+)?every\\s+("+DW+"(?:\\s*(?:,|and|&)\\s*"+DW+")*)(?=\\s)","i")))){
+    out.days=[...new Set(m[1].split(/\s*(?:,|and|&)\s*/i).map(w=>WEEKDAYS.findIndex(x=>x.startsWith(w.toLowerCase().slice(0,3)))).filter(i=>i>=0))];
+    if(out.days.length){out.kind="event";let d=t;while(!out.days.includes(dow(d)))d=addDays(d,1);out.date=d}}
   if(cut(/\s(?:on\s+)?today(?=\s)/i))out.date=t;
   else if(cut(/\s(?:on\s+)?(?:tomorrow|tmr|tmrw|tomoz)(?=\s)/i))out.date=addDays(t,1);
   else if((m=cut(/\s(?:on\s+)?(next\s+)?(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day|nesday|rsday|urday|sday)?(?=\s)/i))){
@@ -553,7 +572,7 @@ function quickPreview(q){
   if(!q||(!q.title&&!q.items))return"";
   const bits={shop:()=>`Shopping: ${q.items.map(esc).join(", ")}`,
     money:()=>`Spending ${money(q.amount||0)}${q.title?" · "+esc(q.title):""} · ${pname(q.who||meId())}`,
-    event:()=>`Event: ${esc(q.title||"Untitled")} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""} · ${pname(q.who??0)}`,
+    event:()=>q.days?`Weekly activity: ${esc(q.title||"Untitled")} · ${repText({repeat:"weekly",days:q.days})}${q.time?" · "+tm(q.time):""} · ${pname(q.who??0)}`:`Event: ${esc(q.title||"Untitled")} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""} · ${pname(q.who??0)}`,
     task:()=>`Task: ${esc(q.title||"Untitled")} · ${pname(q.who||meId())} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""}`,
     homework:()=>`Homework: ${esc(q.subject||"Homework")} · ${esc(q.title||"")} · due ${nice(q.date||addDays(TODAY(),1))}`}[q.kind];
   return bits?bits():"";
@@ -562,8 +581,8 @@ function saveQuick(q){
   if(q.kind==="shop"){q.items.forEach(n=>addShopItem(n));toast(q.items.length>1?q.items.length+" items added to shopping":"Added to shopping");return}
   if(!q.title&&q.kind!=="money")return toast("Type what it is, e.g. Dentist Friday 3pm");
   if(q.kind==="money"){if(!(q.amount>0))return;const cat=guessCat(q.title);ST.add("tx",{type:"out",amount:Math.round(q.amount*100)/100,cat,who:q.who||meId(),date:q.date||TODAY(),note:q.title});toast("Spending added to "+cat);return}
-  if(q.kind==="event"){const d=q.date||TODAY();ST.add("events",{title:q.title,who:q.who??0,date:d,time:q.time||"",place:""});toast("Added to the calendar for "+nice(d));return}
-  if(q.kind==="homework"){ST.add("homework",{subject:q.subject||"Homework",title:q.title||q.subject||"Homework",who:q.who||(people()[2]?.id||meId()),due:q.date||addDays(TODAY(),1),time:q.time||"",done:false});toast("Homework added");return}
+  if(q.kind==="event"){const d=q.date||TODAY();if(q.days){ST.add("events",{title:q.title,who:q.who??0,date:d,time:q.time||"",place:"",repeat:"weekly",days:q.days.sort(),until:"",skip:[]});toast(q.title+": "+repText({repeat:"weekly",days:q.days}));return}ST.add("events",{title:q.title,who:q.who??0,date:d,time:q.time||"",place:""});toast("Added to the calendar for "+nice(d));return}
+  if(q.kind==="homework"){ST.add("homework",{subject:q.subject||"Homework",title:q.title||q.subject||"Homework",who:q.who||kidId(),due:q.date||addDays(TODAY(),1),time:q.time||"",done:false});toast("Homework added");return}
   ST.add("tasks",{title:q.title,who:q.who||meId(),due:q.date||TODAY(),time:q.time||"",repeat:"none",done:false});toast("Task added for "+nice(q.date||TODAY()));
 }
 const CAT_WORDS={Groceries:/grocer|woolies|woolworths|coles|aldi|iga|supermarket|market|food shop/i,Transport:/petrol|fuel|uber|taxi|bus|train|parking|toll|opal|go card|car|rego|servo/i,Bills:/electric|power|gas bill|water|internet|phone|rent|insurance|bill|netflix|spotify|subscription/i,School:/school|uniform|book|excursion|tuition|fees|stationery/i,"Eating out":/lunch|dinner|breakfast|cafe|coffee|restaurant|takeaway|pizza|mcdonald|kfc|sushi|pho|maccas|bubble tea/i,Health:/doctor|dentist|chemist|pharmacy|medicine|physio|gp|optometrist/i,Fun:/movie|cinema|game|toy|gift|present|holiday|concert|netflix|zoo|park/i};
@@ -711,7 +730,7 @@ function searchSheet(){
     const q=sh.querySelector("#q"),out=sh.querySelector("#qr");q.focus();
     const run=()=>{const s=q.value.trim().toLowerCase();if(s.length<2){out.innerHTML=`<div class="empty">Type at least 2 letters.</div>`;return}
       const has=(...f)=>f.some(x=>String(x||"").toLowerCase().includes(s));const res=[];
-      S().events.filter(e=>has(e.title,e.place)).forEach(e=>res.push(["Event",e.title,nice(e.date)+(e.time?" · "+tm(e.time):""),`data-act="edit" data-col="events" data-id="${e.id}"`,e.date]));
+      S().events.filter(e=>has(e.title,e.place)).forEach(e=>res.push([isRep(e)?"Activity":"Event",e.title,(isRep(e)?repText(e):nice(e.date))+(e.time?" · "+tm(e.time):""),`data-act="edit" data-col="events" data-id="${e.id}"`,e.date]));
       S().tasks.filter(t=>has(t.title)).forEach(t=>res.push(["Task",t.title,(t.done?"Done · ":"")+(t.due?nice(t.due):""),`data-act="edit" data-col="tasks" data-id="${t.id}"`,t.due||""]));
       S().homework.filter(h=>has(h.title,h.subject)).forEach(h=>res.push(["Homework",h.subject+": "+h.title,h.due?nice(h.due):"",`data-act="edit" data-col="homework" data-id="${h.id}"`,h.due||""]));
       S().notes.filter(n=>has(n.title,n.body)).forEach(n=>res.push(["Note",n.title||"Untitled",(n.body||"").slice(0,60),`data-act="openNote" data-id="${n.id}"`,""]));
@@ -732,7 +751,7 @@ function icsFor(e){
   let when;if(e.time){const [h,m]=e.time.split(":").map(Number);const end=new Date(2000,0,1,h+1,m);when=`DTSTART:${d}T${p(h)}${p(m)}00\r\nDTEND:${(end.getDate()>1?addDays(e.date,1):e.date).replace(/-/g,"")}T${p(end.getHours())}${p(end.getMinutes())}00`}
   else when=`DTSTART;VALUE=DATE:${d}\r\nDTEND;VALUE=DATE:${addDays(e.date,1).replace(/-/g,"")}`;
   const clean=s=>String(s||"").replace(/[\\;,]/g,m=>"\\"+m).replace(/\n/g,"\\n");
-  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Happy Home//EN\r\nBEGIN:VEVENT\r\nUID:${e.id}@happyhome\r\nDTSTAMP:${stamp}\r\n${when}\r\nSUMMARY:${clean(e.title)}\r\n${e.place?"LOCATION:"+clean(e.place)+"\r\n":""}BEGIN:VALARM\r\nTRIGGER:-PT30M\r\nACTION:DISPLAY\r\nDESCRIPTION:${clean(e.title)}\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`;
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Happy Home//EN\r\nBEGIN:VEVENT\r\nUID:${e.id}@happyhome\r\nDTSTAMP:${stamp}\r\n${when}\r\nSUMMARY:${clean(e.title)}\r\n${isRep(e)?"RRULE:FREQ=WEEKLY;BYDAY="+e.days.map(i=>["SU","MO","TU","WE","TH","FR","SA"][i]).join(",")+(e.until?";UNTIL="+e.until.replace(/-/g,"")+"T235959":"")+"\r\n":""}${e.place?"LOCATION:"+clean(e.place)+"\r\n":""}BEGIN:VALARM\r\nTRIGGER:-PT30M\r\nACTION:DISPLAY\r\nDESCRIPTION:${clean(e.title)}\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`;
 }
 function exportEvent(e){
   const blob=new Blob([icsFor(e)],{type:"text/calendar"}),url=URL.createObjectURL(blob),a=document.createElement("a");
@@ -740,6 +759,16 @@ function exportEvent(e){
   setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},4000);
 }
 
+/* ---------- weekly activities per person ---------- */
+function viewActivities(){
+  const reps=S().events.filter(e=>isRep(e)&&(!e.until||e.until>=TODAY()));
+  const card=p=>{const mine=reps.filter(e=>+e.who===p.id||(p.id===0&&+e.who===0));const cnt=mine.reduce((a,e)=>a+e.days.length,0);
+    return `<section class="card"><div class="row between"><div class="row" style="gap:8px">${dot(p.id)}<h2>${esc(p.name)}</h2></div><button class="link" data-act="addActivity" data-k="${p.id}">+ Add</button></div>
+     ${mine.length?`<div class="sub" style="margin-top:2px">${cnt} session${cnt===1?"":"s"} a week</div><div class="wkgrid">${[1,2,3,4,5,6,0].map(d=>{const on=mine.filter(e=>e.days.includes(d)).sort((a,b)=>(a.time||"").localeCompare(b.time||""));return `<div class="wkday ${dow(TODAY())===d?"is-today":""}"><b>${DAYN[d]}</b>${on.map(e=>`<button class="wkev" data-act="edit" data-col="events" data-id="${e.id}"><span>${esc(e.title)}</span>${e.time?`<i>${tm(e.time)}</i>`:""}</button>`).join("")}</div>`}).join("")}</div>
+      <div class="list" style="margin-top:8px">${mine.map(e=>`<div class="item"><div class="grow tap" data-act="edit" data-col="events" data-id="${e.id}"><div class="t">${esc(e.title)}</div><div class="m">${repText(e)}${e.time?" · "+tm(e.time):""}${e.place?" · "+esc(placeTxt(e.place)):""}</div></div>${joinBtn(e)}</div>`).join("")}</div>`
+     :`<div class="empty">No weekly activities yet. Add classes, sport, lessons or practice that happen on the same days each week.</div>`}</section>`};
+  return `${backBar}${people().map(card).join("")}${reps.some(e=>+e.who===0)?card({id:0,name:"Whole family"}):""}`;
+}
 /* ---------- important dates view ---------- */
 function viewDates(){
   const list=S().countdowns.map(c=>({...c,nd:cdNext(c)})).sort((a,b)=>(a.nd||"").localeCompare(b.nd||""));
@@ -751,7 +780,7 @@ function viewDates(){
 }
 
 /* ---------- render ---------- */
-const TITLES={home:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates"};
+const TITLES={home:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities"};
 let rendering=false;
 function render(){
   if(rendering)return;rendering=true;
@@ -768,7 +797,7 @@ function render(){
     $("#title").textContent=TITLES[tab];
     const me=person(meId());
     $("#subtitle").textContent=tab==="home"?(me?"Hello, "+me.name:""):"";
-    $("#view").innerHTML={home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates}[tab]();
+    $("#view").innerHTML={home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates,activities:viewActivities}[tab]();
     const active=parentTab[tab]||tab;
     document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===active));
     if(shopVal&&$("#shopInput"))$("#shopInput").value=shopVal; if(shopFocus&&$("#shopInput"))$("#shopInput").focus();
@@ -780,14 +809,14 @@ function bindForms(){
   const sf=$("#shopForm");if(sf)sf.onsubmit=e=>{e.preventDefault();const v=$("#shopInput").value.trim();if(!v)return;
     $("#shopInput").value="";v.split(/\s*,\s*/).filter(Boolean).forEach(addShopItem);$("#shopInput").focus()};
   const qf=$("#qaForm");if(qf){const q=$("#qa");q.oninput=showQuick;qf.onsubmit=e=>{e.preventDefault();const v=q.value.trim();if(!v){q.focus();return}
-    saveQuick(parseQuick(v));q.value="";showQuick();q.blur()}}
+    saveQuick(parseQuick(v));try{ST._localPref("qaUses",String(+(ST._localPref("qaUses")||0)+1))}catch(_){}q.value="";showQuick();q.blur()}}
   const af=$("#authForm");if(af)af.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";const em=$("#a_email").value.trim(),pw=$("#a_pw").value;
     try{authMode==="signup"?await ST.signUp(em,pw):await ST.signIn(em,pw)}catch(err){authErr=err&&err.code==="hh/mfa-needed"?"":authErrorText(err)}busy=false;render();const mc=$("#m_code");mc&&mc.focus()};
   const mf=$("#mfaForm");if(mf)mf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.finishMfaSignIn($("#m_code").value)}catch(err){authErr=authErrorText(err)}busy=false;render()};
   const nf=$("#newFam");if(nf)nf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.createFamily({myName:$("#n_me").value.trim(),otherNames:[$("#n_2").value.trim(),$("#n_3").value.trim()],currency:$("#n_cur").value.trim()})}catch(err){authErr=authErrorText(err)}busy=false;render()};
   const jf=$("#joinFam");if(jf)jf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.joinFamily($("#j_code").value)}catch(err){authErr=authErrorText(err)}busy=false;render()};
 }
-function showQuick(){const q=$("#qa"),p=$("#qaPrev"),tip=$("#qaTip");if(!q||!p)return;const v=q.value.trim();const h=v.length>1?quickPreview(parseQuick(v)):"";p.hidden=!h;p.innerHTML=h?`<span class="label">Will add</span> ${h}`:"";if(tip)tip.hidden=!!v}
+function showQuick(){const q=$("#qa"),p=$("#qaPrev"),tip=$("#qaTip");if(!q||!p)return;const v=q.value.trim();const h=v.length>1?quickPreview(parseQuick(v)):"";p.hidden=!h;p.innerHTML=h?`<span class="label">Will add</span> ${h}`:"";if(tip)tip.hidden=!!v||+(ST._localPref("qaUses")||0)>=3}
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition, hasMic=!!SR;
 function voiceAdd(){
   const q=$("#qa");if(!q)return;
@@ -814,7 +843,7 @@ function addSheet(kind,preset,edit){
   if(kind==="card")return cardForm();
   const kinds=[["task","Task"],["event","Event"],["money","Money"],["shop","Shopping"],["homework","Homework"],["note","Note"]];
   const pick=`<div class="pickgrid">${kinds.map(([k,n])=>`<button type="button" class="${k===kind?"on":""}" data-kind="${k}">${n}</button>`).join("")}</div>`;
-  const kid=people()[2]?.id||meId(), me=meId(), cats=SET().categories||[];
+  const kid=kidId(), me=meId(), cats=SET().categories||[];
   let body="";
   if(kind==="task")body=`<div class="field"><label for="f_title">What needs doing?</label><input id="f_title" required placeholder="e.g. Take bins out"></div>
    <div class="two"><div class="field"><label for="f_who">Who</label><select id="f_who">${whoOptions(me)}</select></div><div class="field"><label for="f_due">Date</label><input id="f_due" type="date" value="${TODAY()}"></div></div>
@@ -826,8 +855,10 @@ function addSheet(kind,preset,edit){
    <div class="field"><label for="f_note">Note</label><input id="f_note" placeholder="e.g. Weekly shop"></div>`;
   if(kind==="event")body=`<div class="field"><label for="f_title">Event</label><input id="f_title" required placeholder="e.g. Football training"></div>
    <div class="two"><div class="field"><label for="f_date">Date</label><input id="f_date" type="date" value="${preset.date||(tab==="calendar"?calDay:TODAY())}"></div><div class="field"><label for="f_time">Time (blank = all day)</label><input id="f_time" type="time"></div></div>
-   <div class="two"><div class="field"><label for="f_who">For</label><select id="f_who">${whoOptions(0,true)}</select></div><div class="field"><label for="f_place">Where</label><input id="f_place" placeholder="Optional"></div></div>
-   <div class="field"><label for="f_rep">Repeat</label><select id="f_rep"><option value="0">Doesn't repeat</option><option value="7">Every week (next 8 weeks)</option><option value="14">Every 2 weeks (next 8 times)</option></select></div>`;
+   <div class="two"><div class="field"><label for="f_who">For</label><select id="f_who">${whoOptions(preset.who??0,true)}</select></div><div class="field"><label for="f_place">Where or link</label><input id="f_place" placeholder="Optional, e.g. pool or lesson link" autocapitalize="off"></div></div>
+   <div class="field"><label for="f_erep">Repeat</label><select id="f_erep"><option value="none">Doesn't repeat</option><option value="weekly">Every week on…</option></select></div>
+   <div class="field" id="f_daysf" hidden><label>Days</label><div class="daypick">${[1,2,3,4,5,6,0].map(i=>`<button type="button" data-day="${i}">${DAYN[i]}</button>`).join("")}</div></div>
+   <div class="field" id="f_untilf" hidden><label for="f_until">Until (optional)</label><input id="f_until" type="date"></div>`;
   if(kind==="shop")body=`<div class="two"><div class="field"><label for="f_title">Item</label><input id="f_title" required placeholder="e.g. Eggs"></div><div class="field"><label for="f_qty">How many</label><input id="f_qty" placeholder="e.g. 12"></div></div>`;
   if(kind==="homework")body=`<div class="two"><div class="field"><label for="f_subj">Subject</label><input id="f_subj" list="subjects" required placeholder="e.g. Maths"><datalist id="subjects">${["Maths","English","Science","HASS","History","Geography","Art","Music","Japanese","PE"].map(s=>`<option value="${s}">`).join("")}</datalist></div><div class="field"><label for="f_due">Due</label><input id="f_due" type="date" value="${addDays(TODAY(),1)}"></div></div>
    <div class="field"><label for="f_title">What to do</label><input id="f_title" required placeholder="e.g. Fractions worksheet, page 14"></div>
@@ -838,19 +869,26 @@ function addSheet(kind,preset,edit){
     sh.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>addSheet(b.dataset.kind,preset));
     if(edit){const set=(id,val)=>{const el=sh.querySelector("#"+id);if(el&&val!=null)el.value=val};
       set("f_title",edit.title);set("f_who",edit.who);set("f_due",edit.due);set("f_time",edit.time||"");set("f_rep",kind==="event"?"0":(edit.repeat||"none"));set("f_subj",edit.subject);set("f_date",edit.date);set("f_place",edit.place||"");set("f_pts",String(+edit.points||0));
-      if(kind==="event"){const r=sh.querySelector("#f_rep");r&&r.closest(".field").remove();const b=document.createElement("button");b.type="button";b.className="ghost";b.textContent="Add to iPhone Calendar";b.onclick=()=>{exportEvent(edit);toast("Opening Calendar…")};sh.querySelector("#f_del").before(b)}
+      if(kind==="event"){const b=document.createElement("button");b.type="button";b.className="ghost";b.textContent="Add to iPhone Calendar";b.onclick=()=>{exportEvent(edit);toast("Opening Calendar…")};sh.querySelector("#f_del").before(b);
+        if(isRep(edit)&&preset.occ){const o=document.createElement("button");o.type="button";o.className="link";o.style.alignSelf="center";o.textContent="Skip just "+nice(preset.occ);o.onclick=()=>{ST.patch("events",edit.id,{skip:[...(edit.skip||[]),preset.occ]});closeSheet();toast("Skipped "+nice(preset.occ))};sh.querySelector("#f_del").before(o);sh.querySelector("#f_del").textContent="Delete every week"}}
       const col={task:"tasks",homework:"homework",event:"events"}[kind],d=sh.querySelector("#f_del");
       d.onclick=()=>{if(d.dataset.arm){closeSheet();delUndo(col,edit.id);render()}else{d.dataset.arm=1;d.textContent="Tap again to delete"}};}
+    if(kind==="event"){const rs=sh.querySelector("#f_erep"),df=sh.querySelector("#f_daysf"),uf=sh.querySelector("#f_untilf"),dp=sh.querySelectorAll("[data-day]");
+      const on=new Set(edit&&isRep(edit)?edit.days:[]);const paint=()=>dp.forEach(b=>b.classList.toggle("on",on.has(+b.dataset.day)));
+      const sync=()=>{const w=rs.value==="weekly";df.hidden=!w;uf.hidden=!w;if(w&&!on.size){auto=dow(sh.querySelector("#f_date").value||TODAY());on.add(auto);paint()}};
+      let auto=null;dp.forEach(b=>b.onclick=()=>{const d=+b.dataset.day;if(auto!==null&&auto!==d&&on.size===1&&on.has(auto))on.delete(auto);auto=null;on.has(d)?on.delete(d):on.add(d);paint()});rs.onchange=sync;
+      if(edit&&isRep(edit)){rs.value="weekly";sh.querySelector("#f_until").value=edit.until||""}else if(preset.days){rs.value="weekly"}
+      paint();sync();sh._days=on}
     let type="out";
     sh.querySelectorAll("#f_type button").forEach(b=>b.onclick=()=>{type=b.dataset.t;sh.querySelectorAll("#f_type button").forEach(x=>x.classList.toggle("on",x===b));sh.querySelector("#f_cat").value=type==="in"?"Salary":cats[0]});
     const first=sh.querySelector("#f_subj,#f_title,#f_amt");if(!edit&&first)first.focus();
     sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const v=id=>(sh.querySelector("#"+id)?.value??"");
       if(kind==="task"){if(!v("f_title").trim())return;const rec={title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time"),repeat:v("f_rep"),points:+v("f_pts")||0};if(edit){ST.patch("tasks",edit.id,rec);toast("Task updated")}else{ST.add("tasks",{...rec,done:false});toast("Task added")}}
       if(kind==="money"){const a=parseFloat(v("f_amt"));if(!(a>0))return;ST.add("tx",{type,amount:Math.round(a*100)/100,cat:v("f_cat"),who:+v("f_who"),date:v("f_date")||TODAY(),note:v("f_note").trim()});moneyMonth=monthKey(v("f_date")||TODAY());toast(type==="in"?"Income added":"Spending added")}
-      if(kind==="event"&&edit){if(!v("f_title").trim())return;const d0=v("f_date")||TODAY();ST.patch("events",edit.id,{title:v("f_title").trim(),who:+v("f_who"),date:d0,time:v("f_time"),place:v("f_place").trim()});calDay=d0;calMonth=monthKey(d0);toast("Event updated")}
-      else if(kind==="event"){if(!v("f_title").trim())return;const d0=v("f_date")||TODAY(),step=+v("f_rep"),n=step?8:1;
-        for(let i=0;i<n;i++)ST.add("events",{title:v("f_title").trim(),who:+v("f_who"),date:addDays(d0,i*step),time:v("f_time"),place:v("f_place").trim()});
-        calDay=d0;calMonth=monthKey(d0);toast(n>1?n+" events added":"Event added")}
+      if(kind==="event"){if(!v("f_title").trim())return;const d0=v("f_date")||TODAY(),wk=v("f_erep")==="weekly"&&sh._days.size;
+        const rec={title:v("f_title").trim(),who:+v("f_who"),date:d0,time:v("f_time"),place:v("f_place").trim(),repeat:wk?"weekly":"none",days:wk?[...sh._days].sort():[],until:wk?v("f_until"):""};
+        if(edit){ST.patch("events",edit.id,rec);toast(wk?"Activity updated":"Event updated")}else{ST.add("events",{...rec,skip:[]});toast(wk?repText(rec)+(rec.time?" at "+tm(rec.time):""):"Event added")}
+        if(!edit||!wk){calDay=d0;calMonth=monthKey(d0)}}
       if(kind==="shop"){if(!v("f_title").trim())return;addShopItem(v("f_title").trim()+(v("f_qty").trim()?" "+v("f_qty").trim():""));toast("Added to shopping")}
       if(kind==="homework"){if(!v("f_title").trim())return;const rec={subject:v("f_subj").trim()||"Homework",title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time")};if(edit){ST.patch("homework",edit.id,rec);toast("Homework updated")}else{ST.add("homework",{...rec,done:false});toast("Homework added")}}
       if(kind==="note"){if(!v("f_title").trim()&&!v("f_body").trim())return;ST.add("notes",{title:v("f_title").trim(),body:v("f_body"),who:meId(),updated:Date.now(),pinned:false});toast("Note saved")}
@@ -903,7 +941,7 @@ function settingsSheet(){
     <textarea id="s_box" rows="3" hidden placeholder="Paste backup code here" style="border:0;background:var(--sunk);border-radius:10px;padding:10px 12px;width:100%"></textarea>
     <button class="ghost" type="button" id="s_reset">Erase everything on this phone</button>`}`,sh=>{
     sh.querySelector("#f").onsubmit=e=>{e.preventDefault();
-      const ppl=people().map(p=>Object.assign({},p,{name:sh.querySelector("#p_"+p.id).value.trim()||p.name}));
+      const ppl=peopleRaw().map(p=>Object.assign({},p,{name:sh.querySelector("#p_"+p.id).value.trim()||p.name}));
       const cats=sh.querySelector("#s_cats").value.split(",").map(x=>x.trim()).filter(Boolean);
       ST.setSettings({people:ppl,currency:sh.querySelector("#s_cur").value.trim()||"$",categories:cats.length?cats:s.categories});
       if(!cloud)ST.setMe(sh.querySelector("#s_me").value);
@@ -1010,12 +1048,13 @@ document.addEventListener("click",e=>{
     case"editMeal":closeSheet();return mealSheet(a.dataset.d);
     case"mealsToShop":return mealsToShop();
     case"addCountdown":return countdownSheet();
+    case"addActivity":return addSheet("event",{who:+a.dataset.k,days:[dow(TODAY())]});
     case"editCountdown":closeSheet();return countdownSheet(id);
     case"reAdd":addShopItem(a.dataset.k);toast(a.dataset.k+" added");return;
     case"twoStep":return twoStepSheet();
     case"mfaCancel":ST.cancelMfa();authErr="";return render();
-    case"edit":{closeSheet();const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event"}[col],null,r);return}
-    case"swipeDel":{const w=a.closest(".swipe");delUndo(w.dataset.col,w.dataset.id);return}
+    case"edit":{closeSheet();const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event"}[col],{occ:a.dataset.d},r);return}
+    case"swipeDel":{const w=a.closest(".swipe");if(w.dataset.occ){const e=S().events.find(x=>x.id===w.dataset.id);if(e){const d=w.dataset.occ,old=e.skip||[];ST.patch("events",e.id,{skip:[...old,d]});toast("Removed for "+nice(d),"Undo",()=>ST.patch("events",e.id,{skip:old}))}return}delUndo(w.dataset.col,w.dataset.id);return}
     case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was});if(was)takeStars(snap);if(!was){giveStars(snap);toast(+snap.points>0?`Done! ★ ${+snap.points} for ${pname(snap.who)}`:"Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}
     case"toggleHw":return void flip("homework","Homework finished!");
     case"toggleShop":return void flip("shopping");
