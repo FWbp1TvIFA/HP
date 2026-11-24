@@ -357,3 +357,164 @@ html.pn-focus, html.pn-focus body{overflow:hidden!important;overscroll-behavior:
   .pn-confetti{display:none}
   .pn-hd{transition:none}
 }
+
+/* ═══════════════════ Falling notes everywhere, song cards, friends and the party ═══════════════════ */
+.pn-root{gap:8px;--pn-ink:var(--ink,#1E1A3C)}
+.pn-stage{gap:7px}
+/* a tighter top, so the whole instrument fits above the tab bar on a phone */
+.pn-songbtn,.pn-sq{min-height:48px;border:2px solid var(--rim,transparent);border-radius:16px;box-shadow:0 3px 0 var(--rim,rgba(0,0,0,.1))}
+.pn-sq{width:58px}
+.pn-root .pn-modeseg button{min-height:40px}
+.pn-root .pn-modeseg button.on,.pn-root .pn-bseg button.on{background:var(--pop,var(--accent,#1F5C4A));color:var(--ink,var(--on-accent,#fff))}
+.pn-root .pn-speedseg button{min-height:42px}
+.pn-playbig{min-height:44px;min-width:118px;padding:8px 10px}
+.pn-sheetbox{max-height:calc(var(--pn-lineh,104px) + 8px);border:2px solid var(--rim,transparent);border-radius:16px;box-shadow:none}
+.pn-root .pn-modeseg button{white-space:nowrap;font-size:.86rem;padding:6px 0}
+.pn-root .pn-speedseg button{font-size:.78rem;padding:6px 0}
+.pn-root .pn-viewbtn{flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;line-height:1;min-width:62px;height:auto;min-height:44px;border:2px solid var(--rim,transparent);border-radius:14px;box-shadow:0 3px 0 var(--rim,rgba(0,0,0,.1))}
+.pn-m-time .pn-viewbtn{opacity:.45;pointer-events:none}
+.pn-names{height:26px}
+.pn-root:not(.pn-short) .pn-bar .pn-bb[data-k=view]{display:none}  /* the bar's View button is for a sideways phone; upright full screen shows both */
+
+/* the helper, the speech bubble and the "in a row" counter */
+.pn-root:not(.pn-focus-on):not(.pn-m-free) .pn-now{display:none}
+.pn-root:not(.pn-focus-on):not(.pn-m-free) .pn-follow{grid-template-columns:minmax(0,1fr);grid-template-areas:"side" "sheet"}
+.pn-root:not(.pn-focus-on).pn-lane .pn-sheetbox{display:none}                 /* normal page: falling notes or the sheet, one at a time, so the keys stay on the screen */
+.pn-side{display:flex;align-items:center;gap:8px}
+.pn-sidetxt{flex:1;min-width:0}
+.pn-buddy{flex:none;width:52px;height:54px}
+.pn-fr{display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 0 1.2px rgba(255,255,255,.95))}
+.pn-buddy .pn-fr{transform-origin:50% 100%;animation:pn-idle 2.6s ease-in-out infinite}
+.pn-buddy.pn-happy .pn-fr{animation:pn-hop .72s cubic-bezier(.3,1.4,.5,1)}
+.pn-buddy.pn-oops .pn-fr{animation:pn-tilt .72s ease-in-out}
+.pn-eyes{transform-box:fill-box;transform-origin:50% 50%;animation:pn-blinkeye 4.4s infinite}
+.pn-arm{transform-box:fill-box}
+.pn-fbrow{min-width:0}
+.pn-fb{flex:1;min-width:0;position:relative;min-height:44px;padding:5px 12px;border-radius:15px;background:var(--surface,#fff);border:2px solid var(--rim,rgba(0,0,0,.12));font-size:.98rem}
+.pn-fb::before{content:"";position:absolute;left:-7px;top:50%;width:10px;height:10px;margin-top:-6px;background:inherit;border-left:2px solid var(--rim,rgba(0,0,0,.12));border-bottom:2px solid var(--rim,rgba(0,0,0,.12));transform:rotate(45deg)}
+.pn-m-time .pn-fb::before{display:none}
+.pn-combo{flex:none;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1;background:#FFCB2E;color:#1E1A3C;border-radius:14px;padding:5px 8px 6px;box-shadow:0 3px 0 rgba(0,0,0,.2)}
+.pn-combo i{font-style:normal;font-size:15px}
+.pn-combo b{font:800 1.15rem/1 var(--display,inherit)}
+.pn-combo span{font-size:.56rem;font-weight:700;white-space:nowrap}
+.pn-combo.pn-pop1{animation:pn-combo .5s cubic-bezier(.2,1.6,.4,1)}
+
+/* how far through the song, and the lane the notes fall down */
+.pn-progbar{position:absolute;z-index:2;left:0;right:0;top:0;height:5px;background:rgba(127,127,127,.22);overflow:hidden;pointer-events:none}
+.pn-prog{display:block;height:100%;border-radius:0 3px 3px 0;background:var(--pop,var(--accent,#1F5C4A));transform:scaleX(0);transform-origin:0 50%;transition:transform .2s linear}
+.pn-m-free .pn-progbar{visibility:hidden}
+.pn-fall{display:block;height:104px;border-bottom:4px solid var(--pop,var(--accent,#1F5C4A));
+  background:repeating-linear-gradient(90deg,transparent 0,transparent calc(var(--kw,48px) - 1px),rgba(127,127,127,.2) calc(var(--kw,48px) - 1px),rgba(127,127,127,.2) var(--kw,48px)),linear-gradient(180deg,rgba(127,127,127,.03),rgba(127,127,127,.17))}
+.pn-m-free .pn-fall,.pn-root:not(.pn-lane) .pn-fall{display:none}
+.pn-focus-on:not(.pn-short):not(.pn-m-free) .pn-fall{display:block}           /* upright full screen: sheet and falling notes together */
+.pn-track.pn-glide{transition:transform .26s cubic-bezier(.2,.8,.3,1)}
+.pn-track i{border-radius:9px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:1px;padding:0;font:800 13px/1 var(--display,sans-serif);box-shadow:inset 0 0 0 2px rgba(255,255,255,.65),0 2px 0 rgba(0,0,0,.28);transition:opacity .2s}
+.pn-track i b{font-weight:800}
+.pn-track i.pn-tall{flex-direction:column;gap:3px;font-size:15px}
+.pn-track i.pn-tiny{font-size:10px;border-radius:6px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.65),0 1px 0 rgba(0,0,0,.28)}
+.pn-root .pn-ni{flex:none;width:11px;height:14px;display:block}
+.pn-root .pn-tall .pn-ni{width:17px;height:21px}
+
+/* under the keys: three big buttons and the song cards */
+.pn-under{display:flex;flex-direction:column;gap:12px;margin-top:4px}
+.pn-focus-on .pn-under{display:none}
+.pn-acts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pn-root .pn-act{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:64px;padding:6px 4px;border:0;border-radius:18px;color:#1E1A3C;font:700 .82rem/1.1 var(--display,inherit);box-shadow:0 4px 0 rgba(0,0,0,.22)}
+.pn-root .pn-act:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.22)}
+.pn-act1{background:#56A8FF} .pn-act2{background:#FFCB2E} .pn-act3{background:#3DD68C}
+.pn-act i{font-style:normal;font-size:22px;line-height:1}
+.pn-root .pn-act svg{width:24px;height:24px}
+.pn-shelves{display:flex;flex-direction:column;gap:10px}
+.pn-shelf h3{display:flex;align-items:center;gap:7px;margin:0 0 6px;font:700 1.04rem/1.2 var(--display,inherit)}
+.pn-root .pn-shelfedit{margin-left:auto;min-height:36px;padding:2px 8px;font:700 .82rem/1 var(--body,inherit)}
+.pn-shelf h3 small{font:700 .7rem/1 var(--body,inherit);color:var(--muted,#5B6F68);background:var(--sunk,#E6ECE8);border-radius:999px;padding:3px 8px}
+.pn-cards{position:relative;display:flex;gap:9px;margin-inline:-16px;padding:2px 16px 8px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scroll-padding-inline:16px;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.pn-cards::-webkit-scrollbar{display:none}
+.pn-root .pn-card{flex:none;width:104px;min-height:116px;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 6px 7px;border:2px solid var(--rim,rgba(0,0,0,.14));border-radius:18px;background:var(--surface,#fff);color:var(--fg,#16302A);box-shadow:0 4px 0 var(--rim,rgba(0,0,0,.14));text-align:center}
+.pn-root .pn-card:active{transform:translateY(3px);box-shadow:0 1px 0 var(--rim,rgba(0,0,0,.14))}
+.pn-cardart{flex:none;width:48px;height:48px;border-radius:16px;background:var(--c,#FFCB2E);color:var(--ct,#1E1A3C);display:grid;place-items:center;font-size:26px;line-height:1;box-shadow:inset 0 -3px 0 rgba(0,0,0,.16)}
+.pn-card b{font:700 .78rem/1.15 var(--display,inherit);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.3em;overflow-wrap:anywhere}
+.pn-card small{font-size:.8rem;line-height:1}
+.pn-root .pn-card.pn-on{border-color:var(--fg,#16302A);background:var(--accent-soft,#D7EAE2)}
+.pn-card.pn-on .pn-cardart{animation:pn-wiggle 1.1s ease-in-out infinite}
+.pn-root .pn-cardadd{border-style:dashed}
+.pn-cardadd .pn-cardart{background:var(--sunk,#E6ECE8);color:var(--fg,#16302A);font:800 28px/1 var(--display,inherit);box-shadow:none}
+.pn-cardadd small{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--muted,#5B6F68);font-size:.68rem;letter-spacing:0}
+.pn-auto{display:flex;align-items:center;gap:10px;min-height:44px;font-weight:600;font-size:.9rem}
+.pn-auto input{flex:none;width:22px;height:22px;margin:0;accent-color:var(--tone,var(--accent,#1F5C4A))}
+
+.pn-focus-on .pn-hint{background:var(--surface,#fff);border:2px solid var(--rim,rgba(127,127,127,.4))}
+/* confetti and stars are drawn on this see-through layer; it never takes a touch */
+.pn-fx{position:fixed;left:0;top:0;width:100%;height:100%;z-index:22;pointer-events:none}
+
+/* the party when a song is finished */
+.pn-party{overflow:hidden;border:3px solid #1E1A3C;padding-top:14px;box-shadow:0 8px 0 rgba(0,0,0,.35),0 24px 60px rgba(0,0,0,.45)}
+.pn-rays{position:absolute;left:50%;top:-150px;width:560px;height:560px;margin-left:-280px;border-radius:50%;pointer-events:none;opacity:.55;
+  background:repeating-conic-gradient(from 0deg,rgba(255,203,46,.6) 0 12deg,transparent 12deg 24deg);
+  -webkit-mask:radial-gradient(closest-side,#000 18%,transparent 76%);mask:radial-gradient(closest-side,#000 18%,transparent 76%);animation:pn-spin 16s linear infinite}
+.pn-party>*:not(.pn-rays){position:relative}
+.pn-party .pn-bigstars svg{width:74px;height:74px} .pn-party .pn-bigstars span:nth-child(2) svg{width:94px;height:94px}
+.pn-party .pn-hooray{font:800 1.75rem/1.15 var(--display,inherit);margin:4px 0 2px}
+.pn-hooray i{display:inline-block;font-style:normal;animation:pn-letter .5s cubic-bezier(.2,1.8,.4,1) backwards}
+.pn-band{display:flex;justify-content:center;align-items:flex-end;gap:6px;height:88px;margin:8px 0 2px;padding-bottom:5px;background:radial-gradient(ellipse at 50% 100%,var(--accent-soft,#E8E8EE) 0,var(--accent-soft,#E8E8EE) 68%,transparent 70%) no-repeat 50% 100%/94% 30px}
+.pn-band span{display:block;width:62px;height:66px;transform-origin:50% 100%}
+.pn-band .pn-f1{animation:pn-dance-a .62s ease-in-out infinite alternate}
+.pn-band .pn-f2{width:72px;height:76px;animation:pn-dance-b .7s ease-in-out infinite alternate}
+.pn-band .pn-f3{animation:pn-dance-c 1.1s ease-in-out infinite}
+.pn-band .pn-f4{animation:pn-dance-a .56s ease-in-out .2s infinite alternate}
+.pn-band .pn-arml{transform-origin:70% 12%;animation:pn-wave-l .5s ease-in-out infinite alternate}
+.pn-band .pn-armr{transform-origin:30% 12%;animation:pn-wave-r .5s ease-in-out infinite alternate}
+.pn-popchips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:8px}
+.pn-popchips .pn-popgive{margin-top:0}
+.pn-poprun{display:inline-block;background:#FFE08A;color:#1E1A3C;border-radius:999px;padding:3px 12px;font-size:.8rem;font-weight:700}
+.pn-root .pn-popbtns{flex-wrap:wrap}
+.pn-root .pn-popbtns .pn-nextbtn{flex:1 1 100%;position:relative;overflow:hidden;min-height:52px;font-size:1.02rem}
+.pn-nextbtn span{position:relative;z-index:1;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pn-cd{position:absolute;left:0;top:0;bottom:0;width:100%;background:rgba(255,255,255,.4);transform-origin:0 50%;transform:scaleX(0)}
+.pn-counting .pn-cd{animation:pn-cd 10s linear forwards}
+
+/* sideways phone: the falling notes take the place of the sheet strip (unless Sheet view is chosen); the helper's words float over them */
+.pn-short .pn-progbar{height:4px}
+.pn-short:not(.pn-lane) .pn-buddy{display:none}
+.pn-short .pn-fall{flex:0 0 clamp(80px,calc(100vh - 252px),128px);height:auto}
+.pn-short.pn-lane .pn-follow{position:absolute;z-index:3;display:block;height:auto;left:env(safe-area-inset-left,0px);right:env(safe-area-inset-right,0px);top:calc(var(--pn-bar) + env(safe-area-inset-top,0px) + 6px);padding:4px 46px;pointer-events:none}
+.pn-short.pn-lane .pn-sheetbox,.pn-short.pn-lane .pn-now{display:none}
+.pn-short.pn-lane .pn-side{float:right;max-width:56%;background:var(--surface,#fff);border-radius:14px;padding:3px 10px 3px 5px;box-shadow:0 1px 4px rgba(0,0,0,.2);opacity:.96}
+.pn-short.pn-lane .pn-hold{display:none}
+.pn-short .pn-buddy{width:34px;height:36px}
+.pn-short .pn-fb{min-height:0;padding:0;border:0;background:none;font-size:.82rem}
+.pn-short .pn-fb::before{display:none}
+.pn-short .pn-combo{flex-direction:row;gap:3px;padding:3px 7px;border-radius:10px}
+.pn-short .pn-combo span{display:none}
+.pn-short .pn-combo b{font-size:.95rem}
+@media (max-height:520px){
+  .pn-party{display:grid;grid-template-columns:minmax(150px,32%) minmax(0,1fr);column-gap:12px;align-items:center;text-align:left;width:min(640px,100%);padding-top:10px}
+  .pn-party .pn-bigstars{grid-column:1;grid-row:1}
+  .pn-party .pn-bigstars svg{width:40px;height:40px} .pn-party .pn-bigstars span:nth-child(2) svg{width:52px;height:52px}
+  .pn-party .pn-band{grid-column:1;grid-row:2 / span 4;height:66px;margin:0}
+  .pn-party .pn-hooray,.pn-party .pn-popsong,.pn-party .pn-popline,.pn-party .pn-poptip,.pn-party .pn-popchips{grid-column:2}
+  .pn-party .pn-hooray{grid-row:1;font-size:1.25rem;margin:0}
+  .pn-party .pn-popchips{justify-content:flex-start;margin-top:4px}
+  .pn-party .pn-popbtns{grid-column:1 / -1;flex-wrap:nowrap;margin-top:8px}
+  .pn-root .pn-party .pn-popbtns .pn-nextbtn{flex:2 1 0;min-height:44px;font-size:.9rem}
+  .pn-band span{width:42px;height:46px} .pn-band .pn-f2{width:50px;height:54px}
+}
+@keyframes pn-idle{0%,100%{transform:translateY(0) scaleY(1)}50%{transform:translateY(-1.5px) scaleY(1.035)}}
+@keyframes pn-hop{0%{transform:translateY(0) scale(1,1)}18%{transform:translateY(0) scale(1.1,.86)}48%{transform:translateY(-15px) scale(.95,1.08)}78%{transform:translateY(0) scale(1.06,.93)}100%{transform:translateY(0) scale(1,1)}}
+@keyframes pn-tilt{0%,100%{transform:rotate(0)}25%{transform:rotate(-11deg)}60%{transform:rotate(8deg)}}
+@keyframes pn-blinkeye{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+@keyframes pn-combo{from{transform:scale(.6) rotate(-8deg)}to{transform:scale(1) rotate(0)}}
+@keyframes pn-wiggle{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
+@keyframes pn-spin{to{transform:rotate(360deg)}}
+@keyframes pn-letter{from{transform:translateY(16px) scale(.4);opacity:0}to{transform:none;opacity:1}}
+@keyframes pn-dance-a{from{transform:translateY(0) rotate(-7deg)}to{transform:translateY(-12px) rotate(7deg)}}
+@keyframes pn-dance-b{from{transform:translateY(0) scale(1.04,.95)}to{transform:translateY(-16px) scale(.97,1.05)}}
+@keyframes pn-dance-c{0%,100%{transform:rotate(-16deg) scale(1)}50%{transform:rotate(16deg) scale(1.12)}}
+@keyframes pn-wave-l{from{transform:rotate(0)}to{transform:rotate(38deg)}}
+@keyframes pn-wave-r{from{transform:rotate(0)}to{transform:rotate(-38deg)}}
+@keyframes pn-cd{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media (prefers-reduced-motion: reduce){
+  .pn-buddy .pn-fr,.pn-buddy.pn-happy .pn-fr,.pn-buddy.pn-oops .pn-fr,.pn-eyes,.pn-combo.pn-pop1,.pn-card.pn-on .pn-cardart,.pn-rays,.pn-hooray i,.pn-band span,.pn-band .pn-arm{animation:none}
+  .pn-track.pn-glide,.pn-prog{transition:none}
+  .pn-fx{display:none}
+}
