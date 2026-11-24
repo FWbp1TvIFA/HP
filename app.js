@@ -50,8 +50,8 @@ const ICON={
 
 /* ---------- view state ---------- */
 let tab="home", listTab="tasks", listWho="all", moneyMonth=thisMonth(), calDay=TODAY(), calMonth=thisMonth();
-const routes=["home","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities","learn"];
-const parentTab={notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"money",meals:"more",dates:"more",activities:"more",learn:"more"};
+const routes=["home","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities","learn","live"];
+const parentTab={notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"money",meals:"more",dates:"more",activities:"more",learn:"more",live:"more"};
 if(routes.includes(location.hash.slice(1)))tab=location.hash.slice(1);
 let authMode="signin", authErr="", busy=false;
 
@@ -124,7 +124,7 @@ function viewHome(){
 /* family board: short notes to each other ("Home late tonight", "Jugo has swimming bag?") */
 function boardCard(){
   const cut=Date.now()-5*864e5,msgs=[...S().board].filter(m=>(m.at||m.createdAt||0)>cut).sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,4);
-  return `<section class="card board"><div class="row between"><h2>Family board</h2><span class="sub">Notes for everyone</span></div>
+  return `<section class="card board"><div class="row between"><h2>Family board</h2><button class="link" data-go="live"><span class="livedot"></span> Live view</button></div>
    ${msgs.length?`<div class="list" style="margin-top:4px">${msgs.map(m=>{const ack=Object.keys(m.ack||{}).filter(k=>(m.ack||{})[k]).map(Number).filter(i=>i!==+m.who);const mine=+m.who===meId(),iAck=(m.ack||{})[meId()];
      return row("board",m.id,`${dot(m.who)}<div class="grow"><div class="t bt">${esc(m.text)}</div><div class="m">${esc(pname(m.who))} · ${ago(m.at||m.createdAt)}${ack.length?" · 👍 "+ack.map(i=>esc(pname(i))).join(", "):""}</div></div>${mine?"":`<button class="mini ${iAck?"ghostmini":""}" data-act="boardAck" data-id="${m.id}">${iAck?"👍":"Got it"}</button>`}`)}).join("")}</div>`:""}
    <form id="boardForm" class="quick" style="margin-top:8px" autocomplete="off"><input id="boardIn" placeholder="${msgs.length?"Reply or post a note…":"e.g. Home late tonight, dinner in the fridge"}" maxlength="200" enterkeyhint="send"><button type="submit">Post</button></form></section>`;
@@ -237,6 +237,7 @@ function viewMore(){
   const tile=(go,icon,title,sub)=>`<button class="tile" data-go="${go}">${icon}<b>${title}</b><span>${sub}</span></button>`;
   const cards=S().wallet.length+S().myWallet.length;
   return `<div class="tiles">
+   <button class="tile livetile" data-go="live"><span class="livemini">${people().map(p=>`<i style="background:${pvar(p.id)}"></i>`).join("")}</span><b>Live view</b><span><span class="livedot"></span> Family tree and who's doing what</span></button>
    ${tile("learn",'<span class="tilechar">学</span>',"Learn",(()=>{const st=learnStreak(kidId());return st?"🔥 "+st+" day streak":"Chinese and piano for "+esc(pname(kidId()))})())}
    ${tile("activities",ICON.swim,"Activities",(()=>{const n=S().events.filter(isRep).length;return n?n+" weekly class"+(n===1?"":"es")+" and lessons":"Swimming, lessons, sport"})())}
    ${tile("meals",ICON.meal,"Dinner plan",(()=>{const m=mealOn(TODAY());return m?"Tonight: "+esc(m.title):"Plan the week's dinners"})())}
@@ -935,6 +936,65 @@ function learnTodayCard(){
   return `<button class="tile learntile" data-go="learn"><span class="label">${lbl}</span><b>${did?"✓ Practised today":"Not practised yet"}</b><span>${st?"🔥 "+st+" day streak":"Tap to start"}</span></button>`;
 }
 
+/* ---------- Live view: the family as a connected tree, plus a live feed ---------- */
+let liveTab="tree", liveSel=null;
+const pvar=id=>id==0?"var(--muted)":`var(--p${colorIdx(id)})`;
+function personStats(p){
+  const t=TODAY(),w=addDays(t,6),id=p.id;
+  const ev=evRange(t,w).filter(e=>+e.who===id);
+  return [
+    {k:"ev",em:"📅",n:ev.length,label:"plans this week",go:"calendar",items:sortEv(ev).slice(0,5).map(e=>`${nice(e.date)}${e.time?" "+tm(e.time):""} · ${e.title}`)},
+    {k:"tasks",em:"✅",n:S().tasks.filter(x=>!x.done&&+x.who===id).length,label:"to do",go:"lists",list:"tasks",items:sortTasks(S().tasks.filter(x=>!x.done&&+x.who===id)).slice(0,5).map(x=>x.title)},
+    {k:"hw",em:"📝",n:S().homework.filter(x=>!x.done&&+x.who===id).length,label:"homework",go:"lists",list:"homework",items:S().homework.filter(x=>!x.done&&+x.who===id).slice(0,5).map(x=>x.subject+": "+x.title)},
+    {k:"act",em:"🏊",n:S().events.filter(e=>isRep(e)&&+e.who===id&&(!e.until||e.until>=t)).length,label:"weekly classes",go:"activities",items:S().events.filter(e=>isRep(e)&&+e.who===id).map(e=>e.title+" · "+repText(e))},
+    {k:"star",em:"⭐",n:starsThisWeek()[id]||0,label:"stars this week",go:"lists",list:"tasks",items:[]},
+    {k:"learn",em:"学",n:learnStreak(id),label:"day Chinese streak",go:"learn",items:[],hide:!learnDoc(id).last},
+    {k:"spend",em:"💳",n:Math.round(S().tx.filter(x=>x.type==="out"&&+x.who===id&&monthKey(x.date)===thisMonth()).reduce((a,x)=>a+x.amount,0)),label:"spent this month",money:true,go:"money",items:[]}
+  ].filter(x=>!x.hide&&(x.n>0||["ev","tasks"].includes(x.k)));
+}
+function recentIds(){const cut=Date.now()-90e3,ids=new Set();["tasks","events","tx","shopping","homework","board","bills","notes"].forEach(c=>S()[c].forEach(r=>{if((r.createdAt||r.at||0)>cut&&r.by!=null)ids.add(+r.by)}));return ids}
+function viewLive(){
+  const seg=`<div class="seg">${[["tree","Family tree"],["feed","Live feed"]].map(([k,n])=>`<button class="${liveTab===k?"on":""}" data-act="liveTab" data-k="${k}">${n}</button>`).join("")}</div>`;
+  const livebar=`<div class="livebar"><span class="livedot"></span>Live · updates the moment anyone changes something</div>`;
+  return `${backBar}${livebar}${seg}${liveTab==="tree"?liveTree():liveFeed()}`;
+}
+function liveTree(){
+  const ppl=people(),n=ppl.length||1,W=380,H=470,cx=W/2,cy=H/2,R=132,busy=recentIds();
+  const homeSats=[{em:"🛒",n:S().shopping.filter(s=>!s.done).length,label:"to buy",go:"lists",list:"shopping"},{em:"🧾",n:S().bills.filter(b=>b.next&&b.next<=addDays(TODAY(),7)).length,label:"bills due",go:"bills"},{em:"💬",n:S().board.filter(m=>(m.at||0)>Date.now()-5*864e5).length,label:"notes",go:"home"}];
+  let links="",nodes="",labels="";
+  const pos=i=>{const a=(-90+i*360/n)*Math.PI/180;return [cx+R*Math.cos(a),cy+R*Math.sin(a),a]};
+  homeSats.forEach((h,i)=>{const a=(-90+(i+.5)*360/3)*Math.PI/180,x=cx+70*Math.cos(a),y=cy+70*Math.sin(a);
+    links+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" class="lk lk-home"/>`;
+    nodes+=`<g class="node sat" data-go="${h.go}" ${h.list?`data-list="${h.list}"`:""} transform="translate(${x},${y})"><circle r="17" class="satc"/><text class="em" dy="5">${h.em}</text>${h.n?`<g transform="translate(12,-12)"><circle r="8.5" class="badge"/><text class="bn" dy="3.2">${h.n>99?"99+":h.n}</text></g>`:""}</g>`});
+  ppl.forEach((p,i)=>{const [x,y,a]=pos(i),st=personStats(p),m=st.length,span=Math.min(170,34*m)*Math.PI/180,col=pvar(p.id),sel=liveSel===p.id,on=busy.has(p.id);
+    links+=`<path d="M${cx},${cy} Q${(cx+x)/2+18*Math.cos(a+1.57)},${(cy+y)/2+18*Math.sin(a+1.57)} ${x},${y}" class="lk lk-main" style="stroke:${col}"/>`;
+    st.forEach((s,j)=>{const b=a+(m>1?-span/2+span*j/(m-1):0),r2=72,sx=x+r2*Math.cos(b),sy=y+r2*Math.sin(b);
+      links+=`<line x1="${x}" y1="${y}" x2="${sx}" y2="${sy}" class="lk lk-sat" style="stroke:${col}"/>`;
+      nodes+=`<g class="node sat ${s.n?"":"zero"}" data-go="${s.go}" ${s.list?`data-list="${s.list}"`:""} transform="translate(${sx},${sy})"><circle r="19" class="satc" style="stroke:${col}"/><text class="em ${s.k==="learn"?"zh":""}" dy="5">${s.em}</text>${s.n?`<g transform="translate(14,-14)"><circle r="9.5" style="fill:${col}"/><text class="bn" dy="3.2">${s.money?(s.n>=1000?Math.round(s.n/100)/10+"k":s.n):s.n>99?"99+":s.n}</text></g>`:""}</g>`});
+    nodes+=`<g class="node person ${sel?"sel":""} ${on?"pulse":""}" data-act="liveSel" data-k="${p.id}" transform="translate(${x},${y})">${on?`<circle r="37" class="ring" style="stroke:${col}"/>`:""}<circle r="29" style="fill:${col}"/><text class="pi" dy="7">${esc(p.name.slice(0,1).toUpperCase())}</text></g>`;
+    const lx=x-46*Math.cos(a),ly=y-46*Math.sin(a)+4;labels+=`<g class="plg" transform="translate(${lx},${ly})"><rect x="${-(p.name.split(" ")[0].length*4+9)}" y="-11" width="${p.name.split(" ")[0].length*8+18}" height="20" rx="10" style="fill:${col}"/><text class="pl" dy="3.5">${esc(p.name.split(" ")[0])}</text></g>`});
+  nodes+=`<g class="node home" data-act="liveSel" data-k="home" transform="translate(${cx},${cy})"><circle r="30" class="homec"/><text class="em big" dy="8">🏠</text></g>`;
+  const sp=liveSel!==null&&liveSel!=="home"?person(liveSel):null;
+  const detail=sp?`<section class="card stack" style="gap:8px"><div class="row" style="gap:10px">${dot(sp.id)}<h2>${esc(sp.name)}</h2></div>${personStats(sp).map(s=>`<button class="item lrow" data-go="${s.go}" ${s.list?`data-list="${s.list}"`:""}><span class="lem ${s.k==="learn"?"zh":""}">${s.em}</span><div class="grow"><div class="t">${s.money?money(s.n):s.n} ${esc(s.label)}</div>${s.items.length?`<div class="m">${s.items.map(esc).join(" · ")}</div>`:""}</div><span class="chev">›</span></button>`).join("")}</section>`
+   :`<p class="sub" style="text-align:center;margin:0">Tap a person to see their week. Tap a bubble to jump to it. Rings glow when someone just added something.</p>`;
+  return `<section class="card livecard"><svg class="livetree" viewBox="0 0 ${W} ${H}" role="img" aria-label="Family tree of plans">${links}${nodes}${labels}</svg></section>${detail}${liveFeedMini()}`;
+}
+function feedItems(){
+  const verb={tasks:"added a task",events:"added to the calendar",tx:"recorded money",shopping:"added to shopping",homework:"added homework",notes:"wrote a note",bills:"added a bill",countdowns:"added a date",board:"posted",meals:"planned dinner",stars:"earned stars"};
+  const em={tasks:"✅",events:"📅",tx:"💳",shopping:"🛒",homework:"📝",notes:"🗒️",bills:"🧾",countdowns:"🎉",board:"💬",meals:"🍽️",stars:"⭐"};
+  const out=[];Object.keys(verb).forEach(c=>(S()[c]||[]).forEach(r=>{const at=r.createdAt||r.at||r.updated;const who=c==="stars"?r.who:(r.by??r.who);if(!at||who==null)return;
+    const what=c==="tx"?(r.note||r.cat)+" "+money(r.type==="in"?r.amount:-r.amount,true):c==="shopping"?r.name:c==="homework"?r.subject+": "+r.title:c==="stars"?"★ "+r.pts+" · "+(r.title||""):c==="meals"?r.title:c==="board"?r.text:(r.title||r.name||"");
+    out.push({at,who:+who,c,txt:verb[c],what,em:em[c]})}));
+  S().learn.forEach(l=>{if(l.updated)out.push({at:l.updated,who:+l.who,c:"learn",txt:"practised Chinese",what:"🔥 "+(l.streak||1)+" day streak",em:"学"})});
+  return out.sort((a,b)=>b.at-a.at);
+}
+function feedRow(f){return `<div class="item feedrow ${Date.now()-f.at<90e3?"fresh":""}">${dot(f.who)}<div class="grow"><div class="t"><b>${esc(pname(f.who).split(" ")[0])}</b> ${esc(f.txt)}</div><div class="m">${f.em} ${esc(String(f.what).slice(0,80))}</div></div><span class="sub fago">${ago(f.at)}</span></div>`}
+function liveFeedMini(){const f=feedItems().slice(0,4);return f.length?`<section class="card"><div class="row between"><h2>Just now</h2><button class="link" data-act="liveTab" data-k="feed">All activity</button></div><div class="list" style="margin-top:4px">${f.map(feedRow).join("")}</div></section>`:""}
+function liveFeed(){
+  const f=feedItems().slice(0,60);let last="";
+  return `<section class="card"><div class="list">${f.length?f.map(x=>{const d=iso(new Date(x.at)),h=d!==last?`<div class="aisle">${nice(d)}</div>`:"";last=d;return h+feedRow(x)}).join(""):`<div class="empty">Nothing yet. As the family adds things, they appear here straight away.</div>`}</div></section>`;
+}
+
 /* ---------- weekly activities per person ---------- */
 function viewActivities(){
   const reps=S().events.filter(e=>isRep(e)&&(!e.until||e.until>=TODAY()));
@@ -956,7 +1016,7 @@ function viewDates(){
 }
 
 /* ---------- render ---------- */
-const TITLES={home:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities",learn:"Learn"};
+const TITLES={home:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities",learn:"Learn",live:"Live"};
 let rendering=false;
 function render(){
   if(rendering)return;rendering=true;
@@ -973,7 +1033,7 @@ function render(){
     $("#title").textContent=TITLES[tab];
     const me=person(meId());
     $("#subtitle").textContent=tab==="home"?(me?"Hello, "+me.name:""):"";
-    $("#view").innerHTML={home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn}[tab]();
+    $("#view").innerHTML={home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn,live:viewLive}[tab]();
     const active=parentTab[tab]||tab;
     document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===active));
     if(shopVal&&$("#shopInput"))$("#shopInput").value=shopVal; if(shopFocus&&$("#shopInput"))$("#shopInput").focus();
@@ -1252,6 +1312,8 @@ document.addEventListener("click",e=>{
       const txt="Shopping list\n"+order.filter(k=>g[k]).map(k=>"\n"+k+"\n"+g[k].map(x=>"• "+x.name+(x.qty?" ("+x.qty+")":"")).join("\n")).join("\n");
       if(navigator.share)navigator.share({title:"Shopping list",text:txt}).catch(()=>{});else{try{navigator.clipboard.writeText(txt).then(()=>toast("List copied"))}catch(_){toast("Couldn't share")}}return}
     case"boardAck":{const m=S().board.find(x=>x.id===id);if(m)setMapKey("board",id,"ack",meId(),!(m.ack||{})[meId()]);return}
+    case"liveTab":liveTab=a.dataset.k;break;
+    case"liveSel":liveSel=a.dataset.k==="home"?null:(liveSel===+a.dataset.k?null:+a.dataset.k);break;
     case"reAdd":addShopItem(a.dataset.k);toast(a.dataset.k+" added");return;
     case"twoStep":return twoStepSheet();
     case"mfaCancel":ST.cancelMfa();authErr="";return render();
@@ -1324,6 +1386,7 @@ ST.onChange(()=>{
   moodTick();render();
 });
 setInterval(()=>{if(tab==="mood"&&activeSession())render();moodTick()},1000);
+setInterval(()=>{if(tab==="live"&&!document.hidden&&!$("#sheetHost").innerHTML)render()},20000);
 let autoPayDay=null;setInterval(()=>{if(ST.phase==="ready"&&autoPayDay!==TODAY()&&Date.now()-bootAt>6000){autoPayDay=TODAY();try{autoPayBills()}catch(e){}}},3000);
 const bootAt=Date.now();
 ST.init();
