@@ -318,3 +318,15 @@ header.top .iconbtn+.iconbtn{margin-left:-4px}
 .star{color:var(--warn);font-weight:600}
 .searchbox{width:100%;border:0;background:var(--sunk);border-radius:12px;padding:12px 14px;font-size:16px;color:var(--fg)}
 .sres .pill{min-width:70px;text-align:center}
+.toast{display:flex;align-items:center;gap:12px}
+.toast .tact{border:0;background:none;color:var(--accent-soft);font-weight:700;padding:0;font-size:.88rem}
+.mday .dots i.sp{background:var(--warn)}
+.trend{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:12px;height:120px}
+.tcol{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.tcol span{font-size:.72rem;color:var(--muted)}
+.tcol.cur span{color:var(--fg);font-weight:700}
+.tbars{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center;gap:3px}
+.tbars i{display:block;width:40%;max-width:14px;border-radius:4px 4px 2px 2px;min-height:2px}
+.tin,.lg.tin{background:color-mix(in srgb,var(--good) 45%,transparent)} .tout,.lg.tout{background:var(--accent)}
+.tcol:not(.cur) .tout{opacity:.75}
+.lg{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
