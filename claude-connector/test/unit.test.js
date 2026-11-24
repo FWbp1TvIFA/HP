@@ -8,6 +8,7 @@ import { handle } from "../src/handler.js";
 import { toValue, fromValue } from "../src/firebase.js";
 
 const T = "2026-11-24"; // a Tuesday
+const KEY = "Kq7vT2mX9pL4wR8nB3cF6hJ1sD5gZ0yAe"; // a random-looking HH_SECRET for tests
 
 test("dates like the app", () => {
   assert.equal(parseDate("tomorrow", T), "2026-11-25");
@@ -58,7 +59,7 @@ test("numbers are stored the way the Firebase web SDK stores them", () => {
 });
 
 test("two-step sign-in: code page, then finalize with the authenticator code", async () => {
-  const env = { HH_SECRET: "s".repeat(40) };
+  const env = { HH_SECRET: KEY };
   const realFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (url, init) => {
@@ -90,26 +91,59 @@ test("two-step sign-in: code page, then finalize with the authenticator code", a
     assert.equal(res.status, 302);
     const loc = new URL(res.headers.get("location"));
     assert.equal(loc.searchParams.get("state"), "S");
+    assert.equal(loc.searchParams.get("iss"), base);
     const fin = calls.filter(c => c.url.includes("mfaSignIn:finalize")).pop();
     assert.deepEqual(JSON.parse(fin.body), { mfaPendingCredential: "PENDING", mfaEnrollmentId: "ENR1", totpVerificationInfo: { verificationCode: "123456" } });
   } finally { globalThis.fetch = realFetch; }
 });
 
 test("only Claude's published client identity is accepted as a URL client id", async () => {
-  const env = { HH_SECRET: "s".repeat(40) };
+  const env = { HH_SECRET: KEY };
   const ch = await sha256base64url("v".repeat(50));
   const q = id => new URLSearchParams({ response_type: "code", client_id: id, redirect_uri: "https://claude.ai/api/mcp/auth_callback", state: "S", code_challenge: ch, code_challenge_method: "S256" });
   assert.equal((await handle(new Request(`https://hh.example/authorize?${q("https://claude.ai/oauth/mcp-oauth-client-metadata")}`), env)).status, 200);
   assert.equal((await handle(new Request(`https://hh.example/authorize?${q("https://evil.example/client.json")}`), env)).status, 400);
   assert.equal((await handle(new Request(`https://hh.example/authorize?${q("my-own-client")}`), env)).status, 400);
+  // Claude's published identity only ever returns to Claude, never to a local address.
+  const local = new URLSearchParams({ response_type: "code", client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata", redirect_uri: "http://127.0.0.1:8080/cb", state: "S", code_challenge: ch, code_challenge_method: "S256" });
+  assert.equal((await handle(new Request(`https://hh.example/authorize?${local}`), env)).status, 400);
   const asm = await (await handle(new Request("https://hh.example/.well-known/oauth-authorization-server"), env)).json();
+  assert.equal(asm.authorization_response_iss_parameter_supported, true);
   assert.equal(asm.client_id_metadata_document_supported, true);
   assert.ok(asm.token_endpoint_auth_methods_supported.includes("none"));
   assert.ok(asm.scopes_supported.includes("offline_access"));
 });
 
+test("tokens are only issued for this server's own address (RFC 8707)", async () => {
+  const env = { HH_SECRET: KEY };
+  const ch = await sha256base64url("v".repeat(50));
+  const q = resource => new URLSearchParams({ response_type: "code", client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata", redirect_uri: "https://claude.ai/api/mcp/auth_callback", state: "S", code_challenge: ch, code_challenge_method: "S256", ...(resource ? { resource } : {}) });
+  for (const ok of ["https://hh.example/mcp", "https://hh.example/mcp/", "https://hh.example", "https://hh.example/sse", ""]) {
+    assert.equal((await handle(new Request(`https://hh.example/authorize?${q(ok)}`), env)).status, 200, ok);
+  }
+  const evil = await handle(new Request(`https://hh.example/authorize?${q("https://evil.example/mcp")}`), env);
+  assert.equal(evil.status, 302);
+  const loc = new URL(evil.headers.get("location"));
+  assert.equal(loc.origin + loc.pathname, "https://claude.ai/api/mcp/auth_callback");
+  assert.equal(loc.searchParams.get("error"), "invalid_target");
+  const tok = await handle(new Request("https://hh.example/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "x", resource: "https://evil.example/mcp" }) }), env);
+  assert.equal((await tok.json()).error, "invalid_target");
+  // An error before sign-in for a local app is shown as a page, not sent to a local address.
+  const reg = await (await handle(new Request("https://hh.example/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ redirect_uris: ["http://127.0.0.1:9999/cb"] }) }), env)).json();
+  const bad = new URLSearchParams({ response_type: "token", client_id: reg.client_id, redirect_uri: "http://127.0.0.1:9999/cb", code_challenge: ch, code_challenge_method: "S256" });
+  assert.equal((await handle(new Request(`https://hh.example/authorize?${bad}`), env)).status, 400);
+});
+
+test("a weak or placeholder HH_SECRET is not accepted", async () => {
+  for (const weak of ["happyhomehappyhomehappyhomehappy", "x".repeat(64), "paste-your-long-random-secret-here-please", "dev-secret-dev-secret-dev-secret-00"]) {
+    assert.equal((await handle(new Request("https://hh.example/health"), { HH_SECRET: weak })).status, 200);
+    assert.equal((await (await handle(new Request("https://hh.example/health"), { HH_SECRET: weak })).json()).ready, false, weak);
+  }
+  assert.equal((await (await handle(new Request("https://hh.example/health"), { HH_SECRET: KEY })).json()).ready, true);
+});
+
 test("Vercel entry point is a web fetch handler that keeps the original path", async () => {
-  process.env.HH_SECRET = "s".repeat(40);
+  process.env.HH_SECRET = KEY;
   const entry = (await import("../api/index.js")).default;
   assert.equal(typeof entry.fetch, "function");
   const r = await entry.fetch(new Request("https://hh.example/.well-known/oauth-protected-resource/mcp"));
@@ -118,7 +152,7 @@ test("Vercel entry point is a web fetch handler that keeps the original path", a
 });
 
 test("home page and setup-not-finished state", async () => {
-  const ready = await handle(new Request("https://hh.example/"), { HH_SECRET: "s".repeat(40) });
+  const ready = await handle(new Request("https://hh.example/"), { HH_SECRET: KEY });
   assert.match(await ready.text(), /https:\/\/hh\.example\/mcp/);
   const notReady = await (await handle(new Request("https://hh.example/"), {})).text();
   assert.match(notReady, /HH_SECRET/);

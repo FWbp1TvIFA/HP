@@ -70,7 +70,7 @@ export function parseDate(input, today) {
     const out = `${y}-${dm[2].padStart(2, "0")}-${dm[1].padStart(2, "0")}`;
     if (isISODate(out)) return out;
   }
-  throw new UserInputError(`"${input}" isn't a date I understand. Use YYYY-MM-DD, for example ${today}.`);
+  throw new UserInputError(`"${String(input).slice(0, 40)}" isn't a date I understand. Use YYYY-MM-DD, for example ${today}.`);
 }
 
 // Accepts "15:30", "3pm", "3:30 pm", "9 am", "noon", "midday". Returns "HH:MM" or "".
@@ -87,7 +87,7 @@ export function parseTime(input) {
     let h = +m[1] % 12; if (m[3] === "pm") h += 12;
     return `${String(h).padStart(2, "0")}:${m[2] || "00"}`;
   }
-  throw new UserInputError(`"${input}" isn't a time I understand. Use 24-hour HH:MM, for example 15:30.`);
+  throw new UserInputError(`"${String(input).slice(0, 40)}" isn't a time I understand. Use 24-hour HH:MM, for example 15:30.`);
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

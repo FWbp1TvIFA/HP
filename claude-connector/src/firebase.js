@@ -28,18 +28,19 @@ export class SignInError extends Error { constructor(message, code) { super(mess
 export class DataError extends Error { constructor(message, status) { super(message); this.status = status; } }
 
 const TIMEOUT_MS = 8000; // Claude gives sign-in endpoints about 10 seconds
-async function call(url, init, cfg) {
+const SAVE_TIMEOUT_MS = 25000; // saves get longer, so a slow save isn't reported as failed
+async function call(url, init, cfg, timeoutMs = TIMEOUT_MS) {
   const headers = { ...(init.headers || {}) };
   // The app's API key may be limited to the app's own web address; say where we come from.
   if (url.includes("googleapis.com") && !cfg.emulator) headers.Referer = cfg.appUrl;
-  let res;
+  let res, text;
   try {
-    res = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    res = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });
+    text = await res.text();
   } catch (e) {
-    throw new DataError("Couldn't reach Happy Home's database just now. Please try again in a moment.", 503);
+    throw new DataError("Couldn't reach Happy Home's database just now. Please try again in a moment.", 504);
   }
   let body = null;
-  const text = await res.text();
   try { body = text ? JSON.parse(text) : null; } catch { body = { raw: text.slice(0, 300) }; }
   return { res, body };
 }
@@ -95,6 +96,8 @@ export async function refreshIdToken(cfg, refreshToken) {
   }, cfg);
   if (!res.ok) {
     const code = String(body?.error?.message || "");
+    // A problem with the app's web key is a setup problem, not a signed-out person.
+    if (/API.?KEY|API_KEY|referer|unregistered callers/i.test(code + " " + JSON.stringify(body?.error?.details || ""))) throw new DataError("Happy Home's sign-in service refused the connector. Check the Firebase web key settings.", 503);
     if (res.status === 400 || res.status === 401 || res.status === 403 || /TOKEN|USER_|INVALID/.test(code)) throw new SignInExpiredError(code || "refresh failed");
     throw new DataError("Couldn't reach Happy Home's sign-in service just now. Please try again in a moment.", 503);
   }
@@ -162,6 +165,9 @@ export function safeId(id) {
   return s;
 }
 
+/** Firestore takes at most 500 writes in one commit; keep a margin. */
+export const MAX_WRITES = 450;
+
 export class Firestore {
   constructor(cfg, idToken) {
     this.cfg = cfg;
@@ -169,12 +175,12 @@ export class Firestore {
     this.root = `projects/${cfg.projectId}/databases/(default)/documents`;
   }
   name(path) { return `${this.root}/${path.map(safeId).join("/")}`; }
-  async _req(method, url, body) {
+  async _req(method, url, body, timeoutMs) {
     const { res, body: out } = await call(url, {
       method,
       headers: { Authorization: `Bearer ${this.idToken}`, ...(body ? { "Content-Type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
-    }, this.cfg);
+    }, this.cfg, timeoutMs);
     if (res.ok) return out;
     if (res.status === 401) throw new SignInExpiredError("id token rejected");
     const status = out?.error?.status || "";
@@ -215,13 +221,19 @@ export class Firestore {
     if (filters.length === 1) structuredQuery.where = filters[0];
     if (filters.length > 1) structuredQuery.where = { compositeFilter: { op: "AND", filters } };
     const rows = await this._req("POST", `${this.cfg.firestoreBase}/${this.name(parentPath)}:runQuery`, { structuredQuery });
+    if (Array.isArray(rows) && rows.some(r => r && r.error)) throw new DataError("Happy Home's database had a problem just now. Please try again.", 500);
     return (rows || []).filter(r => r.document).map(r => ({ id: r.document.name.split("/").pop(), ...fromFields(r.document.fields) }));
   }
-  /** Apply several writes in one go (all or nothing). */
+  /** Apply several writes in one go: all or nothing, in a single commit. */
   async commit(writes) {
     if (!writes.length) return;
-    for (let i = 0; i < writes.length; i += 400) {
-      await this._req("POST", `${this.cfg.firestoreBase}/${this.root}:commit`, { writes: writes.slice(i, i + 400) });
+    if (writes.length > MAX_WRITES) throw new DataError(`That's too much to save in one go (${writes.length} changes). Please split it into smaller requests.`, 400);
+    try {
+      await this._req("POST", `${this.cfg.firestoreBase}/${this.root}:commit`, { writes }, SAVE_TIMEOUT_MS);
+    } catch (e) {
+      // The request went out but no answer came back: it may well have been saved.
+      if (e instanceof DataError && e.status === 504) throw new DataError("Happy Home didn't confirm the save in time. It may already be saved, so check with find_items before trying again.", 504);
+      throw e;
     }
   }
   // Write builders for commit()

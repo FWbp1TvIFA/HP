@@ -15,7 +15,7 @@ const EMU = process.env.HH_EMULATOR_HOST || "127.0.0.1";
 const PROJECT = "happy-family-791f1";
 const AUTH = `http://${EMU}:9099/identitytoolkit.googleapis.com/v1`;
 const FS = `http://${EMU}:8080/v1/projects/${PROJECT}/databases/(default)/documents`;
-const env = { HH_SECRET: "test-secret-".padEnd(48, "x"), HH_EMULATOR_HOST: EMU, HH_TZ: "Australia/Brisbane" };
+const env = { HH_SECRET: "e2eKq7vT2mX9pL4wR8nB3cF6hJ1sD5gZ0yA", HH_EMULATOR_HOST: EMU, HH_TZ: "Australia/Brisbane" };
 const TODAY = todayIn("Australia/Brisbane");
 let server, base;
 const users = {};
@@ -212,6 +212,11 @@ test("bad input adds nothing and explains why", async () => {
   assert.equal(isError, true);
   assert.match(text, /Nothing was added/); assert.match(text, /Grandma/); assert.match(text, /above 0/);
   assert.equal((await docs("families/FAMILY01/tasks")).length, before);
+  // Too much for one save (meal ingredients going on the shopping list) is refused whole, never half saved.
+  const meals = Array.from({ length: 30 }, (_, i) => ({ date: addDays(TODAY, 40 + i), title: `Meal ${i}`, ingredients: Array.from({ length: 8 }, (_, k) => `Thing ${i}-${k}`) }));
+  const big = await call(old.client, "add_items", { money: [{ amount: 12, note: "Receipt" }], meals, add_meal_ingredients_to_shopping: true });
+  assert.equal(big.isError, true); assert.match(big.text, /too much to save in one go/);
+  assert.equal((await docs("families/FAMILY01/meals")).filter(m => /^Meal \d/.test(m.title)).length, 0);
 });
 
 test("find_items, weekly occurrences and money summary", async () => {
@@ -252,6 +257,11 @@ test("mark_done: stars, repeating task, shopping, homework and bill payment", as
   assert.deepEqual({ ...pay, createdAt: 0 }, { id: `bill-power1-${TODAY}`, type: "out", amount: 250.5, cat: "Bills", who: 1, date: TODAY, note: "Electricity", createdAt: 0, by: 1 });
   const bill = (await docs("families/FAMILY01/bills")).find(b => b.id === "power1");
   assert.equal(bill.lastPaid, TODAY); assert.ok(bill.next > TODAY);
+  // Paying the same bill again today (for example a retry) doesn't record a second payment.
+  r = await call(old.client, "mark_done", { type: "bills", ids: ["power1"] });
+  assert.match(r.text, /already marked paid today/);
+  assert.equal((await docs("families/FAMILY01/tx")).filter(t => t.id.startsWith("bill-power1-")).length, 1);
+  assert.equal((await docs("families/FAMILY01/bills")).find(b => b.id === "power1").next, bill.next);
 });
 
 test("update_items and delete_items (with skip one day of a weekly activity)", async () => {
@@ -323,7 +333,7 @@ test("claude.ai flow by hand: registration, return address checks, PKCE, refresh
   const { res } = await signInAt(authUrl, users.akiyo.email);
   assert.equal(res.status, 302);
   const loc = new URL(res.headers.get("location"));
-  assert.equal(loc.origin + loc.pathname, cb); assert.equal(loc.searchParams.get("state"), "st-123");
+  assert.equal(loc.origin + loc.pathname, cb); assert.equal(loc.searchParams.get("state"), "st-123"); assert.equal(loc.searchParams.get("iss"), base);
   const code = loc.searchParams.get("code");
   const tok = (p) => j(`${base}/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(p) });
   let t = await tok({ grant_type: "authorization_code", code, code_verifier: "x".repeat(43), redirect_uri: cb, client_id: cid });
@@ -332,6 +342,7 @@ test("claude.ai flow by hand: registration, return address checks, PKCE, refresh
   assert.equal(t.body.error, "invalid_grant");
   t = await tok({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: cb, client_id: cid });
   assert.equal(t.status, 200, JSON.stringify(t.body)); assert.equal(t.body.token_type, "Bearer"); assert.ok(t.body.refresh_token);
+  assert.equal((await tok({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: cb, client_id: cid })).body.error, "invalid_grant", "a sign-in code works once");
   assert.equal((await tok({ grant_type: "refresh_token", refresh_token: t.body.access_token })).body.error, "invalid_grant", "access token can't be used as refresh token");
   const r2 = await tok({ grant_type: "refresh_token", refresh_token: t.body.refresh_token });
   assert.equal(r2.status, 200); assert.ok(r2.body.access_token);
