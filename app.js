@@ -71,9 +71,10 @@ function monthStats(m){
 /* ---------- list items ---------- */
 const checkBtn=(on,act,id)=>`<button class="check ${on?"on":""}" data-act="${act}" data-id="${id}" aria-label="${on?"Mark not done":"Mark done"}">${on?ICON.tick:""}</button>`;
 function tm(t){if(!t)return"";const [h,m]=t.split(":").map(Number);return new Date(2000,0,1,h,m).toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"}).replace(" ","\u00a0")}
-function duePill(due,done,time){if(!due)return"";const now=new Date(),nowT=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");const late=!done&&(due<TODAY()||(due===TODAY()&&time&&time<nowT)),today=due===TODAY();return `<span class="pill ${late?"late":today?"today":""}">${late?"Late · ":""}${nice(due)}${time?" · "+tm(time):""}</span>`}
+function duePill(due,done,time){if(!due)return"";const now=new Date(),nowT=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");const late=!done&&(due<TODAY()||(due===TODAY()&&time&&time<nowT)),today=due===TODAY();const day=today?"Today":due===addDays(TODAY(),1)?"Tomorrow":due===addDays(TODAY(),-1)?"Yesterday":new Date(due+"T12:00:00").toLocaleDateString("en-AU",{weekday:"short",day:"numeric"})+(Math.abs((new Date(due+"T12:00:00")-new Date(TODAY()+"T12:00:00"))/864e5)>6?" "+new Date(due+"T12:00:00").toLocaleDateString("en-AU",{month:"short"}):"");
+  return `<span class="pill ${late?"late":today?"today":""}">${late?"Late · "+(today?tm(time):day):day+(time?" · "+tm(time):"")}</span>`}
 const row=(col,id,inner,done)=>`<div class="swipe" data-col="${col}" data-id="${id}"><div class="act" data-act="swipeDel">Delete</div><div class="item ${done?"done":""}">${inner}</div></div>`;
-function taskItem(t){return row("tasks",t.id,`${checkBtn(t.done,"toggle",t.id)}<div class="grow tap" data-act="edit" data-col="tasks" data-id="${t.id}"><div class="t">${esc(t.title)}</div><div class="m">${esc(pname(t.who))}${t.repeat&&t.repeat!=="none"?" · repeats "+t.repeat:""}${+t.points>0?` · <span class="star">★ ${+t.points}</span>`:""}</div></div>${duePill(t.due,t.done,t.time)}`,t.done)}
+function taskItem(t){return row("tasks",t.id,`${checkBtn(t.done,"toggle",t.id)}<div class="grow tap" data-act="edit" data-col="tasks" data-id="${t.id}"><div class="t">${esc(t.title)}</div><div class="m">${esc(pname(t.who))}${t.repeat&&t.repeat!=="none"?" · "+t.repeat:""}${+t.points>0?` · <span class="star">★ ${+t.points}</span>`:""}</div></div>${duePill(t.due,t.done,t.time)}`,t.done)}
 function hwItem(h){return row("homework",h.id,`${checkBtn(h.done,"toggleHw",h.id)}<div class="grow tap" data-act="edit" data-col="homework" data-id="${h.id}"><div class="t">${esc(h.title)}</div><div class="m">${esc(h.subject)} · ${esc(pname(h.who))}</div></div>${duePill(h.due,h.done,h.time)}`,h.done)}
 function eventItem(e,showDate){return row("events",e.id,`<span class="time">${e.time?tm(e.time):"All day"}</span>${dot(e.who)}<div class="grow tap" data-act="edit" data-col="events" data-id="${e.id}" data-d="${e.date}"><div class="t">${esc(e.title)}${isRep(e)?' <span class="rep" title="Repeats">↻</span>':""}</div><div class="m">${showDate?nice(e.date)+" · ":""}${esc(pname(e.who))}${e.place?" · "+esc(placeTxt(e.place)):""}</div></div>${joinBtn(e)}`).replace('class="swipe"',isRep(e)?'class="swipe" data-occ="'+e.date+'"':'class="swipe"')}
 function txItem(x){const n=x.type==="in"?x.amount:-x.amount;return row("tx",x.id,`${dot(x.who)}<div class="grow"><div class="t">${esc(x.note||x.cat)}</div><div class="m">${esc(x.cat)} · ${nice(x.date)} · ${esc(pname(x.who))}</div></div><span class="num ${n>0?"pos":""}" style="font-weight:600">${money(n,true)}</span>`)}
@@ -679,8 +680,8 @@ function nextDue(d,every){if(every==="week")return addDays(d,7);if(every==="fort
 const perMonth=b=>({week:52/12,fortnight:26/12,month:1,quarter:1/3,year:1/12}[b.every]||1)*(+b.amount||0);
 const billsSorted=()=>[...S().bills].sort((a,b)=>(a.next||"").localeCompare(b.next||""));
 function billRow(b){const t=TODAY(),late=b.next<t,soon=b.next<=addDays(t,3);
-  return row("bills",b.id,`<div class="billic">${esc((b.name||"?").slice(0,1).toUpperCase())}</div><div class="grow tap" data-act="editBill" data-id="${b.id}"><div class="t">${esc(b.name)}</div><div class="m">${EVERY[b.every]?.[0]||""}${b.auto?" · paid automatically":""}</div></div>
-   <div style="text-align:right"><div class="num" style="font-weight:600">${money(+b.amount||0)}</div><span class="pill ${late?"late":soon?"today":""}">${late?"Overdue · ":""}${nice(b.next)}</span></div>
+  return row("bills",b.id,`<div class="billic">${esc((b.name||"?").slice(0,1).toUpperCase())}</div><div class="grow tap" data-act="editBill" data-id="${b.id}"><div class="t">${esc(b.name)}</div><div class="m">${EVERY[b.every]?.[0]||""}${b.auto?" · paid automatically":""}</div><div class="bpill"><span class="pill ${late?"late":soon?"today":""}">${late?"Overdue · ":""}${nice(b.next)}</span></div></div>
+   <div class="num bamt">${money(+b.amount||0)}</div>
    <button class="mini" data-act="payBill" data-id="${b.id}">Paid</button>`)}
 function payBill(id){const b=S().bills.find(x=>x.id===id);if(!b)return;
   ST.put("tx","bill-"+b.id+"-"+(b.next||TODAY()),{type:"out",amount:+b.amount||0,cat:b.cat||"Bills",who:b.who||meId(),date:TODAY(),note:b.name,createdAt:Date.now(),by:meId()});
@@ -1362,16 +1363,28 @@ function roleNames(){
 /* ---------- render ---------- */
 const TITLES={home:"Happy Home",today:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities",learn:"Chinese",piano:"Piano",alarms:"Alarms"};
 let rendering=false;
+/* the bright look: every page wears its own colour (theme.css reads html[data-page]) */
+function paintPage(pg,again){const de=document.documentElement;if(de.dataset.page===pg&&!again)return;de.dataset.page=pg;
+  try{const c=getComputedStyle(de).getPropertyValue("--bar").trim();if(/^#[0-9a-f]{3,8}$/i.test(c))document.querySelectorAll('meta[name="theme-color"]').forEach(m=>{m.content=c})}catch(_){}}
+/* a few stars fly out when something gets ticked off */
+try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>paintPage(document.documentElement.dataset.page||"home",true))}catch(_){}
+let lastTap=null;
+function party(){try{const e=lastTap,w=$(".wrap");if(!e||!w||!w.animate||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  ["⭐","✨","🎉","⭐","✨","💛"].forEach((ch,i,all)=>{const s=document.createElement("span");s.className="party";s.textContent=ch;s.setAttribute("aria-hidden","true");s.style.left=e.x+"px";s.style.top=e.y+"px";w.append(s);
+    const a=(i/all.length)*Math.PI*2+Math.random()*.7,d=44+Math.random()*30,x=Math.cos(a)*d,y=Math.sin(a)*d-16;
+    const an=s.animate([{transform:"translate(-50%,-50%) scale(.3)",opacity:1},{transform:`translate(calc(-50% + ${x.toFixed(0)}px),calc(-50% + ${y.toFixed(0)}px)) scale(1.1) rotate(${(Math.random()*80-40).toFixed(0)}deg)`,opacity:1,offset:.65},{transform:`translate(calc(-50% + ${(x*1.15).toFixed(0)}px),calc(-50% + ${(y*1.15+14).toFixed(0)}px)) scale(.7)`,opacity:0}],{duration:760,easing:"cubic-bezier(.2,.8,.3,1)"});
+    an.onfinish=an.oncancel=()=>s.remove();setTimeout(()=>s.remove(),1200)})}catch(_){}}
 function render(){
   if(rendering)return;rendering=true;
   try{
     const nav=$("nav.tabs"),head=$("header.top");
     if(ST.phase!=="ready"||(ST.mode==="cloud"&&!ST.me.personId)){
-      nav.hidden=true;head.hidden=true;pianoOff();
+      nav.hidden=true;head.hidden=true;pianoOff();paintPage("auth");
       $("#view").innerHTML=ST.phase==="loading"?`<div class="auth"><div class="logo">H</div><p class="sub">Loading your family…</p></div>`:ST.phase==="signedOut"?viewAuth():ST.phase==="needsFamily"?viewFamilySetup():viewClaim();
       bindForms();return;
     }
     nav.hidden=false;head.hidden=false;
+    if(!TITLES[tab])tab="home";paintPage(tab);
     syncPhotos();renderTabs();
     {const pv=viewId(),pb=$("#btnProfile");if(pb){const ph=photoOf(pv),cls="avatarbtn dot who-"+colorIdx(pv)+(ph?" ph ph-"+pv:""),ini=(pname(pv)||"?").slice(0,1).toUpperCase();if(pb.className!==cls)pb.className=cls;if(pb.textContent!==ini)pb.textContent=ini;pb.setAttribute("aria-label","Profile: "+pname(pv))}}
     if(tab==="piano"&&window.HHPiano&&!pianoFail){
@@ -1631,11 +1644,12 @@ function rollRepeat(t){
 
 /* ---------- clicks ---------- */
 document.addEventListener("click",e=>{
+  lastTap=e.clientX||e.clientY?{x:e.clientX,y:e.clientY}:null;
   const sw=e.target.closest(".swipe");if(sw&&sw.dataset.justSwiped){e.preventDefault();return}
   const g=e.target.closest("[data-go]");if(g){if(g.closest("#sheetHost"))closeSheet();if(g.dataset.list)listTab=g.dataset.list;go(g.dataset.go);return}
   const tb=e.target.closest(".tab");if(tb){go(tb.dataset.tab);return}
   const a=e.target.closest("[data-act]");if(!a)return;const id=a.dataset.id,act=a.dataset.act;
-  const flip=(col,msg)=>{const t=S()[col].find(x=>x.id===id);if(!t)return;ST.patch(col,id,{done:!t.done,doneAt:t.done?null:Date.now()});if(!t.done&&msg)toast(msg);return t};
+  const flip=(col,msg)=>{const t=S()[col].find(x=>x.id===id);if(!t)return;ST.patch(col,id,{done:!t.done,doneAt:t.done?null:Date.now()});if(!t.done){if(msg)toast(msg);if(col!=="shopping")party()}return t};
   switch(act){
     case"close":return closeSheet();
     case"voice":return voiceAdd();
@@ -1690,7 +1704,7 @@ document.addEventListener("click",e=>{
     case"mfaCancel":ST.cancelMfa();authErr="";return render();
     case"edit":{closeSheet();const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event"}[col],{occ:a.dataset.d},r);return}
     case"swipeDel":{const w=a.closest(".swipe");if(w.dataset.occ){const e=S().events.find(x=>x.id===w.dataset.id);if(e){const d=w.dataset.occ,old=e.skip||[];ST.patch("events",e.id,{skip:[...old,d]});toast("Removed for "+nice(d),"Undo",()=>ST.patch("events",e.id,{skip:old}))}return}delUndo(w.dataset.col,w.dataset.id);return}
-    case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was,doneAt:was?null:Date.now()});if(was)takeStars(snap);if(!was){giveStars(snap);toast(+snap.points>0?`Done! ★ ${+snap.points} for ${pname(snap.who)}`:"Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}
+    case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was,doneAt:was?null:Date.now()});if(was)takeStars(snap);if(!was){party();giveStars(snap);toast(+snap.points>0?`Done! ★ ${+snap.points} for ${pname(snap.who)}`:"Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}
     case"toggleHw":return void flip("homework","Homework finished!");
     case"toggleShop":return void flip("shopping");
     case"clearDone":{const gone=S().tasks.filter(x=>x.done);ST.delMany("tasks",gone.map(x=>x.id));toast(gone.length+" cleared","Undo",()=>gone.forEach(({id:i,...r})=>ST.put("tasks",i,r)));return}
