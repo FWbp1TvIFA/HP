@@ -9,7 +9,7 @@ const subtle = globalThis.crypto.subtle;
 
 export const MIN_SECRET_LENGTH = 32;
 /** A usable HH_SECRET: long, and random-looking rather than a repeated word or a placeholder. */
-export const secretOk = s => typeof s === "string" && s.length >= MIN_SECRET_LENGTH && new Set(s).size >= 12 && !/your|secret|change|example|random/i.test(s);
+export const secretOk = s => typeof s === "string" && s.length >= MIN_SECRET_LENGTH && new Set(s).size >= 8 && !/(^|[-_ .])(your|secret|change|example|random)([-_ .]|$)/i.test(s);
 
 let cachedSecret = null, cachedKey = null;
 async function keyFor(secret) {
@@ -40,7 +40,8 @@ export async function seal(secret, purpose, payload, ttlSeconds) {
 export async function unseal(secret, purpose, token) {
   try {
     if (typeof token !== "string" || token.length > 8192 || !token.startsWith(PREFIX[purpose] + "_")) return null;
-    const raw = Buffer.from(token.slice(4), "base64url");
+    const body = token.slice(4), raw = Buffer.from(body, "base64url");
+    if (raw.toString("base64url") !== body) return null;   // one spelling per token, so a used code can't be re-spelled
     if (raw.length < 12 + 16) return null;
     const pt = await subtle.decrypt({ name: "AES-GCM", iv: raw.subarray(0, 12), additionalData: enc.encode(purpose) }, await keyFor(secret), raw.subarray(12));
     const data = JSON.parse(dec.decode(pt));
