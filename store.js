@@ -96,6 +96,8 @@
       }
       FB.onAuthStateChanged(this.auth, user => this._onUser(user));
     },
+    pendingCols: new Set(),
+    get pending() { return this.pendingCols.size > 0; },
     _fail(e) { console.error(e); this.error = (e && e.code === "permission-denied") ? "You don't have permission to change that." : "Couldn't save. It will retry when you're back online."; this._emit(); },
     _doc(col, id) {
       if (PRIVATE_PATH[col]) return FB.doc(this.db, "users", this.me.uid, PRIVATE_PATH[col], id);
@@ -109,6 +111,7 @@
       this.phase = "loading"; this._emit();
       const unsubUser = FB.onSnapshot(FB.doc(this.db, "users", user.uid), snap => {
         const d = snap.data();
+        if ((!d || !d.familyId) && snap.metadata.fromCache && !navigator.onLine) return; // offline with nothing saved yet: wait for the internet instead of asking to set up a family
         if (!d || !d.familyId) { this.phase = "needsFamily"; this._emit(); return; }
         if (d.familyId !== this.familyId) { this.familyId = d.familyId; this._subscribeFamily(); }
       }, e => this._fail(e));
@@ -124,7 +127,9 @@
         this.phase = "ready"; this._emit();
       }, e => { this._fail(e); }));
       FAMILY_COLS.forEach(col => {
-        this._unsubs.push(FB.onSnapshot(FB.collection(this.db, "families", fid, col), snap => {
+        this._unsubs.push(FB.onSnapshot(FB.collection(this.db, "families", fid, col), { includeMetadataChanges: true }, snap => {
+          const before = this.pendingCols.size; snap.metadata.hasPendingWrites ? this.pendingCols.add(col) : this.pendingCols.delete(col);
+          if (!snap.docChanges().length && before === this.pendingCols.size && this.state[col].length === snap.size) { if (before !== this.pendingCols.size) this._emit(); return; }
           this.state[col] = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
           this._emit();
         }, e => this._fail(e)));
