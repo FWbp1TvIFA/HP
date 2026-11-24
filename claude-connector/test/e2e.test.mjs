@@ -212,6 +212,15 @@ test("bad input adds nothing and explains why", async () => {
   assert.equal(isError, true);
   assert.match(text, /Nothing was added/); assert.match(text, /Grandma/); assert.match(text, /above 0/);
   assert.equal((await docs("families/FAMILY01/tasks")).length, before);
+  // An amount with a decimal comma could be read two ways, so it is refused in any spelling.
+  for (const amt of ["12,50", "$ 12,50", "12,50 AUD", "AU$12,50", "1.250,00"]) {
+    const unclear = await call(old.client, "add_items", { money: [{ amount: amt }] });
+    assert.equal(unclear.isError, true, amt); assert.match(unclear.text, /unclear/);
+  }
+  // Ingredients on separate lines count the same as commas.
+  const lines = Array.from({ length: 6 }, (_, i) => ({ date: addDays(TODAY, 80 + i), title: `Lines ${i}`, ingredients: Array.from({ length: 60 }, (_, k) => `Line thing ${i}-${k}`).join("\n") }));
+  const many = await call(old.client, "add_items", { meals: lines, add_meal_ingredients_to_shopping: true });
+  assert.equal(many.isError, true); assert.match(many.text, /too many meal ingredients/);
   // Too much for one save (meal ingredients going on the shopping list) is refused whole, never half saved.
   const meals = Array.from({ length: 30 }, (_, i) => ({ date: addDays(TODAY, 40 + i), title: `Meal ${i}`, ingredients: Array.from({ length: 8 }, (_, k) => `Thing ${i}-${k}`) }));
   const big = await call(old.client, "add_items", { money: [{ amount: 12, note: "Receipt" }], meals, add_meal_ingredients_to_shopping: true });
@@ -262,6 +271,15 @@ test("mark_done: stars, repeating task, shopping, homework and bill payment", as
   assert.match(r.text, /already marked paid today/);
   assert.equal((await docs("families/FAMILY01/tx")).filter(t => t.id.startsWith("bill-power1-")).length, 1);
   assert.equal((await docs("families/FAMILY01/bills")).find(b => b.id === "power1").next, bill.next);
+  // Undoing a wrong payment (delete the spending, move the due date back) lets the bill be paid again the same day.
+  r = await call(old.client, "delete_items", { type: "money", ids: [`bill-power1-${TODAY}`] });
+  assert.equal(r.isError, false, r.text);
+  r = await call(old.client, "update_items", { updates: [{ type: "bills", id: "power1", changes: { next_due: TODAY, amount: 260 } }] });
+  assert.equal(r.isError, false, r.text);
+  r = await call(old.client, "mark_done", { type: "bills", ids: ["power1"] });
+  assert.match(r.text, /Paid Electricity/);
+  const repaid = (await docs("families/FAMILY01/tx")).filter(t => t.id.startsWith("bill-power1-"));
+  assert.equal(repaid.length, 1); assert.equal(repaid[0].amount, 260);
 });
 
 test("update_items and delete_items (with skip one day of a weekly activity)", async () => {

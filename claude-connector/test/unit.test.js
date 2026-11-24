@@ -36,6 +36,9 @@ test("sealed tokens can't be forged, swapped or reused after expiry", async () =
   assert.equal(await unseal("j".repeat(40), "access", t), null);
   assert.equal(await unseal(s, "access", "hht_" + t.slice(4).split("").reverse().join("")), null);
   assert.equal(await unseal(s, "code", await seal(s, "code", {}, -1)), null);
+  // Each token has exactly one spelling, so a used sign-in code can't be sent again with padding or stray characters.
+  for (const extra of ["=", "==", ".", "!", " ", "\n", "%"]) assert.equal(await unseal(s, "access", t + extra), null, JSON.stringify(extra));
+  assert.equal(await unseal(s, "access", t.slice(0, 20) + "." + t.slice(20)), null);
   const v = "abcdefghijklmnopqrstuvwxyz0123456789-._~ABCDEFG";
   assert.ok(await pkceMatches(v, await sha256base64url(v)));
   assert.ok(!(await pkceMatches("short", await sha256base64url("short"))));
@@ -152,6 +155,11 @@ test("a weak or placeholder HH_SECRET is not accepted", async () => {
     assert.equal((await (await handle(new Request("https://hh.example/health"), { HH_SECRET: weak })).json()).ready, false, weak);
   }
   assert.equal((await (await handle(new Request("https://hh.example/health"), { HH_SECRET: KEY })).json()).ready, true);
+  // Real random keys are accepted: short hex with few different characters, and base64 that happens to spell a word.
+  for (const good of ["2eab9bf1fdab5e2d15f4898ede8f5db5", "kQ3d8Yourf0Lx7Z2pW9bN4cV6mT1sR5hJ8gA0eU2iO4=", "/R+9H2Pr4h6rz7gC+GYiqkVyOURjP2zSQfud69ZHuA0=", "9f1c2a7e-4b3d-4c8a-9e2f-1a2b3c4d5e6f"]) {
+    assert.equal((await (await handle(new Request("https://hh.example/health"), { HH_SECRET: good })).json()).ready, true, good);
+  }
+  assert.equal((await (await handle(new Request("https://hh.example/health"), { HH_SECRET: "your_secret_key_goes_here_123456789" })).json()).ready, false);
 });
 
 test("Vercel entry point is a web fetch handler that keeps the original path", async () => {
@@ -166,6 +174,11 @@ test("Vercel entry point is a web fetch handler that keeps the original path", a
   process.env.VERCEL = "1";
   const asm = await (await entry.fetch(new Request("http://hh.example/.well-known/oauth-authorization-server"))).json();
   assert.equal(asm.token_endpoint, "https://hh.example/token");
+  // "vercel dev" on a computer also sets VERCEL, but serves plain http on localhost: leave that alone.
+  process.env.VERCEL_ENV = "development";
+  const dev = await (await entry.fetch(new Request("http://localhost:3000/.well-known/oauth-authorization-server"))).json();
+  assert.equal(dev.issuer, "http://localhost:3000");
+  delete process.env.VERCEL_ENV;
   delete process.env.VERCEL;
   delete process.env.HH_SECRET;
 });
