@@ -279,3 +279,4 @@ body.sheet-open .wrap{transform:scale(.94) translateY(18px);border-radius:14px;o
 .reqbar{background:var(--accent-soft);border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:10px}
 .mapl{color:var(--accent);font-weight:600;text-decoration:none}
 .offline{font-size:.8rem;color:var(--muted)}
+.tap{cursor:pointer;-webkit-tap-highlight-color:transparent}

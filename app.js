@@ -52,13 +52,14 @@ function monthStats(m){
 
 /* ---------- list items ---------- */
 const checkBtn=(on,act,id)=>`<button class="check ${on?"on":""}" data-act="${act}" data-id="${id}" aria-label="${on?"Mark not done":"Mark done"}">${on?ICON.tick:""}</button>`;
-function duePill(due,done){if(!due)return"";const late=!done&&due<TODAY(),today=due===TODAY();return `<span class="pill ${late?"late":today?"today":""}">${late?"Late · ":""}${nice(due)}</span>`}
+function tm(t){if(!t)return"";const [h,m]=t.split(":").map(Number);return new Date(2000,0,1,h,m).toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"}).replace(" ","\u00a0")}
+function duePill(due,done,time){if(!due)return"";const now=new Date(),nowT=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");const late=!done&&(due<TODAY()||(due===TODAY()&&time&&time<nowT)),today=due===TODAY();return `<span class="pill ${late?"late":today?"today":""}">${late?"Late · ":""}${nice(due)}${time?" · "+tm(time):""}</span>`}
 const row=(col,id,inner,done)=>`<div class="swipe" data-col="${col}" data-id="${id}"><div class="act" data-act="swipeDel">Delete</div><div class="item ${done?"done":""}">${inner}</div></div>`;
-function taskItem(t){return row("tasks",t.id,`${checkBtn(t.done,"toggle",t.id)}<div class="grow"><div class="t">${esc(t.title)}</div><div class="m">${esc(pname(t.who))}${t.repeat&&t.repeat!=="none"?" · repeats "+t.repeat:""}</div></div>${duePill(t.due,t.done)}`,t.done)}
-function hwItem(h){return row("homework",h.id,`${checkBtn(h.done,"toggleHw",h.id)}<div class="grow"><div class="t">${esc(h.title)}</div><div class="m">${esc(h.subject)} · ${esc(pname(h.who))}</div></div>${duePill(h.due,h.done)}`,h.done)}
-function eventItem(e,showDate){return row("events",e.id,`<span class="time">${esc(e.time||"All day")}</span>${dot(e.who)}<div class="grow"><div class="t">${esc(e.title)}</div><div class="m">${showDate?nice(e.date)+" · ":""}${esc(pname(e.who))}${e.place?" · "+esc(e.place):""}</div></div>`)}
+function taskItem(t){return row("tasks",t.id,`${checkBtn(t.done,"toggle",t.id)}<div class="grow tap" data-act="edit" data-col="tasks" data-id="${t.id}"><div class="t">${esc(t.title)}</div><div class="m">${esc(pname(t.who))}${t.repeat&&t.repeat!=="none"?" · repeats "+t.repeat:""}</div></div>${duePill(t.due,t.done,t.time)}`,t.done)}
+function hwItem(h){return row("homework",h.id,`${checkBtn(h.done,"toggleHw",h.id)}<div class="grow tap" data-act="edit" data-col="homework" data-id="${h.id}"><div class="t">${esc(h.title)}</div><div class="m">${esc(h.subject)} · ${esc(pname(h.who))}</div></div>${duePill(h.due,h.done,h.time)}`,h.done)}
+function eventItem(e,showDate){return row("events",e.id,`<span class="time">${e.time?tm(e.time):"All day"}</span>${dot(e.who)}<div class="grow tap" data-act="edit" data-col="events" data-id="${e.id}"><div class="t">${esc(e.title)}</div><div class="m">${showDate?nice(e.date)+" · ":""}${esc(pname(e.who))}${e.place?" · "+esc(e.place):""}</div></div>`)}
 function txItem(x){const n=x.type==="in"?x.amount:-x.amount;return row("tx",x.id,`${dot(x.who)}<div class="grow"><div class="t">${esc(x.note||x.cat)}</div><div class="m">${esc(x.cat)} · ${nice(x.date)} · ${esc(pname(x.who))}</div></div><span class="num ${n>0?"pos":""}" style="font-weight:600">${money(n,true)}</span>`)}
-const sortTasks=a=>a.sort((x,y)=>(!!x.done-!!y.done)||((x.due||"9")>(y.due||"9")?1:-1));
+const sortTasks=a=>a.sort((x,y)=>(!!x.done-!!y.done)||((x.due||"9")+(x.time||"99")>(y.due||"9")+(y.time||"99")?1:-1));
 const sortEv=a=>a.sort((x,y)=>(x.date+(x.time||"00:00")).localeCompare(y.date+(y.time||"00:00")));
 const swipeHint=()=>`<div class="hint">Swipe left on a row to delete it</div>`;
 
@@ -507,7 +508,7 @@ function openSheet(html,onMount){
 const whoOptions=(sel,fam)=>(fam?`<option value="0" ${sel==0?"selected":""}>Whole family</option>`:"")+people().map(p=>`<option value="${p.id}" ${p.id==sel?"selected":""}>${esc(p.name)}</option>`).join("");
 const sheetHead=t=>`<div class="row between"><h2>${t}</h2><button class="del" style="display:block" data-act="close" aria-label="Close">${ICON.x}</button></div>`;
 function defaultKind(){return {money:"money",calendar:"event",notes:"note",calc:"money",wallet:"card",lists:{tasks:"task",shopping:"shop",homework:"homework"}[listTab]}[tab]||"task"}
-function addSheet(kind,preset){
+function addSheet(kind,preset,edit){
   kind=kind||defaultKind();preset=preset||{};
   if(kind==="card")return cardForm();
   const kinds=[["task","Task"],["event","Event"],["money","Money"],["shop","Shopping"],["homework","Homework"],["note","Note"]];
@@ -515,8 +516,8 @@ function addSheet(kind,preset){
   const kid=people()[2]?.id||meId(), me=meId(), cats=SET().categories||[];
   let body="";
   if(kind==="task")body=`<div class="field"><label for="f_title">What needs doing?</label><input id="f_title" required placeholder="e.g. Take bins out"></div>
-   <div class="two"><div class="field"><label for="f_who">Who</label><select id="f_who">${whoOptions(me)}</select></div><div class="field"><label for="f_due">Due</label><input id="f_due" type="date" value="${TODAY()}"></div></div>
-   <div class="field"><label for="f_rep">Repeat</label><select id="f_rep"><option value="none">Doesn't repeat</option><option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option></select></div>`;
+   <div class="two"><div class="field"><label for="f_who">Who</label><select id="f_who">${whoOptions(me)}</select></div><div class="field"><label for="f_due">Date</label><input id="f_due" type="date" value="${TODAY()}"></div></div>
+   <div class="two"><div class="field"><label for="f_time">Time (optional)</label><input id="f_time" type="time"></div><div class="field"><label for="f_rep">Repeat</label><select id="f_rep"><option value="none">Doesn't repeat</option><option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option></select></div></div>`;
   if(kind==="money")body=`<div class="seg" id="f_type"><button type="button" class="on" data-t="out">Spent</button><button type="button" data-t="in">Received</button></div>
    <div class="two"><div class="field"><label for="f_amt">Amount (${esc(SET().currency||"$")})</label><input id="f_amt" type="number" inputmode="decimal" step="0.01" min="0" required placeholder="0.00" value="${preset.amount??""}"></div><div class="field"><label for="f_date">Date</label><input id="f_date" type="date" value="${TODAY()}"></div></div>
    <div class="two"><div class="field"><label for="f_cat">Category</label><select id="f_cat">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}<option>Salary</option></select></div><div class="field"><label for="f_who">Who</label><select id="f_who">${whoOptions(me)}</select></div></div>
@@ -528,24 +529,31 @@ function addSheet(kind,preset){
   if(kind==="shop")body=`<div class="two"><div class="field"><label for="f_title">Item</label><input id="f_title" required placeholder="e.g. Eggs"></div><div class="field"><label for="f_qty">How many</label><input id="f_qty" placeholder="e.g. 12"></div></div>`;
   if(kind==="homework")body=`<div class="two"><div class="field"><label for="f_subj">Subject</label><input id="f_subj" list="subjects" required placeholder="e.g. Maths"><datalist id="subjects">${["Maths","English","Science","HASS","History","Geography","Art","Music","Japanese","PE"].map(s=>`<option value="${s}">`).join("")}</datalist></div><div class="field"><label for="f_due">Due</label><input id="f_due" type="date" value="${addDays(TODAY(),1)}"></div></div>
    <div class="field"><label for="f_title">What to do</label><input id="f_title" required placeholder="e.g. Fractions worksheet, page 14"></div>
-   <div class="field"><label for="f_who">For</label><select id="f_who">${whoOptions(kid)}</select></div>`;
+   <div class="two"><div class="field"><label for="f_who">For</label><select id="f_who">${whoOptions(kid)}</select></div><div class="field"><label for="f_time">Time (optional)</label><input id="f_time" type="time"></div></div>`;
   if(kind==="note")body=`<div class="field"><label for="f_title">Title</label><input id="f_title" placeholder="e.g. Holiday ideas"></div>
    <div class="field"><label for="f_body">Note</label><textarea id="f_body" class="body" rows="7"></textarea></div>`;
-  openSheet(`${sheetHead("Add")}${pick}<form id="f" class="stack" style="gap:12px">${body}<button class="primary" type="submit">Save</button></form>`,sh=>{
+  openSheet(`${sheetHead(edit?{task:"Edit task",homework:"Edit homework",event:"Edit event"}[kind]:"Add")}${edit?"":pick}<form id="f" class="stack" style="gap:12px">${body}<button class="primary" type="submit">Save</button>${edit?`<button type="button" class="link" id="f_del" style="color:var(--bad);align-self:center">Delete</button>`:""}</form>`,sh=>{
     sh.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>addSheet(b.dataset.kind,preset));
+    if(edit){const set=(id,val)=>{const el=sh.querySelector("#"+id);if(el&&val!=null)el.value=val};
+      set("f_title",edit.title);set("f_who",edit.who);set("f_due",edit.due);set("f_time",edit.time||"");set("f_rep",kind==="event"?"0":(edit.repeat||"none"));set("f_subj",edit.subject);set("f_date",edit.date);set("f_place",edit.place||"");
+      if(kind==="event"){const r=sh.querySelector("#f_rep");r&&r.closest(".field").remove()}
+      const col={task:"tasks",homework:"homework",event:"events"}[kind],d=sh.querySelector("#f_del");
+      d.onclick=()=>{if(d.dataset.arm){ST.del(col,edit.id);closeSheet();toast("Deleted");render()}else{d.dataset.arm=1;d.textContent="Tap again to delete"}};}
     let type="out";
     sh.querySelectorAll("#f_type button").forEach(b=>b.onclick=()=>{type=b.dataset.t;sh.querySelectorAll("#f_type button").forEach(x=>x.classList.toggle("on",x===b));sh.querySelector("#f_cat").value=type==="in"?"Salary":cats[0]});
-    const first=sh.querySelector("#f_subj,#f_title,#f_amt");first&&first.focus();
+    const first=sh.querySelector("#f_subj,#f_title,#f_amt");if(!edit&&first)first.focus();
     sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const v=id=>(sh.querySelector("#"+id)?.value??"");
-      if(kind==="task"){if(!v("f_title").trim())return;ST.add("tasks",{title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),repeat:v("f_rep"),done:false});toast("Task added")}
+      if(kind==="task"){if(!v("f_title").trim())return;const rec={title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time"),repeat:v("f_rep")};if(edit){ST.patch("tasks",edit.id,rec);toast("Task updated")}else{ST.add("tasks",{...rec,done:false});toast("Task added")}}
       if(kind==="money"){const a=parseFloat(v("f_amt"));if(!(a>0))return;ST.add("tx",{type,amount:Math.round(a*100)/100,cat:v("f_cat"),who:+v("f_who"),date:v("f_date")||TODAY(),note:v("f_note").trim()});moneyMonth=monthKey(v("f_date")||TODAY());toast(type==="in"?"Income added":"Spending added")}
-      if(kind==="event"){if(!v("f_title").trim())return;const d0=v("f_date")||TODAY(),step=+v("f_rep"),n=step?8:1;
+      if(kind==="event"&&edit){if(!v("f_title").trim())return;const d0=v("f_date")||TODAY();ST.patch("events",edit.id,{title:v("f_title").trim(),who:+v("f_who"),date:d0,time:v("f_time"),place:v("f_place").trim()});calDay=d0;calMonth=monthKey(d0);toast("Event updated")}
+      else if(kind==="event"){if(!v("f_title").trim())return;const d0=v("f_date")||TODAY(),step=+v("f_rep"),n=step?8:1;
         for(let i=0;i<n;i++)ST.add("events",{title:v("f_title").trim(),who:+v("f_who"),date:addDays(d0,i*step),time:v("f_time"),place:v("f_place").trim()});
         calDay=d0;calMonth=monthKey(d0);toast(n>1?n+" events added":"Event added")}
       if(kind==="shop"){if(!v("f_title").trim())return;ST.add("shopping",{name:v("f_title").trim(),qty:v("f_qty").trim(),done:false,who:meId()});toast("Added to shopping")}
-      if(kind==="homework"){if(!v("f_title").trim())return;ST.add("homework",{subject:v("f_subj").trim()||"Homework",title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),done:false});toast("Homework added")}
+      if(kind==="homework"){if(!v("f_title").trim())return;const rec={subject:v("f_subj").trim()||"Homework",title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time")};if(edit){ST.patch("homework",edit.id,rec);toast("Homework updated")}else{ST.add("homework",{...rec,done:false});toast("Homework added")}}
       if(kind==="note"){if(!v("f_title").trim()&&!v("f_body").trim())return;ST.add("notes",{title:v("f_title").trim(),body:v("f_body"),who:meId(),updated:Date.now(),pinned:false});toast("Note saved")}
       closeSheet();
+      if(edit){render();return}
       const dest={task:["lists","tasks"],shop:["lists","shopping"],homework:["lists","homework"],note:["notes"],money:["money"],event:["calendar"]}[kind];
       if(dest[1])listTab=dest[1];
       if(tab!=="home"&&tab!==dest[0])go(dest[0]);else render();
@@ -614,7 +622,7 @@ function rollRepeat(t){
   const step=t.repeat==="daily"?1:t.repeat==="weekly"?7:0;
   const next=s=>{if(step)return addDays(s,step);const x=new Date(s+"T12:00:00");x.setMonth(x.getMonth()+1);return iso(x)};
   let d=next(t.due);while(d<TODAY())d=next(d);
-  ST.add("tasks",{title:t.title,who:t.who,due:d,repeat:t.repeat,done:false});
+  ST.add("tasks",{title:t.title,who:t.who,due:d,time:t.time||"",repeat:t.repeat,done:false});
 }
 
 /* ---------- swipe to delete (tracks the finger 1:1, projects momentum on release) ---------- */
@@ -656,6 +664,7 @@ document.addEventListener("click",e=>{
   const flip=(col,msg)=>{const t=S()[col].find(x=>x.id===id);if(!t)return;ST.patch(col,id,{done:!t.done});if(!t.done&&msg)toast(msg);return t};
   switch(act){
     case"close":return closeSheet();
+    case"edit":{const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event"}[col],null,r);return}
     case"swipeDel":{const w=a.closest(".swipe");ST.del(w.dataset.col,w.dataset.id);toast("Deleted");return}
     case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was});if(!was){toast("Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}
     case"toggleHw":return void flip("homework","Homework finished!");
