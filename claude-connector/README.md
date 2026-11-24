@@ -27,7 +27,7 @@ It lives in its own folder and does not change the app. It runs free on Vercel's
 
 Every write uses the same fields, defaults and side effects as the app, including `createdAt` and `by` for the Live feed, `doneAt` when something is ticked off, and `remind` when a particular reminder is asked for. Dates are worked out in Australia/Brisbane time.
 
-People can be named the way the family says them: the name shown in the app (such as Dad or Mum), an earlier name the app keeps as `aka`, or mum, mom, mummy, dad, daddy.
+People can be named the way the family says them: the name shown in the app (such as Dad or Mum), an earlier name the app keeps as `aka`, or mum, mom, mummy, dad, daddy. A whole name always wins over a first name or an earlier name, the mum and dad words only find someone the app calls Mum or Dad, and two people in one answer ("Mum and Dad") are sent back to Claude to choose, because each item belongs to one person or the whole family. New alarms are for the signed-in person unless another person or Family is named, like the app's alarm screen.
 
 ## Setup (once)
 

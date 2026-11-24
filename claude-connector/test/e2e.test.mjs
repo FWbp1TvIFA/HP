@@ -371,7 +371,8 @@ test("Dad and Mum names, reminders, done times and alarms match the app", async 
   const swim = alarms.find(a => plain(a).title === "Leave for swimming"), once = alarms.find(a => plain(a).time === "06:45"), late = alarms.find(a => plain(a).title === "Earlier today");
   assert.deepEqual({ ...plain(swim), id: 0, createdAt: 0 }, { id: 0, title: "Leave for swimming", time: "15:30", who: 3, days: [2, 4], date: "", on: true, createdAt: 0, by: 1 });
   assert.deepEqual(swim.days, [{ int: 2 }, { int: 4 }]); assert.deepEqual(swim.who, { int: 3 });
-  assert.deepEqual({ ...plain(once), id: 0, createdAt: 0 }, { id: 0, title: "Alarm", time: "06:45", who: 0, days: [], date: addDays(TODAY, 2), on: true, createdAt: 0, by: 1 });
+  // No "who": the signed-in person, like the app's alarm sheet.
+  assert.deepEqual({ ...plain(once), id: 0, createdAt: 0 }, { id: 0, title: "Alarm", time: "06:45", who: 1, days: [], date: addDays(TODAY, 2), on: true, createdAt: 0, by: 1 });
   assert.equal(plain(late).date, addDays(TODAY, 1), "a time that has passed today rings tomorrow, like the app");
   r = await call(old.client, "add_items", { alarms: [{ title: "No time" }] });
   assert.equal(r.isError, true); assert.match(r.text, /time/);
@@ -379,6 +380,10 @@ test("Dad and Mum names, reminders, done times and alarms match the app", async 
   assert.match(r.text, /3 alarms/); assert.match(r.text, /Leave for swimming/);
   r = await call(old.client, "get_overview", {});
   assert.match(r.text, /Alarms switched on[\s\S]*Leave for swimming/);
+  // A weekly alarm can't skip one day: asking for that is refused, never a delete of every week.
+  r = await call(old.client, "delete_items", { type: "alarms", ids: [swim.id], only_this_date: addDays(TODAY, 2) });
+  assert.equal(r.isError, true); assert.match(r.text, /can't skip just one day[\s\S]*Nothing was deleted/);
+  assert.equal((await docs("families/FAMILY01/alarms")).length, 3);
   // Switch one off, turn the weekly one into a one-time alarm, then delete one.
   r = await call(old.client, "update_items", { updates: [{ type: "alarms", id: once.id, changes: { on: false } }, { type: "alarms", id: swim.id, changes: { weekly_on_days: [], date: addDays(TODAY, 5), time: "16:00", who: "family" } }] });
   assert.equal(r.isError, false, r.text);
@@ -387,6 +392,18 @@ test("Dad and Mum names, reminders, done times and alarms match the app", async 
   assert.deepEqual({ ...after.find(a => a.id === swim.id), createdAt: 0 }, { id: swim.id, title: "Leave for swimming", time: "16:00", who: 0, days: [], date: addDays(TODAY, 5), on: true, createdAt: 0, by: 1 });
   r = await call(old.client, "get_overview", {});
   assert.doesNotMatch(r.text.split("Alarms switched on")[1].split("\n\n")[0], /6:45/);
+  // A new time for a switched-off alarm switches it back on, like saving it in the app, unless it's told to stay off.
+  r = await call(old.client, "update_items", { updates: [{ type: "alarms", id: once.id, changes: { time: "07:00" } }] });
+  assert.equal(r.isError, false, r.text);
+  assert.equal((await docs("families/FAMILY01/alarms")).find(a => a.id === once.id).on, true);
+  r = await call(old.client, "update_items", { updates: [{ type: "alarms", id: once.id, changes: { time: "07:15", on: false } }] });
+  let o = (await docs("families/FAMILY01/alarms")).find(a => a.id === once.id);
+  assert.equal(o.on, false); assert.equal(o.time, "07:15");
+  r = await call(old.client, "update_items", { updates: [{ type: "alarms", id: once.id, changes: { title: "Gym" } }] });
+  assert.equal((await docs("families/FAMILY01/alarms")).find(a => a.id === once.id).on, false, "a new name alone leaves it off");
+  // Two people for one item is refused, not quietly given to one of them.
+  r = await call(old.client, "add_items", { events: [{ title: "Both", date: addDays(TODAY, 6), who: "Mum and Dad" }] });
+  assert.equal(r.isError, true); assert.match(r.text, /more than one person[\s\S]*"Family" for everyone/);
   r = await call(old.client, "delete_items", { type: "alarms", ids: [late.id] });
   assert.equal(r.isError, false, r.text);
   assert.equal((await docs("families/FAMILY01/alarms")).length, 2);
