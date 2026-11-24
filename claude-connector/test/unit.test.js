@@ -56,6 +56,9 @@ test("numbers are stored the way the Firebase web SDK stores them", () => {
   assert.deepEqual(toValue(87.4), { doubleValue: 87.4 });
   assert.deepEqual(toValue([1, "a"]), { arrayValue: { values: [{ integerValue: "1" }, { stringValue: "a" }] } });
   assert.equal(fromValue({ integerValue: "1732400000000" }), 1732400000000);
+  // A 29 February birthday falls on 1 March in other years, as the app shows it.
+  assert.equal(countdownNext({ date: "2016-02-29", yearly: true }, "2027-02-20"), "2027-03-01");
+  assert.equal(countdownNext({ date: "2016-02-29", yearly: true }, "2028-02-20"), "2028-02-29");
 });
 
 test("two-step sign-in: code page, then finalize with the authenticator code", async () => {
@@ -107,6 +110,12 @@ test("only Claude's published client identity is accepted as a URL client id", a
   // Claude's published identity only ever returns to Claude, never to a local address.
   const local = new URLSearchParams({ response_type: "code", client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata", redirect_uri: "http://127.0.0.1:8080/cb", state: "S", code_challenge: ch, code_challenge_method: "S256" });
   assert.equal((await handle(new Request(`https://hh.example/authorize?${local}`), env)).status, 400);
+  // Claude Code's own published identity returns to localhost:<port>/callback, and only there.
+  const cc = uri => new URLSearchParams({ response_type: "code", client_id: "https://claude.ai/oauth/claude-code-client-metadata", redirect_uri: uri, state: "S", code_challenge: ch, code_challenge_method: "S256" });
+  assert.equal((await handle(new Request(`https://hh.example/authorize?${cc("http://localhost:54321/callback")}`), env)).status, 200);
+  assert.equal((await handle(new Request(`https://hh.example/authorize?${cc("http://127.0.0.1:54321/callback")}`), env)).status, 200);
+  assert.equal((await handle(new Request(`https://hh.example/authorize?${cc("http://localhost:54321/other")}`), env)).status, 400);
+  assert.equal((await handle(new Request(`https://hh.example/authorize?${cc("https://claude.ai/api/mcp/auth_callback")}`), env)).status, 400);
   const asm = await (await handle(new Request("https://hh.example/.well-known/oauth-authorization-server"), env)).json();
   assert.equal(asm.authorization_response_iss_parameter_supported, true);
   assert.equal(asm.client_id_metadata_document_supported, true);
@@ -128,6 +137,9 @@ test("tokens are only issued for this server's own address (RFC 8707)", async ()
   assert.equal(loc.searchParams.get("error"), "invalid_target");
   const tok = await handle(new Request("https://hh.example/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "x", resource: "https://evil.example/mcp" }) }), env);
   assert.equal((await tok.json()).error, "invalid_target");
+  // With a custom address set later, people who connected at the old address can still renew.
+  const moved = await handle(new Request("https://hh.example/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "x", resource: "https://hh.example/mcp" }) }), { ...env, HH_PUBLIC_URL: "https://home.example.com" });
+  assert.equal((await moved.json()).error, "invalid_grant");
   // An error before sign-in for a local app is shown as a page, not sent to a local address.
   const reg = await (await handle(new Request("https://hh.example/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ redirect_uris: ["http://127.0.0.1:9999/cb"] }) }), env)).json();
   const bad = new URLSearchParams({ response_type: "token", client_id: reg.client_id, redirect_uri: "http://127.0.0.1:9999/cb", code_challenge: ch, code_challenge_method: "S256" });
@@ -148,12 +160,22 @@ test("Vercel entry point is a web fetch handler that keeps the original path", a
   assert.equal(typeof entry.fetch, "function");
   const r = await entry.fetch(new Request("https://hh.example/.well-known/oauth-protected-resource/mcp"));
   assert.equal((await r.json()).resource, "https://hh.example/mcp");
+  // Vercel's Node layer hands the function an http:// URL; the public address is https.
+  const viaVercel = await entry.fetch(new Request("http://hh.example/.well-known/oauth-protected-resource/mcp", { headers: { "x-forwarded-proto": "https" } }));
+  assert.deepEqual(await viaVercel.json().then(j => [j.resource, j.authorization_servers[0]]), ["https://hh.example/mcp", "https://hh.example"]);
+  process.env.VERCEL = "1";
+  const asm = await (await entry.fetch(new Request("http://hh.example/.well-known/oauth-authorization-server"))).json();
+  assert.equal(asm.token_endpoint, "https://hh.example/token");
+  delete process.env.VERCEL;
   delete process.env.HH_SECRET;
 });
 
 test("home page and setup-not-finished state", async () => {
   const ready = await handle(new Request("https://hh.example/"), { HH_SECRET: KEY });
   assert.match(await ready.text(), /https:\/\/hh\.example\/mcp/);
+  // Opened from a one-off deployment link, the page still shows the lasting production address.
+  const fromDeploy = await handle(new Request("https://hh-abc123-old.vercel.app/"), { HH_SECRET: KEY, VERCEL: "1", VERCEL_PROJECT_PRODUCTION_URL: "happy-home.vercel.app" });
+  assert.match(await fromDeploy.text(), /<code id="addr">https:\/\/happy-home\.vercel\.app\/mcp<\/code>/);
   const notReady = await (await handle(new Request("https://hh.example/"), {})).text();
   assert.match(notReady, /HH_SECRET/);
   const mcp = await handle(new Request("https://hh.example/mcp", { method: "POST", body: "{}" }), {});

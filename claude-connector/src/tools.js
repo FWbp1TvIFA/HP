@@ -27,6 +27,7 @@ const need = (v, label) => { if (!v) throw new UserError(`${label} is missing.`)
 const dateArg = (v, f, fallback, label = "Date") => wrap(() => { const d = parseDate(v, f.today); if (d === null) return fallback; return d; });
 const timeArg = v => wrap(() => parseTime(v));
 const amountArg = (v, label = "Amount") => {
+  if (typeof v === "string" && /^\s*\$?\d+,\d{1,2}\s*$/.test(v)) throw new UserError(`${label} "${v.trim()}" is unclear. Send it as a number such as 12.50.`);
   const n = typeof v === "string" ? parseFloat(v.replace(/[^0-9.\-]/g, "")) : +v;
   if (!isFinite(n) || n <= 0) throw new UserError(`${label} must be a number above 0.`);
   if (n > 10000000) throw new UserError(`${label} looks too big.`);
@@ -167,7 +168,8 @@ async function findItems(f, args) {
   const whoOk = x => who === null || +x.who === who || (type === "meals" && +x.cook === who);
 
   if (type === "money") {
-    const a = from || f.today.slice(0, 8) + "01", b = to || (from ? addDays(from, 92) : f.today.slice(0, 8) + "31");
+    const monthEnd = d => addDays(addOneMonthLikeApp(d.slice(0, 8) + "01"), -1);
+    const a = from || (to ? to.slice(0, 8) + "01" : f.today.slice(0, 8) + "01"), b = to || (from ? addDays(from, 92) : monthEnd(f.today));
     if (daysBetween(a, b) > 800) throw new UserError("Pick a shorter date range (at most about two years).");
     rows = (await f.fs.range(famPath, "tx", "date", a, b)).filter(x => matches(x, ["note", "cat"]) && whoOk(x)).sort(byDateTime).reverse();
     label = `money from ${niceDate(a, f.today)} to ${niceDate(b, f.today)}`;
@@ -251,6 +253,8 @@ async function addItems(f, args) {
     arr.forEach((item, i) => { try { if (!item || typeof item !== "object") throw new UserError("must be an object"); fn(item); } catch (e) { if (e instanceof UserError) problems.push(`${key} #${i + 1}: ${e.message}`); else throw e; } });
   };
   const total = TYPE_LIST.reduce((n, k) => n + (Array.isArray(args[k]) ? args[k].length : 0), 0);
+  const ingredientCount = args.add_meal_ingredients_to_shopping === true && Array.isArray(args.meals) ? args.meals.reduce((n, m) => n + (Array.isArray(m?.ingredients) ? m.ingredients.length : String(m?.ingredients || "").split(",").length), 0) : 0;
+  if (ingredientCount > 300) throw new UserError("That's too many meal ingredients to put on the shopping list in one go. Nothing was added. Please add the meals in smaller groups.");
   if (!total) throw new UserError("Nothing to add. Put the things to add in tasks, events, homework, shopping, money, notes, bills, meals, countdowns or board.");
   if (total > 200) throw new UserError("That's a lot at once; add at most 200 things per call.");
 
@@ -428,7 +432,7 @@ async function updateItems(f, args) {
           if (has("due")) fields.due = dateArg(c.due, f, "");
           break;
         case "shopping":
-          if (has("name")) fields.name = capFirst(need(text(c.name, 120, "Name"), "Name"));
+          if (has("name")) { fields.name = capFirst(need(text(c.name, 120, "Name"), "Name")); fields.aisle = ""; }  // the app works the aisle out again from the new name
           if (has("qty")) fields.qty = text(c.qty, 40, "Quantity");
           break;
         case "money": {
@@ -550,7 +554,8 @@ export function toolDefinitions(f) {
   const me = f && f.myName ? ` Defaults to the signed-in person (${f.myName}).` : " Defaults to the signed-in person.";
   const who = extra => ({ type: "string", description: `Who it's for: ${names}${extra || ""}.` });
   const cats = f ? f.categories.join(", ") : "the family's categories";
-  const date = d => ({ type: "string", description: `${d} as YYYY-MM-DD${f ? ` (today is ${f.today})` : ""}.` });
+  // No "today is" here: the tool list can be kept for days, and get_overview gives today's date.
+  const date = d => ({ type: "string", description: `${d} as YYYY-MM-DD. Words like "tomorrow" or "friday" also work.` });
   const time = { type: "string", description: "Time as 24-hour HH:MM, e.g. 15:30. Leave out for no time." };
   const type = (list = TYPE_LIST) => ({ type: "string", enum: list, description: "What kind of item." });
   const ro = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
@@ -579,7 +584,7 @@ export function toolDefinitions(f) {
     {
       name: "money_summary", title: "Money summary",
       description: "Spending and income for a month: totals, each category against its budget, biggest spends, and bills still to come. Compares with last month.",
-      inputSchema: { type: "object", additionalProperties: false, properties: { month: { type: "string", description: `Month as YYYY-MM. Default this month${f ? " (" + f.today.slice(0, 7) + ")" : ""}.` } } },
+      inputSchema: { type: "object", additionalProperties: false, properties: { month: { type: "string", description: "Month as YYYY-MM. Default this month." } } },
       annotations: { title: "Money summary", ...ro }, run: moneySummary,
     },
     {

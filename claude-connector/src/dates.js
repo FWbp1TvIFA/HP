@@ -40,7 +40,8 @@ export function countdownNext(c, today) {
   const y = +today.slice(0, 4);
   let d = y + c.date.slice(4);
   if (d < today) d = (y + 1) + c.date.slice(4);
-  return d;
+  // Compared as text like the app; then a 29 February in a non-leap year becomes 1 March, as the app shows it.
+  return isISODate(d) ? d : addDays(d.slice(0, 8) + "28", 1);
 }
 
 export function daysBetween(a, b) { return Math.round((asDate(b) - asDate(a)) / 86400000); }
