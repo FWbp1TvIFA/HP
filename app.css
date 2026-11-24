@@ -342,3 +342,38 @@ header.top .iconbtn+.iconbtn{margin-left:-4px}
 .wkev{border:0;background:var(--accent);color:var(--on-accent);border-radius:7px;padding:4px 3px;font-size:.64rem;line-height:1.15;display:flex;flex-direction:column;align-items:center;text-align:center;overflow:hidden}
 .wkev span{font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wkev i{font-style:normal;opacity:.85}
+/* learn */
+.tilechar{font-size:26px;line-height:26px;color:var(--accent);font-weight:700}
+.learnhero .lchar{font-size:56px;color:var(--accent);opacity:.9}
+.lchar{font-family:"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",sans-serif;font-size:1.6rem;font-weight:600;line-height:1.1}
+.lchar.huge{font-size:5rem}
+.lchar.big{font-size:3.5rem}
+.lbig{font-family:var(--display);font-size:1.5rem;font-weight:700;letter-spacing:-.01em}
+.decks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.deck{border:0;background:var(--sunk);border-radius:14px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:2px;color:var(--fg)}
+.deck .dem{font-size:1.6rem}
+.deck .bar{margin-top:6px}
+.flash{border:0;background:var(--surface);box-shadow:var(--shadow);border-radius:22px;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--fg);width:100%}
+.flash.on{background:var(--accent-soft)}
+.flash .py{font-size:1.6rem;font-weight:600;color:var(--accent)}
+.flash .en{font-size:1.2rem}
+.qask{display:flex;align-items:center;justify-content:center;gap:12px;min-height:120px}
+.qem{font-size:5rem}
+.bigsay{border:0;width:110px;height:110px;border-radius:50%;background:var(--accent);color:#fff;font-size:3rem;box-shadow:var(--shadow)}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.opt{border:2px solid transparent;background:var(--surface);box-shadow:var(--shadow);border-radius:16px;min-height:84px;padding:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:1.05rem;color:var(--fg)}
+.opt.right{border-color:var(--good);background:color-mix(in srgb,var(--good) 14%,var(--surface))}
+.opt.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,var(--surface))}
+.opt.dim{opacity:.5}
+.learntile b{font-size:1rem}
+.piano{position:relative;display:flex;height:190px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.piano .wk{flex:1;border:1px solid var(--line);background:#fff;border-radius:0 0 10px 10px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:10px;color:#333;font-weight:700;font-size:.8rem;margin:0 1px}
+.piano .wk:active{background:#e8efe9}
+.piano .wk.hint{background:#fff6d6;box-shadow:inset 0 -6px 0 var(--warn)}
+.piano .bk{position:absolute;top:0;width:8.4%;height:60%;background:#1d1d1f;border:0;border-radius:0 0 7px 7px;z-index:2}
+.piano .bk:active{background:#444}
+.accent{color:var(--accent)}
+.songline{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
+.songline span{font-size:.8rem;padding:3px 7px;border-radius:8px;background:var(--sunk);color:var(--muted);font-weight:600}
+.songline span.done{background:var(--accent-soft);color:var(--accent)}
+.songline span.now{background:var(--warn);color:#fff}

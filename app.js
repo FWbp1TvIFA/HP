@@ -50,8 +50,8 @@ const ICON={
 
 /* ---------- view state ---------- */
 let tab="home", listTab="tasks", listWho="all", moneyMonth=thisMonth(), calDay=TODAY(), calMonth=thisMonth();
-const routes=["home","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities"];
-const parentTab={notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"money",meals:"more",dates:"more",activities:"more"};
+const routes=["home","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities","learn"];
+const parentTab={notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"money",meals:"more",dates:"more",activities:"more",learn:"more"};
 if(routes.includes(location.hash.slice(1)))tab=location.hash.slice(1);
 let authMode="signin", authErr="", busy=false;
 
@@ -112,6 +112,7 @@ function viewHome(){
    <button class="tile" data-go="meals"><span class="label">Dinner tonight</span><b>${dinner?esc(dinner.title):"Not planned"}</b><span>${dinner&&dinner.cook?esc(pname(dinner.cook))+" cooking":"Tap to plan the week"}</span></button>
    ${cds.length?`<button class="tile" data-go="dates"><span class="label">${esc(cdLabel(cds[0]))}</span><b>${esc(cds[0].title)}</b><span>${nice(cds[0].nd)}</span></button>`:`<button class="tile" data-act="addCountdown"><span class="label">Countdown</span><b>Add a date</b><span>Birthdays, trips, holidays</span></button>`}
   </div>
+  <div class="two">${learnTodayCard()}${(()=>{const k=kidId(),nx=sortEv(evRange(t,addDays(t,6)).filter(e=>isRep(e)&&+e.who===k)).filter(e=>e.date>t||!e.time||e.time>=nowT)[0];return nx?`<button class="tile" data-go="activities"><span class="label">${esc(pname(k))}'s next class</span><b>${esc(nx.title)}</b><span>${nice(nx.date)}${nx.time?" · "+tm(nx.time):""}</span></button>`:`<button class="tile" data-go="activities"><span class="label">Activities</span><b>Weekly classes</b><span>Swimming, lessons, sport</span></button>`})()}</div>
   <div class="two">
    <button class="tile" data-go="money"><span class="label">Money left</span><b class="num ${left<0?"neg":""}">${money(left)}</b><span>this month</span></button>
    <button class="tile" data-go="lists" data-list="shopping"><span class="label">Shopping</span><b class="num">${shopLeft} item${shopLeft===1?"":"s"}</b><span>still to buy</span></button>
@@ -227,6 +228,7 @@ function viewMore(){
   const tile=(go,icon,title,sub)=>`<button class="tile" data-go="${go}">${icon}<b>${title}</b><span>${sub}</span></button>`;
   const cards=S().wallet.length+S().myWallet.length;
   return `<div class="tiles">
+   ${tile("learn",'<span class="tilechar">学</span>',"Learn",(()=>{const st=learnStreak(kidId());return st?"🔥 "+st+" day streak":"Chinese and piano for "+esc(pname(kidId()))})())}
    ${tile("activities",ICON.swim,"Activities",(()=>{const n=S().events.filter(isRep).length;return n?n+" weekly class"+(n===1?"":"es")+" and lessons":"Swimming, lessons, sport"})())}
    ${tile("meals",ICON.meal,"Dinner plan",(()=>{const m=mealOn(TODAY());return m?"Tonight: "+esc(m.title):"Plan the week's dinners"})())}
    ${tile("dates",ICON.cake,"Dates",(()=>{const c=countdownsSoon(1)[0];return c?esc(c.title)+" · "+esc(cdLabel(c)):"Birthdays and trips"})())}
@@ -759,6 +761,121 @@ function exportEvent(e){
   setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},4000);
 }
 
+/* ---------- Learn: Chinese practice and a little piano ---------- */
+const ZH_DECKS=[
+ ["hello","Hello & me","👋",[["你好","nǐ hǎo","hello","👋"],["谢谢","xièxie","thank you","🙏"],["再见","zàijiàn","goodbye","👋"],["我","wǒ","I, me","🙋"],["你","nǐ","you","👉"],["是","shì","is, am, are","✅"],["不","bù","no, not","🚫"],["好","hǎo","good","👍"],["对不起","duìbuqǐ","sorry","😔"],["老师","lǎoshī","teacher","🧑‍🏫"]]],
+ ["numbers","Numbers 1–10","🔢",[["一","yī","one","1️⃣"],["二","èr","two","2️⃣"],["三","sān","three","3️⃣"],["四","sì","four","4️⃣"],["五","wǔ","five","5️⃣"],["六","liù","six","6️⃣"],["七","qī","seven","7️⃣"],["八","bā","eight","8️⃣"],["九","jiǔ","nine","9️⃣"],["十","shí","ten","🔟"]]],
+ ["family","Family","👨‍👩‍👦",[["爸爸","bàba","dad","👨"],["妈妈","māma","mum","👩"],["哥哥","gēge","older brother","👦"],["姐姐","jiějie","older sister","👧"],["弟弟","dìdi","younger brother","👶"],["妹妹","mèimei","younger sister","👧"],["爷爷","yéye","grandpa","👴"],["奶奶","nǎinai","grandma","👵"],["家","jiā","home, family","🏠"],["朋友","péngyou","friend","🤝"]]],
+ ["colours","Colours","🎨",[["红色","hóngsè","red","🔴"],["蓝色","lánsè","blue","🔵"],["绿色","lǜsè","green","🟢"],["黄色","huángsè","yellow","🟡"],["白色","báisè","white","⚪"],["黑色","hēisè","black","⚫"],["橙色","chéngsè","orange","🟠"],["紫色","zǐsè","purple","🟣"]]],
+ ["animals","Animals","🐼",[["猫","māo","cat","🐱"],["狗","gǒu","dog","🐶"],["鱼","yú","fish","🐟"],["鸟","niǎo","bird","🐦"],["马","mǎ","horse","🐴"],["牛","niú","cow","🐮"],["猪","zhū","pig","🐷"],["兔子","tùzi","rabbit","🐰"],["熊猫","xióngmāo","panda","🐼"],["老虎","lǎohǔ","tiger","🐯"]]],
+ ["food","Food & drink","🥟",[["水","shuǐ","water","💧"],["米饭","mǐfàn","rice","🍚"],["面条","miàntiáo","noodles","🍜"],["苹果","píngguǒ","apple","🍎"],["香蕉","xiāngjiāo","banana","🍌"],["牛奶","niúnǎi","milk","🥛"],["鸡蛋","jīdàn","egg","🥚"],["饺子","jiǎozi","dumplings","🥟"],["茶","chá","tea","🍵"],["蛋糕","dàngāo","cake","🍰"]]],
+ ["body","My body","🙂",[["头","tóu","head","🙂"],["眼睛","yǎnjing","eyes","👀"],["耳朵","ěrduo","ears","👂"],["鼻子","bízi","nose","👃"],["嘴","zuǐ","mouth","👄"],["手","shǒu","hand","✋"],["脚","jiǎo","foot","🦶"]]],
+ ["everyday","Everyday words","🏫",[["学校","xuéxiào","school","🏫"],["书","shū","book","📖"],["大","dà","big","🐘"],["小","xiǎo","small","🐭"],["喜欢","xǐhuan","to like","❤️"],["吃","chī","to eat","🍽️"],["喝","hē","to drink","🥤"],["看","kàn","to look, watch","👀"],["游泳","yóuyǒng","to swim","🏊"],["今天","jīntiān","today","📅"],["明天","míngtiān","tomorrow","🌅"],["太阳","tàiyáng","sun","☀️"],["月亮","yuèliang","moon","🌙"]]]
+];
+const ZH_ALL=ZH_DECKS.flatMap(([k,,,w])=>w.map(x=>({zh:x[0],py:x[1],en:x[2],em:x[3],deck:k})));
+let learnTab="chinese", lz=null, lzDeck=null, pianoLabels="letters", pianoGame=null;
+const learnerId=()=>{const v=+ST._localPref("learner");return people().some(p=>p.id===v)?v:(meId()===kidId()?meId():kidId())};
+const learnDoc=id=>S().learn.find(x=>x.id===String(id))||{boxes:{},streak:0,best:0,last:"",total:0,decks:{}};
+function learnStreak(id){const d=learnDoc(id);if(!d.last)return 0;return d.last===TODAY()||d.last===addDays(TODAY(),-1)?d.streak||0:0}
+function speakZh(t){try{const u=new SpeechSynthesisUtterance(t);u.lang="zh-CN";u.rate=.75;const v=speechSynthesis.getVoices().find(x=>/^zh(-|_)CN/i.test(x.lang))||speechSynthesis.getVoices().find(x=>/^zh/i.test(x.lang));if(v)u.voice=v;speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){toast("This phone can't read Chinese aloud")}}
+let actx=null;
+function tone(freq,dur,type){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();actx.resume&&actx.resume();const o=actx.createOscillator(),g=actx.createGain(),t=actx.currentTime;o.type=type||"triangle";o.frequency.value=freq;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(.35,t+.015);g.gain.exponentialRampToValueAtTime(0.0001,t+(dur||.6));o.connect(g).connect(actx.destination);o.start(t);o.stop(t+(dur||.6)+.05)}catch(e){}}
+const ding=()=>{tone(880,.18,"sine");setTimeout(()=>tone(1318.5,.3,"sine"),120)};
+const bonk=()=>tone(196,.25,"square");
+const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+function pickWords(deck,n){
+  const box=learnDoc(learnerId()).boxes||{},di=w=>ZH_DECKS.findIndex(x=>x[0]===w.deck);const pool=deck?ZH_ALL.filter(w=>w.deck===deck):ZH_ALL;
+  return shuffle(pool).sort((a,b)=>((box[a.zh]||0)-(box[b.zh]||0))||(deck?0:di(a)-di(b))).slice(0,n);
+}
+function startLearn(mode,deck){
+  lzDeck=deck||null;const words=pickWords(deck,mode==="cards"?Math.min(12,ZH_ALL.length):10);
+  const qs=words.map((w,i)=>{const kind=mode==="cards"?"card":["meaning","listen","pick"][i%3];const others=shuffle(ZH_ALL.filter(x=>x.zh!==w.zh&&x.en!==w.en)).slice(0,3);return {w,kind,opts:shuffle([w,...others])}});
+  lz={mode,qs,i:0,right:0,flip:false,answered:null,missed:[]};render();
+  if(qs[0]&&qs[0].kind==="listen")setTimeout(()=>speakZh(qs[0].w.zh),300);
+}
+function learnSave(){
+  const id=learnerId(),d=learnDoc(id),t=TODAY(),boxes={...(d.boxes||{})};
+  lz.qs.forEach(q=>{const ok=!lz.missed.includes(q.w.zh);boxes[q.w.zh]=ok?Math.min(5,(boxes[q.w.zh]||0)+1):0});
+  const streak=d.last===t?(d.streak||1):d.last===addDays(t,-1)?(d.streak||0)+1:1;
+  const decks={...(d.decks||{})};if(lzDeck)decks[lzDeck]=Math.max(decks[lzDeck]||0,lz.right);
+  ST.put("learn",String(id),{boxes,streak,best:Math.max(d.best||0,streak),last:t,total:(d.total||0)+lz.qs.length,decks,who:id,updated:Date.now()});
+  const pts=Math.max(1,Math.round(lz.right/2)),sid="learn-"+id+"-"+t,prev=S().stars.find(x=>x.id===sid);
+  ST.put("stars",sid,{who:id,pts:(prev?.pts||0)+pts,date:t,title:"Chinese practice"});
+  return {pts,streak};
+}
+function learnAnswer(i){
+  const q=lz.qs[lz.i];if(lz.answered!==null)return;const ok=q.opts[i].zh===q.w.zh;lz.answered=i;
+  if(ok){lz.right++;ding()}else{lz.missed.push(q.w.zh);bonk()}
+  speakZh(q.w.zh);render();
+}
+function learnNext(knew){
+  const q=lz.qs[lz.i];
+  if(lz.mode==="cards"){if(knew)lz.right++;else lz.missed.push(q.w.zh)}
+  lz.i++;lz.flip=false;lz.answered=null;
+  if(lz.i>=lz.qs.length){lz.done=learnSave()}
+  else if(lz.qs[lz.i].kind==="listen")setTimeout(()=>speakZh(lz.qs[lz.i].w.zh),250);
+  render();
+}
+function viewLearn(){
+  const seg=`<div class="seg">${[["chinese","中文 Chinese"],["piano","🎹 Piano"]].map(([k,n])=>`<button class="${learnTab===k?"on":""}" data-act="learnTab" data-k="${k}">${n}</button>`).join("")}</div>`;
+  if(learnTab==="piano")return `${backBar}${seg}${viewPiano()}`;
+  if(lz)return `${backBar}${lessonView()}`;
+  const id=learnerId(),d=learnDoc(id),st=learnStreak(id),box=d.boxes||{},known=Object.values(box).filter(v=>v>=2).length,did=d.last===TODAY();
+  const who=people().length>1?`<div class="chips">${people().map(p=>`<button class="chip ${p.id===id?"on":""}" data-act="learner" data-k="${p.id}">${esc(p.name)}</button>`).join("")}</div>`:"";
+  return `${backBar}${seg}${who}
+  <section class="card learnhero"><div class="row between"><div><div class="label">${esc(pname(id))}'s Chinese</div><div class="lbig">${st?"🔥 "+st+" day"+(st===1?"":"s"):"Start a streak"}</div><div class="sub">${did?"Practised today. Well done!":"A few minutes a day keeps the streak going."} ${known} of ${ZH_ALL.length} words learnt.</div></div><div class="lchar">学</div></div>
+   <div class="two" style="margin-top:12px"><button class="primary" data-act="learnGo" data-k="quiz">Today's quiz</button><button class="ghost" data-act="learnGo" data-k="cards">Flashcards</button></div></section>
+  <section class="card"><h2>Pick a topic</h2><div class="decks">${ZH_DECKS.map(([k,n,em,w])=>{const got=w.filter(x=>(box[x[0]]||0)>=2).length;return `<button class="deck" data-act="learnDeck" data-k="${k}"><span class="dem">${em}</span><b>${esc(n)}</b><span class="sub">${got}/${w.length} learnt</span><div class="bar"><i style="width:${got/w.length*100}%"></i></div></button>`}).join("")}</div></section>
+  <section class="card stack" style="gap:6px"><h2>Lessons</h2><div class="sub">Chinese lessons and practice times live in Activities, with a button that opens the lesson website.</div><button class="ghost" data-go="activities">Open Activities</button></section>
+  <p class="sub" style="text-align:center">Words are read aloud by the phone's own Chinese voice. Nothing is sent anywhere.</p>`;
+}
+function lessonView(){
+  if(lz.done){const pct=Math.round(lz.right/lz.qs.length*100);return `<section class="card stack lessondone" style="gap:12px;text-align:center;align-items:center"><div class="lchar big">${pct>=80?"🏆":pct>=50?"⭐":"💪"}</div><h2>${pct>=80?"Amazing!":pct>=50?"Good work!":"Nice try!"}</h2>
+   <div class="lbig">${lz.right} / ${lz.qs.length}</div><div class="sub">★ ${lz.done.pts} star${lz.done.pts===1?"":"s"} for ${esc(pname(learnerId()))} · 🔥 ${lz.done.streak} day streak</div>
+   ${lz.missed.length?`<div class="sub">Practise these again: ${lz.missed.map(z=>{const w=ZH_ALL.find(x=>x.zh===z);return `<button class="chip" data-act="say" data-k="${esc(z)}">${esc(z)} ${esc(w.en)}</button>`}).join(" ")}</div>`:""}
+   <div class="two" style="width:100%"><button class="ghost" data-act="learnQuit">Finish</button><button class="primary" data-act="learnGo" data-k="${lz.mode}" data-d="${lzDeck||""}">Go again</button></div></section>`}
+  const q=lz.qs[lz.i],w=q.w,prog=`<div class="row between"><button class="link" data-act="learnQuit">✕ Stop</button><span class="sub">${lz.i+1} of ${lz.qs.length}</span></div><div class="bar"><i style="width:${lz.i/lz.qs.length*100}%"></i></div>`;
+  if(q.kind==="card")return `${prog}<button class="flash ${lz.flip?"on":""}" data-act="flip"><span class="lchar huge">${esc(w.zh)}</span>${lz.flip?`<span class="py">${esc(w.py)}</span><span class="en">${w.em} ${esc(w.en)}</span>`:`<span class="sub">Tap to turn over</span>`}</button>
+   <button class="ghost" data-act="say" data-k="${esc(w.zh)}">🔊 Hear it</button>
+   ${lz.flip?`<div class="two"><button class="ghost" data-act="cardNext" data-k="0">Still learning</button><button class="primary" data-act="cardNext" data-k="1">I knew it!</button></div>`:""}`;
+  const a=lz.answered,ask=q.kind==="meaning"?`<div class="qask"><span class="lchar huge">${esc(w.zh)}</span><button class="iconbtn" data-act="say" data-k="${esc(w.zh)}" aria-label="Hear it">🔊</button></div><div class="sub" style="text-align:center">What does it mean?</div>`
+   :q.kind==="listen"?`<div class="qask"><button class="bigsay" data-act="say" data-k="${esc(w.zh)}">🔊</button></div><div class="sub" style="text-align:center">Listen. Which one did you hear?</div>`
+   :`<div class="qask"><span class="qem">${w.em}</span></div><div class="sub" style="text-align:center">Which one means “${esc(w.en)}”?</div>`;
+  const label=o=>q.kind==="meaning"?`${o.em} ${esc(o.en)}`:`<span class="lchar">${esc(o.zh)}</span>${a!==null?`<span class="sub">${esc(o.py)}</span>`:""}`;
+  return `${prog}<section class="card stack" style="gap:10px">${ask}</section>
+   <div class="opts">${q.opts.map((o,i)=>`<button class="opt ${a!==null?(o.zh===w.zh?"right":i===a?"wrong":"dim"):""}" data-act="learnAns" data-k="${i}">${label(o)}</button>`).join("")}</div>
+   ${a!==null?`<section class="card row" style="gap:12px"><span class="lchar">${esc(w.zh)}</span><div class="grow"><div class="t">${esc(w.py)}</div><div class="sub">${w.em} ${esc(w.en)}</div></div><button class="primary" data-act="learnNext">Next</button></section>`:""}`;
+}
+/* piano: one octave and a bit, labels, a find-the-note game and a song to follow */
+const NOTES=[["C",261.63],["C#",277.18],["D",293.66],["D#",311.13],["E",329.63],["F",349.23],["F#",369.99],["G",392],["G#",415.3],["A",440],["A#",466.16],["B",493.88],["C2",523.25]];
+const SOLFA={C:"Do",D:"Re",E:"Mi",F:"Fa",G:"Sol",A:"La",B:"Ti",C2:"Do"};
+const SONG=["C","C","G","G","A","A","G","F","F","E","E","D","D","C"];
+const nlabel=n=>pianoLabels==="solfa"?SOLFA[n]||"":n.replace("2","");
+function viewPiano(){
+  const whites=NOTES.filter(n=>!n[0].includes("#")),g=pianoGame;
+  const target=g&&g.kind==="find"?g.target:g&&g.kind==="song"?SONG[g.i]:null;
+  const keys=`<div class="piano">${whites.map(([n])=>`<button class="wk ${target===n&&g.kind==="song"?"hint":""}" data-act="pkey" data-k="${n}"><span>${pianoLabels==="none"?"":nlabel(n)}</span></button>`).join("")}${NOTES.filter(n=>n[0].includes("#")).map(([n])=>{const idx=whites.findIndex(w=>w[0]===n[0]);return `<button class="bk" style="left:calc(${(idx+1)/whites.length*100}% - 4.2%)" data-act="pkey" data-k="${n}"></button>`}).join("")}</div>`;
+  const status=!g?`<div class="sub">Tap the keys to play. Pick a game below.</div>`
+   :g.kind==="find"?`<div class="lbig" style="text-align:center">Find <b class="accent">${nlabel(g.target)}</b></div><div class="sub" style="text-align:center">Score ${g.score} · ${g.msg||"Tap the right key"}</div>`
+   :g.i>=SONG.length?`<div class="lbig" style="text-align:center">🎉 You played the whole tune!</div>`:`<div class="sub" style="text-align:center">Twinkle, Twinkle, Little Star · note ${g.i+1} of ${SONG.length}. Play the glowing key.</div><div class="songline">${SONG.map((n,i)=>`<span class="${i<g.i?"done":i===g.i?"now":""}">${nlabel(n)}</span>`).join("")}</div>`;
+  return `<section class="card stack" style="gap:12px">${status}${keys}
+   <div class="seg">${[["letters","C D E"],["solfa","Do Re Mi"],["none","No labels"]].map(([k,n])=>`<button class="${pianoLabels===k?"on":""}" data-act="plabels" data-k="${k}">${n}</button>`).join("")}</div></section>
+  <div class="two"><button class="primary" data-act="pgame" data-k="find">Find the note</button><button class="ghost" data-act="pgame" data-k="song">Play a tune</button></div>
+  ${g?`<button class="link" data-act="pgame" data-k="">Stop the game</button>`:""}
+  <p class="sub" style="text-align:center">A first step before real lessons: learn where the notes are and play a simple tune.</p>`;
+}
+function pianoKey(n){
+  const f=NOTES.find(x=>x[0]===n);if(f)tone(f[1],.9);const g=pianoGame;if(!g)return;
+  if(g.kind==="find"){if(n===g.target){g.score++;ding();g.msg="Yes! That's "+nlabel(n);const opts=NOTES.filter(x=>!x[0].includes("#")&&x[0]!==n&&x[0]!=="C2").map(x=>x[0]);g.target=opts[Math.floor(Math.random()*opts.length)];if(g.score%5===0)learnPianoStar()}else{g.msg="That's "+(n.includes("#")?"a black key":nlabel(n))+". Try again"}render();return}
+  if(g.kind==="song"&&g.i<SONG.length){if(n===SONG[g.i]){g.i++;if(g.i>=SONG.length){setTimeout(ding,500);learnPianoStar()}render()}}
+}
+function learnPianoStar(){const id=learnerId(),t=TODAY(),sid="learn-"+id+"-"+t,prev=S().stars.find(x=>x.id===sid);ST.put("stars",sid,{who:id,pts:(prev?.pts||0)+1,date:t,title:"Practice"});toast("★ 1 star for "+pname(id))}
+function learnTodayCard(){
+  const k=kidId(),d=learnDoc(k),st=learnStreak(k),did=d.last===TODAY();
+  if(!d.last&&meId()!==k)return `<button class="tile learntile" data-go="learn"><span class="label">${esc(pname(k))}'s Chinese</span><b>学 Start practising</b><span>Flashcards and quizzes read aloud</span></button>`;
+  return `<button class="tile learntile" data-go="learn"><span class="label">${esc(pname(k))}'s Chinese</span><b>${did?"✓ Practised today":"Not practised yet"}</b><span>${st?"🔥 "+st+" day streak":"Tap to start"}</span></button>`;
+}
+
 /* ---------- weekly activities per person ---------- */
 function viewActivities(){
   const reps=S().events.filter(e=>isRep(e)&&(!e.until||e.until>=TODAY()));
@@ -780,7 +897,7 @@ function viewDates(){
 }
 
 /* ---------- render ---------- */
-const TITLES={home:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities"};
+const TITLES={home:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities",learn:"Learn"};
 let rendering=false;
 function render(){
   if(rendering)return;rendering=true;
@@ -797,7 +914,7 @@ function render(){
     $("#title").textContent=TITLES[tab];
     const me=person(meId());
     $("#subtitle").textContent=tab==="home"?(me?"Hello, "+me.name:""):"";
-    $("#view").innerHTML={home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates,activities:viewActivities}[tab]();
+    $("#view").innerHTML={home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn}[tab]();
     const active=parentTab[tab]||tab;
     document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===active));
     if(shopVal&&$("#shopInput"))$("#shopInput").value=shopVal; if(shopFocus&&$("#shopInput"))$("#shopInput").focus();
@@ -1048,6 +1165,19 @@ document.addEventListener("click",e=>{
     case"editMeal":closeSheet();return mealSheet(a.dataset.d);
     case"mealsToShop":return mealsToShop();
     case"addCountdown":return countdownSheet();
+    case"learnTab":learnTab=a.dataset.k;break;
+    case"learner":ST._localPref("learner",a.dataset.k);break;
+    case"learnGo":startLearn(a.dataset.k,a.dataset.d||null);scrollTo(0,0);return;
+    case"learnDeck":{const k=a.dataset.k,box=learnDoc(learnerId()).boxes||{},seen=ZH_ALL.some(w=>w.deck===k&&box[w.zh]!==undefined);startLearn(seen?"quiz":"cards",k);scrollTo(0,0);return}
+    case"flip":lz.flip=!lz.flip;if(lz.flip)speakZh(lz.qs[lz.i].w.zh);break;
+    case"say":speakZh(a.dataset.k);return;
+    case"cardNext":return learnNext(a.dataset.k==="1");
+    case"learnAns":return learnAnswer(+a.dataset.k);
+    case"learnNext":return learnNext();
+    case"learnQuit":lz=null;break;
+    case"pkey":return pianoKey(a.dataset.k);
+    case"plabels":pianoLabels=a.dataset.k;break;
+    case"pgame":pianoGame=a.dataset.k==="find"?{kind:"find",target:"C",score:0}:a.dataset.k==="song"?{kind:"song",i:0}:null;break;
     case"addActivity":return addSheet("event",{who:+a.dataset.k,days:[dow(TODAY())]});
     case"editCountdown":closeSheet();return countdownSheet(id);
     case"reAdd":addShopItem(a.dataset.k);toast(a.dataset.k+" added");return;
