@@ -24,7 +24,8 @@ const dot=id=>`<span class="dot who-${colorIdx(id)}" aria-hidden="true">${id==0?
 function money(n,sign){const v=Math.abs(n).toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2});return (sign&&n<0?"−":sign&&n>0?"+":"")+(SET().currency||"$")+v}
 function nice(d){const t=TODAY();if(d===t)return"Today";if(d===addDays(t,1))return"Tomorrow";if(d===addDays(t,-1))return"Yesterday";return new Date(d+"T12:00:00").toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"})}
 function ago(ts){const s=Math.round((Date.now()-ts)/1000);if(s<60)return"just now";if(s<3600)return Math.round(s/60)+" min ago";if(s<86400)return Math.round(s/3600)+" h ago";return new Date(ts).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}
-function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2000)}
+function toast(m,act,fn){const t=$("#toast");t.textContent=m;if(act){const b=document.createElement("button");b.className="tact";b.textContent=act;b.onclick=ev=>{ev.stopPropagation();t.hidden=true;fn()};t.append(b)}t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,act?5000:2000)}
+function delUndo(col,id,msg){const r=(S()[col]||[]).find(x=>x.id===id);ST.del(col,id);if(!r){toast(msg||"Deleted");return}const {id:_i,...rest}=r;toast(msg||"Deleted","Undo",()=>{ST.put(col,id,rest);toast("Restored")})}
 const ICON={
  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
  tick:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>',
@@ -122,22 +123,24 @@ function viewCalendar(){
     const d=addDays(start,i), dt=new Date(d+"T12:00:00");
     const evs=S().events.filter(e=>e.date===d);
     const hw=S().homework.some(h=>h.due===d&&!h.done);
+    const special=S().countdowns.some(c=>c.yearly?c.date.slice(5)===d.slice(5):c.date===d)||S().bills.some(b=>b.next===d);
     const whos=[...new Set(evs.map(e=>+e.who))].slice(0,3);
     const dots=whos.map(w=>`<i class="who-${colorIdx(w)}"></i>`).join("")+(hw&&whos.length<3?`<i style="background:var(--muted)"></i>`:"");
     const cls=["mday",monthKey(d)!==calMonth?"out":"",d===TODAY()?"today":"",d===calDay?"sel":""].join(" ");
-    return `<button class="${cls}" data-act="day" data-d="${d}" aria-label="${dt.toDateString()}${evs.length?", "+evs.length+" events":""}"><span class="n">${dt.getDate()}</span><span class="dots">${dots}</span></button>`;
+    return `<button class="${cls}" data-act="day" data-d="${d}" aria-label="${dt.toDateString()}${evs.length?", "+evs.length+" events":""}"><span class="n">${dt.getDate()}</span><span class="dots">${dots}${special?`<i class="sp"></i>`:""}</span></button>`;
   }).join("");
   const ev=sortEv(S().events.filter(e=>e.date===calDay));
   const hwDay=S().homework.filter(h=>h.due===calDay);
   const taskDay=S().tasks.filter(t=>t.due===calDay);
   const dayLabel=new Date(calDay+"T12:00:00").toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"});
-  const any=ev.length||hwDay.length||taskDay.length;
+  const cdDay=S().countdowns.filter(c=>c.yearly?c.date.slice(5)===calDay.slice(5):c.date===calDay),billDay=S().bills.filter(b=>b.next===calDay),dinDay=mealOn(calDay);
+  const any=ev.length||hwDay.length||taskDay.length||cdDay.length||billDay.length||dinDay;
   return `<section class="card">
    <div class="mhead"><h2>${label}</h2><div class="navbtns"><button class="link" data-act="calToday">Today</button>
     <button class="iconbtn" data-act="cPrev" aria-label="Previous month">‹</button><button class="iconbtn" data-act="cNext" aria-label="Next month">›</button></div></div>
    <div class="wd">${wd.map(w=>`<span>${w}</span>`).join("")}</div><div class="mgrid">${grid}</div></section>
   <section class="card"><div class="row between"><h2>${dayLabel}</h2><button class="link" data-act="addEventDay">+ Event</button></div>
-   <div class="list" style="margin-top:6px">${ev.map(e=>eventItem(e)).join("")}${hwDay.map(hwItem).join("")}${taskDay.map(taskItem).join("")}${any?"":`<div class="empty">Nothing planned.</div>`}</div></section>`;
+   <div class="list" style="margin-top:6px">${ev.map(e=>eventItem(e)).join("")}${hwDay.map(hwItem).join("")}${taskDay.map(taskItem).join("")}${cdDay.map(c=>`<button class="item cdrow" data-act="editCountdown" data-id="${c.id}"><span class="time">🎉</span><div class="grow"><div class="t">${esc(c.title)}</div><div class="m">${c.yearly&&c.kind==="birthday"&&+c.date.slice(0,4)>1900?"Turns "+(+calDay.slice(0,4)-+c.date.slice(0,4)):esc({birthday:"Birthday",anniversary:"Anniversary",trip:"Trip",other:"Date"}[c.kind]||"")}</div></div></button>`).join("")}${billDay.map(billRow).join("")}${dinDay?`<button class="item mealrow" data-act="editMeal" data-d="${calDay}"><span class="time">Dinner</span><div class="grow"><div class="t">${esc(dinDay.title)}</div>${dinDay.cook?`<div class="m">${esc(pname(dinDay.cook))} cooking</div>`:""}</div></button>`:""}${any?"":`<div class="empty">Nothing planned.</div>`}</div></section>`;
 }
 
 /* ---------- Lists ---------- */
@@ -183,6 +186,7 @@ function viewMoney(){
   return `<div class="row between"><button class="iconbtn" data-act="mPrev" aria-label="Previous month">‹</button><h2>${label}</h2><button class="iconbtn" data-act="mNext" aria-label="Next month">›</button></div>
   <section class="card"><div class="trio"><div><div class="label">In</div><div class="v num pos">${money(m.inc)}</div></div><div><div class="label">Spent</div><div class="v num">${money(m.out)}</div></div><div><div class="label">Left</div><div class="v num ${m.inc-m.out<0?"neg":""}">${money(m.inc-m.out)}</div></div></div>
    <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:14px">${byWho.map(x=>`<span class="row" style="gap:6px">${dot(x.p.id)}<span class="sub num">${esc(x.p.name)} spent ${money(x.v)}</span></span>`).join("")}</div></section>
+  ${trendCard()}
   ${billsCard()}
   <section class="card"><div class="row between"><h2>Budgets</h2><button class="link" data-act="budgets">Edit</button></div>
    <div class="stack" style="gap:12px;margin-top:10px">${cats.length?cats.map(c=>{const sp=m.byCat[c]||0,b=+budgets[c]||0,pct=b?Math.min(100,sp/b*100):100,over=b&&sp>b;
@@ -190,6 +194,14 @@ function viewMoney(){
   <section class="card"><h2>Entries</h2><div class="list" style="margin-top:6px">${tx.length?tx.map(txItem).join(""):`<div class="empty">No entries this month. Tap + to add one.</div>`}</div></section>`;
 }
 
+function trendCard(){
+  const months=[...Array(6)].map((_,i)=>{const d=new Date(moneyMonth+"-15T12:00:00");d.setMonth(d.getMonth()-5+i);return iso(d).slice(0,7)});
+  const vals=months.map(m=>({m,...monthStats(m)}));if(!vals.some(v=>v.out||v.inc))return"";
+  const max=Math.max(1,...vals.map(v=>Math.max(v.out,v.inc)));const past=vals.slice(0,5).filter(v=>v.out>0);const avg=past.length?past.reduce((x,v)=>x+v.out,0)/past.length:0;
+  return `<section class="card"><div class="row between"><h2>Last 6 months</h2>${avg?`<span class="sub">Usually spend ${money(Math.round(avg))}</span>`:""}</div>
+   <div class="trend">${vals.map(v=>`<div class="tcol ${v.m===moneyMonth?"cur":""}"><div class="tbars"><i class="tin" style="height:${v.inc/max*100}%"></i><i class="tout" style="height:${v.out/max*100}%"></i></div><span>${new Date(v.m+"-15T12:00:00").toLocaleDateString("en-AU",{month:"short"})}</span></div>`).join("")}</div>
+   <div class="row" style="gap:14px;margin-top:6px"><span class="sub"><i class="lg tin"></i>In</span><span class="sub"><i class="lg tout"></i>Spent</span></div></section>`;
+}
 function billsCard(){
   const list=billsSorted(),total=list.reduce((a,b)=>a+perMonth(b),0),soon=list.slice(0,3);
   return `<section class="card"><div class="row between"><h2>Bills & subscriptions</h2><button class="link" data-go="bills">${list.length?"See all":"Set up"}</button></div>
@@ -619,7 +631,7 @@ function billSheet(id){
     sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const amt=parseFloat(v("b_amt"));if(!v("b_name").trim()||!(amt>=0))return;
       const rec={name:v("b_name").trim(),amount:Math.round(amt*100)/100,every:v("b_every"),next:v("b_next")||TODAY(),cat:v("b_cat"),who:+v("b_who"),auto:sh.querySelector("#b_auto").checked};
       if(b){ST.patch("bills",b.id,rec);toast("Bill updated")}else{ST.add("bills",rec);toast("Bill added")}closeSheet();render()};
-    const d=sh.querySelector("#b_del");if(d)d.onclick=()=>{if(d.dataset.arm){ST.del("bills",b.id);closeSheet();toast("Deleted");render()}else{d.dataset.arm=1;d.textContent="Tap again to delete"}};
+    const d=sh.querySelector("#b_del");if(d)d.onclick=()=>{if(d.dataset.arm){closeSheet();delUndo("bills",b.id);render()}else{d.dataset.arm=1;d.textContent="Tap again to delete"}};
   });
 }
 function viewBills(){
@@ -678,7 +690,7 @@ function countdownSheet(id){
     const k=sh.querySelector("#c_k"),y=sh.querySelector("#c_y");k.onchange=()=>{y.checked=k.value==="birthday"||k.value==="anniversary"};
     sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const rec={title:sh.querySelector("#c_t").value.trim(),date:sh.querySelector("#c_d").value,kind:k.value,yearly:y.checked};if(!rec.title||!rec.date)return;
       if(c)ST.patch("countdowns",c.id,rec);else ST.add("countdowns",rec);closeSheet();toast("Saved");render()};
-    const d=sh.querySelector("#c_del");if(d)d.onclick=()=>{ST.del("countdowns",c.id);closeSheet();render()};
+    const d=sh.querySelector("#c_del");if(d)d.onclick=()=>{closeSheet();delUndo("countdowns",c.id);render()};
   });
 }
 
@@ -828,7 +840,7 @@ function addSheet(kind,preset,edit){
       set("f_title",edit.title);set("f_who",edit.who);set("f_due",edit.due);set("f_time",edit.time||"");set("f_rep",kind==="event"?"0":(edit.repeat||"none"));set("f_subj",edit.subject);set("f_date",edit.date);set("f_place",edit.place||"");set("f_pts",String(+edit.points||0));
       if(kind==="event"){const r=sh.querySelector("#f_rep");r&&r.closest(".field").remove();const b=document.createElement("button");b.type="button";b.className="ghost";b.textContent="Add to iPhone Calendar";b.onclick=()=>{exportEvent(edit);toast("Opening Calendar…")};sh.querySelector("#f_del").before(b)}
       const col={task:"tasks",homework:"homework",event:"events"}[kind],d=sh.querySelector("#f_del");
-      d.onclick=()=>{if(d.dataset.arm){ST.del(col,edit.id);closeSheet();toast("Deleted");render()}else{d.dataset.arm=1;d.textContent="Tap again to delete"}};}
+      d.onclick=()=>{if(d.dataset.arm){closeSheet();delUndo(col,edit.id);render()}else{d.dataset.arm=1;d.textContent="Tap again to delete"}};}
     let type="out";
     sh.querySelectorAll("#f_type button").forEach(b=>b.onclick=()=>{type=b.dataset.t;sh.querySelectorAll("#f_type button").forEach(x=>x.classList.toggle("on",x===b));sh.querySelector("#f_cat").value=type==="in"?"Salary":cats[0]});
     const first=sh.querySelector("#f_subj,#f_title,#f_amt");if(!edit&&first)first.focus();
@@ -858,7 +870,7 @@ function noteSheet(id){
    <label class="checkrow" for="n_pin"><input type="checkbox" id="n_pin" ${n.pinned?"checked":""}> Pin to top</label>
    <button class="primary" type="submit">Save</button></form><button class="ghost" id="n_del" type="button">Delete note</button>`,sh=>{
     sh.querySelector("#f").onsubmit=e=>{e.preventDefault();ST.patch("notes",id,{title:sh.querySelector("#n_title").value.trim(),body:sh.querySelector("#n_body").value,pinned:sh.querySelector("#n_pin").checked,updated:Date.now()});closeSheet();toast("Note saved")};
-    const d=sh.querySelector("#n_del");d.onclick=()=>{if(d.dataset.arm){ST.del("notes",id);closeSheet();toast("Note deleted")}else{d.dataset.arm=1;d.textContent="Tap again to delete";d.style.color="var(--bad)"}};
+    const d=sh.querySelector("#n_del");d.onclick=()=>{if(d.dataset.arm){closeSheet();delUndo("notes",id,"Note deleted")}else{d.dataset.arm=1;d.textContent="Tap again to delete";d.style.color="var(--bad)"}};
   });
 }
 function budgetSheet(){
@@ -1003,11 +1015,11 @@ document.addEventListener("click",e=>{
     case"twoStep":return twoStepSheet();
     case"mfaCancel":ST.cancelMfa();authErr="";return render();
     case"edit":{closeSheet();const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event"}[col],null,r);return}
-    case"swipeDel":{const w=a.closest(".swipe");ST.del(w.dataset.col,w.dataset.id);toast("Deleted");return}
+    case"swipeDel":{const w=a.closest(".swipe");delUndo(w.dataset.col,w.dataset.id);return}
     case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was});if(was)takeStars(snap);if(!was){giveStars(snap);toast(+snap.points>0?`Done! ★ ${+snap.points} for ${pname(snap.who)}`:"Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}
     case"toggleHw":return void flip("homework","Homework finished!");
     case"toggleShop":return void flip("shopping");
-    case"clearDone":ST.delMany("tasks",S().tasks.filter(x=>x.done).map(x=>x.id));return;
+    case"clearDone":{const gone=S().tasks.filter(x=>x.done);ST.delMany("tasks",gone.map(x=>x.id));toast(gone.length+" cleared","Undo",()=>gone.forEach(({id:i,...r})=>ST.put("tasks",i,r)));return}
     case"clearHw":ST.delMany("homework",S().homework.filter(x=>x.done).map(x=>x.id));return;
     case"newWeek":ST.delMany("shopping",S().shopping.filter(x=>x.done).map(x=>x.id));toast("Ready for a new week");return;
     case"who":listWho=a.dataset.k;break;
