@@ -121,6 +121,7 @@
       });
     }).then(describe).then(function (d) {
       if (!d || !d.p256dh || !d.auth) throw fail("failed", "no-keys");
+      if (!d.key) d.key = wanted; // this browser does not say which key a subscription uses; it was just made (or kept) with this one
       return d;
     }).catch(function (e) {
       if (e && e.hhPush === true) throw e; // one of ours (a DOMException has a numeric .code of its own)

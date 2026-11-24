@@ -1229,11 +1229,14 @@ function syncAgenda(){
 const deviceTz=()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||"Australia/Brisbane"}catch(e){return"Australia/Brisbane"}};
 function setPrefs(patch){const {id:_i,...cur}=(S().notify.find(x=>x.id==="prefs")||{});ST.put("notify","prefs",{...cur,...patch,updated:Date.now()});agendaDirty=true}
 /* this phone's notification switch */
-let pushState={checked:false,sub:null,busy:false,err:"",why:""};
+let pushState={checked:false,sub:null,busy:false,err:"",why:""},pushSeq=0;
 async function refreshPush(){
   if(!window.HHPush){pushState.checked=true;return}
-  try{pushState.sub=await HHPush.current()}catch(e){pushState.sub=null}
-  pushState.checked=true;
+  const n=++pushSeq;let cur=null;
+  try{cur=await HHPush.current()}catch(e){cur=null}
+  if(cur&&!cur.key&&ST._localPref("pushEp")===cur.id)cur.key=ST._localPref("pushKey")||"";   // this phone's browser does not say which key it used: the app noted it when it was switched on
+  if(n!==pushSeq)return;              // a newer look, or a tap on Turn on or Turn off, finished while this one was still asking the phone: keep that answer
+  pushState.sub=cur;pushState.checked=true;
   const pub=SET().push&&SET().push.pub,s=pushState.sub;
   if(ST.mode==="cloud"&&s&&pub&&s.key===pub&&ST.me.personId){const doc=S().pushSubs.find(x=>x.id===s.id);
     if(!doc||doc.endpoint!==s.endpoint||+doc.who!==meId()||Date.now()-(doc.seen||0)>3*864e5)ST.put("pushSubs",s.id,{who:meId(),endpoint:s.endpoint,p256dh:s.p256dh,auth:s.auth,ua:HHPush.device(),created:(doc&&doc.created)||Date.now(),seen:Date.now()})}
@@ -1243,21 +1246,21 @@ async function turnOnNotifications(){
   if(pushState.busy)return;const sup=window.HHPush?HHPush.support():{ok:false},pub=SET().push&&SET().push.pub;
   pushState.busy=true;pushState.err="";pushState.why="";
   try{
-    if(window.HHPush&&pub&&sup.ok){const s=await HHPush.enable(pub);pushState.sub=s;if(ST.mode==="cloud")ST.put("pushSubs",s.id,{who:meId(),endpoint:s.endpoint,p256dh:s.p256dh,auth:s.auth,ua:HHPush.device(),created:Date.now(),seen:Date.now()});ST._localPref("pushOn","1");toast("Notifications are on for this phone")}
+    if(window.HHPush&&pub&&sup.ok){const s=await HHPush.enable(pub);if(!s.key)s.key=pub;pushSeq++;pushState.sub=s;pushState.checked=true;ST._localPref("pushEp",s.id);ST._localPref("pushKey",s.key);if(ST.mode==="cloud")ST.put("pushSubs",s.id,{who:meId(),endpoint:s.endpoint,p256dh:s.p256dh,auth:s.auth,ua:HHPush.device(),created:Date.now(),seen:Date.now()});ST._localPref("pushOn","1");toast("Notifications are on for this phone")}
     else{const r=("Notification" in window)?await Notification.requestPermission():"denied";if(r==="granted"){ST._localPref("pushOn","1");toast("Notifications are allowed on this phone")}else pushState.err="denied"}
   }catch(e){pushState.err=(e&&typeof e.code==="string"&&e.code)||"failed";pushState.why=String((e&&e.message)||"").replace(/[^\w .:/-]+/g," ").slice(0,60)}
   pushState.busy=false;render();
 }
 async function turnOffNotifications(){
   try{const id=window.HHPush?await HHPush.disable():null;if(id&&ST.mode==="cloud"&&S().pushSubs.some(x=>x.id===id))ST.del("pushSubs",id)}catch(e){}
-  pushState.sub=null;ST._localPref("pushOn","0");toast("Notifications are off for this phone");render();
+  pushSeq++;pushState.sub=null;ST._localPref("pushOn","0");ST._localPref("pushEp","");toast("Notifications are off for this phone");render();
 }
 /* the helper that sends notifications while the app is closed: a spare family login that only the family's own GitHub page uses */
 async function makeNotifier(){
   const cfg=window.HH_FIREBASE_CONFIG,rnd=n=>Array.from(crypto.getRandomValues(new Uint8Array(n)),b=>"abcdefghjkmnpqrstuvwxyz23456789"[b%31]).join("");
   const app2=FB.initializeApp(cfg,"hh-notifier-"+Date.now()),auth2=FB.getAuth(app2);
   if(cfg.emulatorHost)FB.connectAuthEmulator(auth2,"http://"+cfg.emulatorHost+":9099",{disableWarnings:true});
-  const email="notifier-"+rnd(12)+"@"+(String(cfg.authDomain||"").replace(/[^a-z0-9.-]/gi,"")||"example.com"),pw=rnd(30);
+  const email="notifier-"+rnd(12)+"@"+(String(cfg.authDomain||"").replace(/[^a-z0-9.-]/gi,"")||"example.com"),pw=rnd(28)+"-Qx7";
   const keys=await HHPush.makeKeys();
   const cred=await FB.createUserWithEmailAndPassword(auth2,email,pw),uid=cred.user.uid,old=SET().push&&SET().push.uid;
   const members=(SET().members||[]).filter(u=>u!==old).concat(uid);
