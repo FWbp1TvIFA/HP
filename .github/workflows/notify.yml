@@ -1,0 +1,69 @@
+# Happy Home: sends the family's reminders as phone notifications.
+# Runs every 10 minutes, stays on for about 9 minutes so reminders go out on time, and never fails
+# (a failed run would make GitHub email the repository owner).
+name: Happy Home notifications
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write   # only used by the last step, which keeps this schedule switched on
+
+concurrency:
+  group: hh-notify
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    continue-on-error: true
+    steps:
+      - name: Is it set up?
+        id: setup
+        continue-on-error: true
+        env:
+          HH_NOTIFIER: ${{ secrets.HH_NOTIFIER }}
+        run: |
+          if [ -n "$HH_NOTIFIER" ]; then
+            echo "ready=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "Phone notifications are not set up yet (no HH_NOTIFIER secret). Nothing to do."
+          fi
+
+      # Only two files are needed, so fetch just those (this repository is public) at the exact commit of this run.
+      - name: Get the sender
+        if: steps.setup.outputs.ready == 'yes' || github.event_name == 'workflow_dispatch'   # a manual run is also a self-check
+        continue-on-error: true
+        run: |
+          mkdir -p notify
+          base="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA"
+          curl -fsSL --retry 3 --max-time 30 "$base/notify/send.mjs" -o notify/send.mjs
+          curl -fsSL --retry 3 --max-time 30 "$base/firebase-config.js" -o firebase-config.js
+
+      - name: Send what is due
+        if: steps.setup.outputs.ready == 'yes' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        env:
+          HH_NOTIFIER: ${{ secrets.HH_NOTIFIER }}
+          HH_PUSH_HOSTS: ${{ vars.HH_PUSH_HOSTS }}   # optional repository variable: extra push-service hosts
+          HH_APP_URL: ${{ vars.HH_APP_URL }}         # optional repository variable: the app's address if not <owner>.github.io/<repo>/
+        run: |
+          echo "node $(node --version)"
+          node notify/send.mjs || true
+
+      # GitHub switches scheduled workflows off after 60 days without repository activity.
+      # About once a day, ask it to keep this one on. Best effort: errors are ignored.
+      - name: Keep the schedule switched on
+        if: steps.setup.outputs.ready == 'yes'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(date -u +%H)" = "17" ] && [ "$(date -u +%M)" -lt 30 ]; then
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/notify.yml/enable" >/dev/null 2>&1 || true
+          fi
+          exit 0
