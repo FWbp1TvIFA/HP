@@ -15,13 +15,16 @@ const SCOPES = [SCOPE, "offline_access"];
 const CLAUDE_CIMD = /^https:\/\/claude\.ai\/oauth\/[A-Za-z0-9_\-\/]{1,120}$/;
 const isClaudeCallback = uri => { try { const u = new URL(uri); return u.protocol === "https:" && !u.port && !u.search && !u.hash && (u.hostname === "claude.ai" || u.hostname === "claude.com") && u.pathname === "/api/mcp/auth_callback"; } catch { return false; } };
 const isLoopback = uri => /^http:/i.test(uri);
+// Claude Code's published identity returns to http://localhost:<port>/callback (or 127.0.0.1).
+const CLAUDE_CODE_CIMD = "https://claude.ai/oauth/claude-code-client-metadata";
+const isClaudeCodeCallback = uri => { try { const u = new URL(uri); return u.protocol === "http:" && (u.hostname === "localhost" || u.hostname === "127.0.0.1") && u.pathname === "/callback" && !u.search && !u.hash && !u.username && !u.password; } catch { return false; } };
 
 /** The addresses this server answers MCP on. A token is only issued for one of these (RFC 8707),
  *  so another MCP server can't point Claude at this sign-in and collect Happy Home tokens. */
-export function resourceAllowed(resource, base) {
+export function resourceAllowed(resource, bases) {
   if (resource === undefined || resource === null || resource === "") return true;   // older clients don't send it
   const r = String(resource).replace(/\/+$/, "");
-  return r === base || r === base + "/mcp" || r === base + "/sse";
+  return [].concat(bases).some(base => r === base || r === base + "/mcp" || r === base + "/sse");
 }
 
 // Best-effort single use of sign-in codes on a warm server (codes also expire after 5 minutes).
@@ -113,8 +116,9 @@ export async function register(request, env) {
 }
 
 async function clientRedirects(env, clientId) {
-  if (clientId.startsWith("hhc_")) { const c = await unseal(env.HH_SECRET, "client", clientId); return c ? { known: true, uris: c.r } : null; }
-  if (CLAUDE_CIMD.test(clientId)) return { known: true, uris: null, claude: true }; // Claude's published identity: Claude's callback only
+  if (clientId.startsWith("hhc_")) { const c = await unseal(env.HH_SECRET, "client", clientId); return c ? { check: uri => c.r.includes(uri) } : null; }
+  if (clientId === CLAUDE_CODE_CIMD) return { check: isClaudeCodeCallback };
+  if (CLAUDE_CIMD.test(clientId)) return { check: isClaudeCallback }; // Claude's published identity: Claude's callback only
   return null;
 }
 
@@ -124,7 +128,7 @@ const back = (uri, params) => { const u = new URL(uri); for (const [k, v] of Obj
 const startAgain = "Go back to Claude and tap Connect again.";
 
 /* ---------------- /authorize ---------------- */
-export async function authorize(request, env, cfg, base) {
+export async function authorize(request, env, cfg, base, bases = [base]) {
   if (request.method === "GET" || request.method === "HEAD") {
     const p = new URL(request.url).searchParams;
     const clientId = p.get("client_id") || "", redirectUri = p.get("redirect_uri") || "", state = p.get("state") || "";
@@ -132,7 +136,7 @@ export async function authorize(request, env, cfg, base) {
     if (!redirectAllowed(redirectUri, env)) return html(messagePage("Not allowed", `This Happy Home connector only signs in for Claude, so it won't send your sign-in to ${redirectUri.slice(0, 120)}.`), 400);
     const client = await clientRedirects(env, clientId);
     if (!client) return html(messagePage("Please reconnect", `Claude's registration with Happy Home isn't valid. In Claude, remove the Happy Home connector and add it again, leaving the sign-in options as they are (don't enter your own OAuth client).`), 400);
-    if (client.claude ? !isClaudeCallback(redirectUri) : !client.uris.includes(redirectUri)) return html(messagePage("Not allowed", "That return address wasn't registered by this app."), 400);
+    if (!client.check(redirectUri)) return html(messagePage("Not allowed", "That return address wasn't registered by this app."), 400);
     // Problems found before sign-in go back to Claude; for an app on this computer, show them here instead
     // of sending the browser to a local address someone else chose.
     const fail = params => isLoopback(redirectUri) ? html(messagePage("Can't connect", params.error_description || params.error), 400) : back(redirectUri, { ...params, iss: base });
@@ -141,7 +145,7 @@ export async function authorize(request, env, cfg, base) {
     const challenge = p.get("code_challenge") || "";
     if (p.get("code_challenge_method") !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(challenge)) return fail({ error: "invalid_request", error_description: "PKCE with S256 is required", state });
     const resource = p.getAll("resource");
-    if (resource.length > 1 || !resourceAllowed(resource[0], base)) return fail({ error: "invalid_target", error_description: `This sign-in only gives access to ${base}/mcp.`, state });
+    if (resource.length > 1 || !resourceAllowed(resource[0], bases)) return fail({ error: "invalid_target", error_description: `This sign-in only gives access to ${base}/mcp.`, state });
     const req = await seal(env.HH_SECRET, "req", { c: clientId, r: redirectUri, s: state, k: challenge }, REQ_TTL);
     return html(signInPage({ req, clientLabel: clientLabel(redirectUri) }));
   }
@@ -198,11 +202,11 @@ export async function authorize(request, env, cfg, base) {
 }
 
 /* ---------------- /token ---------------- */
-export async function token(request, env, cfg, base) {
+export async function token(request, env, cfg, base, bases = [base]) {
   if (request.method !== "POST") return oauthError("invalid_request", "Use POST.", 405);
   const p = await readParams(request);
   if (!p) return oauthError("invalid_request", "Couldn't read the request.");
-  if (Array.isArray(p.resource) || !resourceAllowed(p.resource, base)) return oauthError("invalid_target", `Tokens are only issued for ${base}/mcp.`);
+  if (Array.isArray(p.resource) || !resourceAllowed(p.resource, bases)) return oauthError("invalid_target", `Tokens are only issued for ${base}/mcp.`);
   let uid, firebaseRefresh;
   if (p.grant_type === "authorization_code") {
     const c = await unseal(env.HH_SECRET, "code", p.code);

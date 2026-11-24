@@ -15,10 +15,17 @@ const CORS = {
 const withCors = res => { for (const [k, v] of Object.entries(CORS)) res.headers.set(k, v); return res; };
 const json = (status, body, extra = {}) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...extra } });
 
-export function publicBase(request, env) {
-  if (env.HH_PUBLIC_URL) return String(env.HH_PUBLIC_URL).replace(/\/+$/, "");
+/** The address this request arrived at. Vercel hands the function an http:// URL even though
+ *  the public address is https, so trust its forwarded scheme (it only ever upgrades to https). */
+export function requestOrigin(request, env = {}) {
   const u = new URL(request.url);
+  const xf = (request.headers.get("x-forwarded-proto") || "").split(",")[0].trim().toLowerCase();
+  if (u.protocol === "http:" && (xf === "https" || env.VERCEL)) u.protocol = "https:";
   return u.origin;
+}
+export function publicBase(request, env = {}) {
+  if (env.HH_PUBLIC_URL) return String(env.HH_PUBLIC_URL).replace(/\/+$/, "");
+  return requestOrigin(request, env);
 }
 
 export async function handle(request, env = {}) {
@@ -36,6 +43,9 @@ async function route(request, env) {
   if (forwarded !== null && (path === "/api" || path.startsWith("/api/index"))) path = "/" + forwarded.replace(/^\/+/, "");
   path = path.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
   const base = publicBase(request, env);
+  // Tokens are for this server, under its public address or the address the request came in on
+  // (so adding HH_PUBLIC_URL later doesn't cut off people who connected at the old address).
+  const bases = [...new Set([base, requestOrigin(request, env)])];
   const ready = secretOk(env.HH_SECRET);
   const cfg = firebaseSettings(env);
   const method = request.method;
@@ -54,7 +64,9 @@ async function route(request, env) {
 
   if (path === "/" && (method === "GET" || method === "HEAD")) {
     const nonce = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16))).toString("base64");
-    return new Response(homePage({ base, ready, appUrl: cfg.appUrl, nonce }), { headers: {
+    // Show the lasting production address, not a one-off deployment link the page may have been opened from.
+    const shown = env.HH_PUBLIC_URL || !env.VERCEL_PROJECT_PRODUCTION_URL ? base : "https://" + String(env.VERCEL_PROJECT_PRODUCTION_URL).replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    return new Response(homePage({ base: shown, ready, appUrl: cfg.appUrl, nonce }), { headers: {
       "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store",
       "Content-Security-Policy": `default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; base-uri 'none'; frame-ancestors 'none'`,
       "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" } });
@@ -65,9 +77,9 @@ async function route(request, env) {
   if (path === "/register") { if (!ready) return withCors(notReady()); return withCors(method === "POST" ? await register(request, env) : json(405, { error: "invalid_request" }, { Allow: "POST" })); }
   if (path === "/authorize") {
     if (!ready) return new Response(messagePage("Almost ready", "The Happy Home connector isn't set up yet. Add the HH_SECRET setting in Vercel, redeploy, then try again."), { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } });
-    return authorize(request, env, cfg, base);
+    return authorize(request, env, cfg, base, bases);
   }
-  if (path === "/token") { if (!ready) return withCors(notReady()); return withCors(await token(request, env, cfg, base)); }
+  if (path === "/token") { if (!ready) return withCors(notReady()); return withCors(await token(request, env, cfg, base, bases)); }
 
   if (path === "/mcp" || path === "/sse" || (path === "/" && method === "POST")) {
     const resourcePath = path === "/" ? "" : path;

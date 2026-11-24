@@ -271,6 +271,14 @@ test("update_items and delete_items (with skip one day of a weekly activity)", a
   assert.equal(mow.who, 2); assert.equal(mow.points, 3); assert.equal(mow.title, "Mow the lawn");
   const piano = (await docs("families/FAMILY01/events")).find(e => e.id === added.piano);
   assert.deepEqual(piano.days, [1, 3]); assert.equal(piano.until, addDays(TODAY, 60));
+  // Renaming a shopping item clears its aisle, so the app files it under the new name's aisle.
+  r = await call(old.client, "update_items", { updates: [{ type: "shopping", id: "milk1", changes: { name: "bread rolls" } }] });
+  assert.equal(r.isError, false, r.text);
+  const rolls = (await docs("families/FAMILY01/shopping")).find(x => x.id === "milk1");
+  assert.equal(rolls.name, "Bread rolls"); assert.equal(rolls.aisle, "");
+  // Only an end date: the range starts at the beginning of that month.
+  r = await call(old.client, "find_items", { type: "money", to: addDays(TODAY, -40) });
+  assert.match(r.text, new RegExp(`from \\w{3} 1 `));
   r = await call(old.client, "update_items", { updates: [{ type: "tasks", id: added.mow, changes: { done: true } }] });
   assert.equal(r.isError, true); assert.match(r.text, /mark_done/);
   r = await call(old.client, "delete_items", { type: "events", ids: ["swim1"], only_this_date: addDays(TODAY, 7) });
