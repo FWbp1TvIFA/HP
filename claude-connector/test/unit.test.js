@@ -6,6 +6,9 @@ import { seal, unseal, pkceMatches, sha256base64url } from "../src/crypto.js";
 import { redirectAllowed } from "../src/oauth.js";
 import { handle } from "../src/handler.js";
 import { toValue, fromValue } from "../src/firebase.js";
+import { Family, namesOf, ALLOWED_COLLECTIONS } from "../src/family.js";
+import { TYPE_COLLECTION } from "../src/tools.js";
+import { nowTimeIn } from "../src/dates.js";
 
 const T = "2026-11-24"; // a Tuesday
 const KEY = "Kq7vT2mX9pL4wR8nB3cF6hJ1sD5gZ0yAe"; // a random-looking HH_SECRET for tests
@@ -162,6 +165,82 @@ test("a weak or placeholder HH_SECRET is not accepted", async () => {
   assert.equal((await (await handle(new Request("https://hh.example/health"), { HH_SECRET: "your_secret_key_goes_here_123456789" })).json()).ready, false);
 });
 
+test("people are found by the name in the app, an earlier name, or mum and dad words", () => {
+  const settings = { people: [{ id: 1, name: "Dad", aka: "Nyein Chan", uid: "u1" }, { id: 2, name: "Mum", aka: "Akiyo", uid: "u2" }, { id: 3, name: "Jugo", uid: null }], roleNames: 1 };
+  const f = new Family({ cfg: {}, fs: null, uid: "u2", fid: "F", settings, tz: "Australia/Brisbane" });
+  for (const [said, id] of [["Mum", 2], ["mom", 2], ["Mummy", 2], ["my mum", 2], ["Akiyo", 2], ["akiyo's", 2], ["Dad", 1], ["daddy", 1], ["papa", 1], ["Nyein", 1], ["nyein chan", 1], ["Jugo", 3], ["jug", 3], ["me", 2], ["3", 3]]) {
+    assert.equal(f.who(said), id, said);
+  }
+  assert.equal(f.who("family", { allowFamily: true }), 0);
+  assert.throws(() => f.who("Grandma"), /Jugo, Mum \(you, also called Akiyo\), Dad \(also called Nyein Chan\)/);
+  assert.equal(f.name(1), "Dad"); assert.equal(f.myName, "Mum");
+  // An earlier name of "Me" (the app's first default) never steals the word "me" from whoever is signed in.
+  const g = new Family({ cfg: {}, fs: null, uid: "u2", fid: "F", settings: { people: [{ id: 1, name: "Dad", aka: "Me", uid: "u1" }, { id: 2, name: "Mum", aka: "Akiyo", uid: "u2" }] }, tz: "Australia/Brisbane" });
+  assert.equal(g.who("me"), 2); assert.deepEqual(namesOf({ name: "Dad", aka: "Me" }), ["dad", "daddy", "papa"]);
+  assert.doesNotMatch(g.namesList(), /also called Me/);
+  // Families that keep their own names work as before.
+  const h = new Family({ cfg: {}, fs: null, uid: "u1", fid: "F", settings: { people: [{ id: 1, name: "Old", uid: "u1" }, { id: 2, name: "Akiyo" }, { id: 3, name: "Jugo" }] }, tz: "Australia/Brisbane" });
+  assert.equal(h.who("Akiyo"), 2); assert.equal(h.namesList(), "Jugo, Akiyo, Old (you)"); assert.throws(() => h.who("mum"));
+});
+
+test("people: whole names win, the mum and dad words never guess, two people are refused", () => {
+  const fam = (people, uid = "u1") => new Family({ cfg: {}, fs: null, uid, fid: "F", settings: { people }, tz: "Australia/Brisbane" });
+  // A child called John still wins over Dad, whose earlier name was John Smith; the same for Sam and Sam Lee.
+  const a = fam([{ id: 1, name: "Dad", aka: "John Smith", uid: "u1" }, { id: 2, name: "Mum", aka: "Mary Smith" }, { id: 3, name: "John" }]);
+  for (const [said, id] of [["John", 3], ["john's", 3], ["John Smith", 1], ["Dad", 1], ["my dad", 1], ["Mary", 2], ["mummy", 2]]) assert.equal(a.who(said), id, said);
+  const b = fam([{ id: 1, name: "John Smith", uid: "u1" }, { id: 2, name: "John" }, { id: 3, name: "Amy" }, { id: 4, name: "Sam Lee" }, { id: 5, name: "Sam" }]);
+  for (const [said, id] of [["John", 2], ["john smith", 1], ["Sam", 5], ["sam lee", 4], ["Amy", 3]]) assert.equal(b.who(said), id, said);
+  // "My Linh" is a name, not "my" + "Linh".
+  const c = fam([{ id: 1, name: "Dad", aka: "Minh", uid: "u1" }, { id: 2, name: "Mum", aka: "Lan" }, { id: 3, name: "My Linh" }, { id: 4, name: "The Kid" }]);
+  for (const [said, id] of [["My Linh", 3], ["my linh's", 3], ["The Kid", 4], ["the dad", 1], ["my mum", 2], ["me", 1]]) assert.equal(c.who(said), id, said);
+  assert.equal(fam([{ id: 1, name: "Old", uid: "u1" }, { id: 2, name: "My Linh Nguyen" }]).who("My Linh"), 2);
+  // With nobody called Mum, "my mom" is a question for the person, never a child called Momoko.
+  const d = fam([{ id: 1, name: "Hiroshi", uid: "u1" }, { id: 2, name: "Akiyo" }, { id: 3, name: "Jugo" }, { id: 4, name: "Momoko" }]);
+  for (const said of ["my mom", "our mom", "the mom", "mom", "Mum", "dad"]) assert.throws(() => d.who(said), /I don't know who/, said);
+  assert.equal(d.who("Momo"), 4);
+  // Short starts of real names still work, and the mum and dad words don't get in the way.
+  const e = fam([{ id: 1, name: "Dad", uid: "u1" }, { id: 2, name: "Mum" }, { id: 3, name: "Molly" }, { id: 4, name: "Max" }, { id: 5, name: "Patrick" }]);
+  for (const [said, id] of [["mo", 3], ["ma", 4], ["pa", 5], ["mu", 2], ["da", 1], ["mom", 2], ["papa", 1]]) assert.equal(e.who(said), id, said);
+  const g = fam([{ id: 1, name: "Old", uid: "u1" }, { id: 2, name: "Akiyo" }, { id: 3, name: "Jugo" }]);
+  for (const [said, id] of [["J", 3], ["a", 2], ["O", 1]]) assert.equal(g.who(said), id, said);
+  const h = fam([{ id: 1, name: "Dad", aka: "Nyein Chan", uid: "u1" }, { id: 2, name: "Mum", aka: "Akiyo" }, { id: 3, name: "Jugo" }]);
+  for (const [said, id] of [["D", 1], ["M", 2], ["J", 3], ["Nyein", 1], ["ny", 1]]) assert.equal(h.who(said), id, said);
+  assert.throws(() => h.who("N"), /I don't know who/);
+  // Happy Home keeps one person on each item, so a list of people is sent back with the choices.
+  for (const said of ["Mum and Dad", "Akiyo & Jugo", "Nyein, Akiyo", "my mum + my dad", "Nyein Chan and Akiyo"]) {
+    assert.throws(() => h.who(said), /is more than one person[\s\S]*The family is: Jugo, Mum/, said);
+    assert.throws(() => h.who(said, { allowFamily: true }), /"Family" for everyone/, said);
+  }
+  assert.equal(h.who("Mum and mummy"), 2); assert.equal(h.who("mum,"), 2); assert.equal(h.who("Jugo!"), 3); for (const said of ["?", ".", "'s"]) assert.throws(() => fam([{ id: 1, name: "Solo", uid: "u1" }]).who(said), /I don't know who/, said);
+  // "me" in a list is the signed-in person, even when Dad's earlier name was the app's first default, "Me".
+  assert.throws(() => h.who("Mum and me"), /is more than one person/); assert.throws(() => h.who("me and Jugo"), /is more than one person/);
+  assert.equal(h.who("Dad and me"), 1);
+  const m = fam([{ id: 1, name: "Dad", aka: "Me", uid: "u1" }, { id: 2, name: "Mum", aka: "Akiyo", uid: "u2" }, { id: 3, name: "Jugo" }], "u2");
+  for (const said of ["Mum and me", "me and Mum", "Akiyo and me", "Mum & myself"]) assert.equal(m.who(said), 2, said);
+  const n = fam([{ id: 1, name: "Me", uid: "u1" }, { id: 2, name: "Akiyo", uid: "u2" }, { id: 3, name: "Jugo" }], "u2");
+  assert.equal(n.who("Akiyo and me"), 2); assert.equal(n.who("me and Akiyo"), 2);
+  // A parent saved as Mummy or Daddy (never renamed) is still who "mum" and "dad" mean, but a grandparent called Papa is not.
+  const k = fam([{ id: 1, name: "Daddy", uid: "u1" }, { id: 2, name: "Mummy" }, { id: 3, name: "Jugo" }, { id: 4, name: "Momo" }]);
+  for (const [said, id] of [["mum", 2], ["my mum", 2], ["mom", 2], ["dad", 1], ["the dad", 1], ["mu", 2], ["Momo", 4]]) assert.equal(k.who(said), id, said);
+  for (const [people, said, id] of [[[{ id: 1, name: "Dada", uid: "u1" }, { id: 2, name: "Mumma" }], "mum", 2], [[{ id: 1, name: "Dada", uid: "u1" }, { id: 2, name: "Mumma" }], "dad", 1], [[{ id: 1, name: "Daddy", uid: "u1" }, { id: 2, name: "Mommy" }], "mom", 2]]) assert.equal(fam(people).who(said), id, said);
+  const gp = fam([{ id: 1, name: "Old", uid: "u1" }, { id: 2, name: "Akiyo" }, { id: 3, name: "Jugo" }, { id: 4, name: "Papa" }]);
+  for (const said of ["dad", "the dad", "daddy"]) assert.throws(() => gp.who(said), /I don't know who/, said);
+  assert.equal(gp.who("Papa"), 4);
+});
+
+test("only the agreed collections can ever be touched", () => {
+  const f = new Family({ cfg: {}, fs: null, uid: "u1", fid: "F", settings: { people: [] }, tz: "Australia/Brisbane" });
+  for (const ok of ["tasks", "events", "homework", "shopping", "tx", "notes", "bills", "meals", "countdowns", "board", "alarms", "stars", "shopFreq", "songs"]) assert.deepEqual(f.col(ok), ["families", "F", ok]);
+  for (const never of ["wallet", "moods", "moodSessions", "locations", "learn", "profiles", "notify", "pushSubs", "users"]) {
+    assert.throws(() => f.col(never), /not one this connector may touch/, never);
+    assert.throws(() => f.doc(never, "x"), /not one this connector may touch/, never);
+  }
+  assert.deepEqual([...ALLOWED_COLLECTIONS].sort(), ["alarms", "bills", "board", "countdowns", "events", "homework", "meals", "notes", "shopFreq", "shopping", "songs", "stars", "tasks", "tx"]);
+  // Every type a tool can name maps to an allowed collection.
+  for (const c of Object.values(TYPE_COLLECTION)) assert.ok(ALLOWED_COLLECTIONS.includes(c), c);
+  assert.match(nowTimeIn("Australia/Brisbane", new Date("2026-11-24T14:05:00Z")), /^00:05$/);
+});
+
 test("Vercel entry point is a web fetch handler that keeps the original path", async () => {
   process.env.HH_SECRET = KEY;
   const entry = (await import("../api/index.js")).default;
@@ -196,4 +275,26 @@ test("home page and setup-not-finished state", async () => {
   // The Vercel rewrite passes the original path as a query parameter.
   const viaRewrite = await handle(new Request("https://hh.example/api/index?__hh_path=.well-known/oauth-protected-resource/mcp"), {});
   assert.equal((await viaRewrite.json()).resource, "https://hh.example/mcp");
+});
+
+test("songs are read exactly as the app's piano page reads them", async () => {
+  const { parseSong, safeYt, noteCount } = await import("../src/songs.js");
+  assert.equal(noteCount("C C G G | A A G- | F F E E | D D C-"), 14);
+  assert.deepEqual(parseSong("C#5- Bb/ _ do'").notes, [{ midi: 73, beats: 2 }, { midi: 70, beats: 0.5, flat: true }, { midi: null, beats: 1 }, { midi: 72, beats: 1 }]);
+  assert.deepEqual(parseSong("C9 xyz").errors, ['"C9" is too high for a piano.', 'I do not understand "xyz".']);
+  assert.equal(safeYt("https://youtu.be/abc"), "https://youtu.be/abc"); assert.equal(safeYt("http://youtube.com/x"), ""); assert.equal(safeYt("https://evil.example/youtube.com"), "");
+  // When the app's own piano.js is next to the connector (this repo), the copy must give the same answer on everything.
+  const fs = await import("node:fs"), url = await import("node:url");
+  const appFile = url.fileURLToPath(new URL("../../piano.js", import.meta.url));
+  if (!fs.existsSync(appFile)) return;
+  const sandbox = { document: { addEventListener() {}, documentElement: {}, createElement: () => ({ style: {} }), querySelector: () => null }, localStorage: { getItem: () => null, setItem() {} } };
+  sandbox.window = sandbox;
+  const vm = await import("node:vm"); vm.runInNewContext(fs.readFileSync(appFile, "utf8"), sandbox);
+  const app = sandbox.HHPiano.parseSong;
+  const bits = ["C", "D", "E", "F", "G", "A", "B", "c", "b", "#", "b", "'", ",", "4", "5", "3", "-", "/", ".", "_", "R", "|", " ", " ", " ", "do", "re", "sol", "x", "♯", "♭", "—", "’"];
+  let seed = 11; const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  for (let i = 0; i < 5000; i++) {
+    let s = ""; for (let j = Math.floor(rnd() * 30); j > 0; j--) s += bits[Math.floor(rnd() * bits.length)];
+    assert.deepEqual(JSON.parse(JSON.stringify(parseSong(s))), JSON.parse(JSON.stringify(app(s))), JSON.stringify(s));
+  }
 });

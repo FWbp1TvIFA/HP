@@ -309,6 +309,150 @@ test("update_items and delete_items (with skip one day of a weekly activity)", a
   assert.equal(r.isError, true, "path tricks are refused");
 });
 
+test("Dad and Mum names, reminders, done times and alarms match the app", async () => {
+  // The app's one-time switch on the owner's phone: grown-ups show as Dad and Mum, old names kept as aka.
+  await patchMask(users.old, "families/FAMILY01", { people: [{ id: 1, name: "Dad", aka: "Old", uid: users.old.uid }, { id: 2, name: "Mum", aka: "Akiyo", uid: users.akiyo.uid }, { id: 3, name: "Jugo", uid: null }], roleNames: 1 });
+  const { tools } = await old.client.listTools();
+  assert.match(tools.find(t => t.name === "add_items").description, /Jugo, Mum \(also called Akiyo\), Dad \(also called Old\)/);
+  let r = await call(old.client, "get_overview", {});
+  assert.match(r.text, /Signed in as Dad/); assert.match(r.text, /Mum \(also called Akiyo\)/);
+
+  // Old names and family words still find the right person.
+  r = await call(old.client, "add_items", {
+    tasks: [{ title: "Call the dentist", who: "Akiyo", due: TODAY, time: "15:00", remind_minutes_before: 30 }, { title: "Water plants", who: "mummy" }, { title: "Wash car", who: "daddy" }],
+    events: [{ title: "Parent night", date: addDays(TODAY, 3), time: "18:00", who: "my mum", remind_minutes_before: -1 }, { title: "Dentist", date: addDays(TODAY, 4), time: "09:00" }],
+    homework: [{ title: "Reading log", due: addDays(TODAY, 1), time: "17:00", remind_minutes_before: 0 }],
+  });
+  assert.equal(r.isError, false, r.text);
+  assert.match(r.text, /Call the dentist \(Mum\)[^\n]*reminder 30 min before/); assert.match(r.text, /Parent night[^\n]*no reminder/);
+  const tasks = await rawDocs("families/FAMILY01/tasks");
+  const dentist = tasks.find(t => t.title === "Call the dentist"), plants = tasks.find(t => t.title === "Water plants"), car = tasks.find(t => t.title === "Wash car");
+  assert.equal(plain(dentist).who, 2); assert.deepEqual(dentist.remind, { int: 30 });
+  assert.equal(plain(plants).who, 2); assert.equal("remind" in plants, false, "no reminder field unless one was asked for");
+  assert.equal(plain(car).who, 1);
+  const evs = await docs("families/FAMILY01/events");
+  assert.equal(evs.find(e => e.title === "Parent night").who, 2); assert.equal(evs.find(e => e.title === "Parent night").remind, -1);
+  assert.equal("remind" in evs.find(e => e.title === "Dentist"), false);
+  const reading = (await docs("families/FAMILY01/homework")).find(h => h.title === "Reading log");
+  assert.equal(reading.remind, 0); assert.equal(reading.who, 3);
+  r = await call(old.client, "add_items", { tasks: [{ title: "Bad reminder", remind_minutes_before: 7 }] });
+  assert.equal(r.isError, true); assert.match(r.text, /remind_minutes_before must be one of/);
+  // Back to the usual reminder: stored as null, the way the app's "Usual" choice saves it.
+  r = await call(old.client, "update_items", { updates: [{ type: "tasks", id: dentist.id, changes: { remind_minutes_before: null } }, { type: "events", id: evs.find(e => e.title === "Dentist").id, changes: { remind_minutes_before: 1440 } }] });
+  assert.equal(r.isError, false, r.text);
+  assert.equal((await docs("families/FAMILY01/tasks")).find(t => t.id === dentist.id).remind, null);
+  assert.equal((await docs("families/FAMILY01/events")).find(e => e.title === "Dentist").remind, 1440);
+
+  // Ticking off stores when it was done; unticking clears it (the app's Live feed reads this).
+  const t0 = Date.now();
+  r = await call(old.client, "mark_done", { type: "tasks", ids: [plants.id] });
+  assert.equal(r.isError, false, r.text);
+  let p = (await rawDocs("families/FAMILY01/tasks")).find(t => t.id === plants.id);
+  assert.equal(plain(p).done, true); assert.ok("int" in p.doneAt && p.doneAt.int >= t0 && p.doneAt.int <= Date.now(), JSON.stringify(p.doneAt));
+  r = await call(old.client, "mark_done", { type: "tasks", ids: [plants.id], done: false });
+  p = (await docs("families/FAMILY01/tasks")).find(t => t.id === plants.id);
+  assert.equal(p.done, false); assert.equal(p.doneAt, null);
+  r = await call(old.client, "mark_done", { type: "homework", ids: [reading.id] });
+  assert.ok((await docs("families/FAMILY01/homework")).find(h => h.id === reading.id).doneAt >= t0);
+  r = await call(old.client, "add_items", { shopping: [{ name: "Eggs" }] });
+  const eggs = (await docs("families/FAMILY01/shopping")).find(x => x.name === "Eggs");
+  r = await call(old.client, "mark_done", { type: "shopping", ids: [eggs.id] });
+  assert.ok((await docs("families/FAMILY01/shopping")).find(x => x.id === eggs.id).doneAt >= t0);
+
+  // Alarms: weekly on set days (no date), or once on a date.
+  r = await call(old.client, "add_items", { alarms: [
+    { title: "Leave for swimming", time: "15:30", weekly_on_days: ["Tue", "Thu"], who: "Jugo" },
+    { time: "06:45", date: addDays(TODAY, 2) },
+    { title: "Earlier today", time: "00:00" },
+  ] });
+  assert.equal(r.isError, false, r.text);
+  assert.match(r.text, /⏰ 3:30 ?pm Leave for swimming, every Tue, Thu \(Jugo\)/i);
+  const alarms = await rawDocs("families/FAMILY01/alarms");
+  const swim = alarms.find(a => plain(a).title === "Leave for swimming"), once = alarms.find(a => plain(a).time === "06:45"), late = alarms.find(a => plain(a).title === "Earlier today");
+  assert.deepEqual({ ...plain(swim), id: 0, createdAt: 0 }, { id: 0, title: "Leave for swimming", time: "15:30", who: 3, days: [2, 4], date: "", on: true, createdAt: 0, by: 1 });
+  assert.deepEqual(swim.days, [{ int: 2 }, { int: 4 }]); assert.deepEqual(swim.who, { int: 3 });
+  // No "who": the signed-in person, like the app's alarm sheet.
+  assert.deepEqual({ ...plain(once), id: 0, createdAt: 0 }, { id: 0, title: "Alarm", time: "06:45", who: 1, days: [], date: addDays(TODAY, 2), on: true, createdAt: 0, by: 1 });
+  assert.equal(plain(late).date, addDays(TODAY, 1), "a time that has passed today rings tomorrow, like the app");
+  r = await call(old.client, "add_items", { alarms: [{ title: "No time" }] });
+  assert.equal(r.isError, true); assert.match(r.text, /time/);
+  r = await call(old.client, "find_items", { type: "alarms" });
+  assert.match(r.text, /3 alarms/); assert.match(r.text, /Leave for swimming/);
+  r = await call(old.client, "get_overview", {});
+  assert.match(r.text, /Alarms switched on[\s\S]*Leave for swimming/);
+  // A weekly alarm can't skip one day: asking for that is refused, never a delete of every week.
+  r = await call(old.client, "delete_items", { type: "alarms", ids: [swim.id], only_this_date: addDays(TODAY, 2) });
+  assert.equal(r.isError, true); assert.match(r.text, /can't skip just one day[\s\S]*Nothing was deleted/);
+  assert.equal((await docs("families/FAMILY01/alarms")).length, 3);
+  // Switch one off, turn the weekly one into a one-time alarm, then delete one.
+  r = await call(old.client, "update_items", { updates: [{ type: "alarms", id: once.id, changes: { on: false } }, { type: "alarms", id: swim.id, changes: { weekly_on_days: [], date: addDays(TODAY, 5), time: "16:00", who: "family" } }] });
+  assert.equal(r.isError, false, r.text);
+  const after = await docs("families/FAMILY01/alarms");
+  assert.equal(after.find(a => a.id === once.id).on, false);
+  assert.deepEqual({ ...after.find(a => a.id === swim.id), createdAt: 0 }, { id: swim.id, title: "Leave for swimming", time: "16:00", who: 0, days: [], date: addDays(TODAY, 5), on: true, createdAt: 0, by: 1 });
+  r = await call(old.client, "get_overview", {});
+  assert.doesNotMatch(r.text.split("Alarms switched on")[1].split("\n\n")[0], /6:45/);
+  // A new time for a switched-off alarm switches it back on, like saving it in the app, unless it's told to stay off.
+  r = await call(old.client, "update_items", { updates: [{ type: "alarms", id: once.id, changes: { time: "07:00" } }] });
+  assert.equal(r.isError, false, r.text);
+  assert.equal((await docs("families/FAMILY01/alarms")).find(a => a.id === once.id).on, true);
+  r = await call(old.client, "update_items", { updates: [{ type: "alarms", id: once.id, changes: { time: "07:15", on: false } }] });
+  let o = (await docs("families/FAMILY01/alarms")).find(a => a.id === once.id);
+  assert.equal(o.on, false); assert.equal(o.time, "07:15");
+  r = await call(old.client, "update_items", { updates: [{ type: "alarms", id: once.id, changes: { title: "Gym" } }] });
+  assert.equal((await docs("families/FAMILY01/alarms")).find(a => a.id === once.id).on, false, "a new name alone leaves it off");
+  // Two people for one item is refused, not quietly given to one of them.
+  r = await call(old.client, "add_items", { events: [{ title: "Both", date: addDays(TODAY, 6), who: "Mum and Dad" }] });
+  assert.equal(r.isError, true); assert.match(r.text, /more than one person[\s\S]*"Family" for everyone/);
+  r = await call(old.client, "delete_items", { type: "alarms", ids: [late.id] });
+  assert.equal(r.isError, false, r.text);
+  assert.equal((await docs("families/FAMILY01/alarms")).length, 2);
+  // The family's own settings were never written by the connector.
+  const fam = (await docs("families")).find(x => x.id === "FAMILY01");
+  assert.equal(fam.roleNames, 1); assert.deepEqual(fam.people.map(x => [x.name, x.aka || ""]), [["Dad", "Old"], ["Mum", "Akiyo"], ["Jugo", ""]]);
+  for (const never of ["profiles", "notify", "pushSubs", "learn", "moods", "locations"]) assert.equal((await docs(`families/FAMILY01/${never}`)).length, 0, never);
+});
+
+test("piano songs are saved the way the piano page saves them", async () => {
+  let r = await call(old.client, "add_items", { songs: [
+    { title: "Twinkle Twinkle", notes: "C C G G | A A G- | F F E E | D D C-", bpm: 100, youtube_link: "https://www.youtube.com/watch?v=yCjJyiqpAuU" },
+    { title: "Waltz", notes: "do re mi- | fa sol la-", beats_in_a_bar: 3 },
+  ] });
+  assert.equal(r.isError, false, r.text);
+  assert.match(r.text, /Piano song: 🎵 Twinkle Twinkle: 14 notes, 4 counts a bar, speed 100, with a YouTube lesson/);
+  const songs = await rawDocs("families/FAMILY01/songs");
+  const tw = songs.find(x => plain(x).title === "Twinkle Twinkle"), wz = songs.find(x => plain(x).title === "Waltz");
+  assert.deepEqual({ ...plain(tw), id: 0, createdAt: 0 }, { id: 0, title: "Twinkle Twinkle", notes: "C C G G | A A G- | F F E E | D D C-", bpm: 100, beats: 4, yt: "https://www.youtube.com/watch?v=yCjJyiqpAuU", createdAt: 0, by: 1 });
+  assert.deepEqual(tw.bpm, { int: 100 }); assert.deepEqual(tw.beats, { int: 4 });
+  assert.deepEqual({ ...plain(wz), id: 0, createdAt: 0 }, { id: 0, title: "Waltz", notes: "do re mi- | fa sol la-", bpm: 90, beats: 3, yt: "", createdAt: 0, by: 1 });
+  // Notes the piano page couldn't read, a bad link or a missing name: nothing is saved, and Claude is told why.
+  for (const [bad, why] of [[{ title: "X", notes: "C D H" }, /I do not understand "H"/], [{ title: "X", notes: "C9" }, /too high for a piano/], [{ title: "X", notes: "| |" }, /no notes/],
+    [{ title: "X", notes: "C D", youtube_link: "https://example.com/v" }, /youtube_link/], [{ notes: "C D" }, /title is missing/], [{ title: "X", notes: "C", bpm: 10 }, /30 to 240/], [{ title: "X", notes: "C", beats_in_a_bar: 6 }, /3 or 4/]]) {
+    r = await call(old.client, "add_items", { songs: [bad] });
+    assert.equal(r.isError, true, JSON.stringify(bad)); assert.match(r.text, why);
+  }
+  assert.equal((await docs("families/FAMILY01/songs")).length, 2);
+  r = await call(old.client, "find_items", { type: "songs", search: "twinkle" });
+  assert.match(r.text, /1 piano songs \(the family's own\) matching "twinkle"[\s\S]*Notes: C C G G \| A A G- \| F F E E \| D D C- \[id/);
+  r = await call(old.client, "add_items", { songs: [{ title: "Too long", notes: Array(600).fill("C").join(" ") }] });
+  assert.equal(r.isError, true); assert.match(r.text, /at most 599 notes and rests/);
+  r = await call(old.client, "add_items", { songs: [{ title: "Long one", notes: Array(599).fill("C5/").join(" ") }] });
+  assert.equal(r.isError, false, r.text);
+  r = await call(old.client, "find_items", { type: "songs", search: "zzz" });
+  assert.match(r.text, /^No piano songs \(the family's own\) matching "zzz"\.$/);
+  r = await call(old.client, "update_items", { updates: [{ type: "song", id: tw.id, changes: { notes: "C C G G | A A G-", bpm: 80, youtube_link: "" } }] });
+  assert.equal(r.isError, false, r.text);
+  const after = (await docs("families/FAMILY01/songs")).find(x => x.id === tw.id);
+  assert.equal(after.notes, "C C G G | A A G-"); assert.equal(after.bpm, 80); assert.equal(after.yt, ""); assert.equal(after.beats, 4);
+  r = await call(old.client, "update_items", { updates: [{ type: "songs", id: tw.id, changes: { notes: "C Q" } }] });
+  assert.equal(r.isError, true); assert.match(r.text, /Nothing was changed/);
+  r = await call(old.client, "delete_items", { type: "songs", ids: [wz.id] });
+  assert.equal(r.isError, false, r.text);
+  assert.equal((await docs("families/FAMILY01/songs")).length, 2);
+  // Piano practice and its stars stay the app's own.
+  assert.equal((await docs("families/FAMILY01/learn")).length, 0);
+});
+
 test("another family can't see or touch this family", async () => {
   const other = await connectAs(users.outsider);
   let r = await call(other.client, "get_overview", {});
