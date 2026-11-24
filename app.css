@@ -390,3 +390,13 @@ header.top .iconbtn+.iconbtn{margin-left:-4px}
 .pdays span{aspect-ratio:1;border-radius:6px;background:var(--sunk);color:var(--muted);font-size:.6rem;display:grid;place-items:center;font-weight:600}
 .pdays span.on{background:var(--accent);color:var(--on-accent)}
 .pdays span.today{outline:2px solid var(--accent);outline-offset:1px}
+.board .bt{white-space:pre-wrap}
+.mini.ghostmini{background:var(--sunk);color:var(--fg)}
+.board .quick input{background:var(--sunk);border:0;font-size:16px}
+/* motion polish */
+#view.enter>*{animation:hhRise .32s cubic-bezier(.32,.72,0,1) both}
+#view.enter>*:nth-child(2){animation-delay:.02s}#view.enter>*:nth-child(3){animation-delay:.04s}#view.enter>*:nth-child(4){animation-delay:.06s}
+@keyframes hhRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.tile,.deck,.opt,.upnext,.flash,.wkev,.mini,.primary,.ghost,.chip{transition:transform .18s cubic-bezier(.32,.72,0,1)}
+.tile:active,.deck:active,.opt:active,.upnext:active,.mini:active,.primary:active,.ghost:active,.chip:active{transform:scale(.97)}
+@media (prefers-reduced-motion: reduce){#view.enter>*{animation:none}.tile:active,.deck:active,.opt:active,.upnext:active,.mini:active,.primary:active,.ghost:active,.chip:active{transform:none}}
