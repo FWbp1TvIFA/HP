@@ -11,6 +11,9 @@ const checkCol = name => { if (!ALLOWED_COLLECTIONS.includes(name)) throw new Er
 const PRONOUNS = ["me", "i", "myself", "mine", "my"];
 // Like the app's Quick add: the grown-ups show as Dad and Mum, and the usual family words find them.
 const ROLE_WORDS = { mum: ["mum", "mom", "mummy", "mama"], dad: ["dad", "daddy", "papa"] };
+// A parent the app never renamed, saved as Mummy or Daddy, is still the one "mum" or "dad" means.
+// (Not Mama or Papa: those are often a grandparent.)
+const PARENT_NAMES = { mum: ["mummy", "mumma", "mommy", "momma"], dad: ["daddy", "dada"] };
 /** Everything a person may be called, in lower case: their name, their earlier name (aka), first names, and mum or dad words. */
 export function namesOf(p) {
   const name = String(p.name ?? "").trim(), aka = String(p.aka ?? "").trim();
@@ -75,7 +78,7 @@ export class Family {
   who(input, { allowFamily = false, fallback } = {}) {
     if (input === undefined || input === null || String(input).trim() === "") return fallback;
     const raw = String(input).trim();
-    const s = raw.toLowerCase().replace(/[’']s$/, "");
+    const s = raw.toLowerCase().replace(/[\s.,!?;:]+$/, "").replace(/[’']s$/, "");
     if (/^\d+$/.test(s)) {
       const n = +s;
       if (n === 0 && allowFamily) return 0;
@@ -87,6 +90,7 @@ export class Family {
     }
     if (PRONOUNS.includes(s)) return this.meId;
     const unknown = () => new UserError(`I don't know who "${raw.slice(0, 40)}" is in Happy Home. The family is: ${this.namesList()}${allowFamily ? ', or "Family" for everyone' : ""}.`);
+    if (!s) throw unknown();                                  // just "?" or "'s" names nobody
     const low = v => String(v ?? "").trim().toLowerCase();
     const people = this.peopleRaw.map(p => {
       const name = low(p.name), extra = ROLE_WORDS[name] || [];
@@ -96,7 +100,7 @@ export class Family {
     const one = list => (list.length === 1 ? list[0].id : null);
     // Whole names first, then the current first name, then earlier first names and the mum and dad words,
     // so a child called John still wins over Dad whose earlier name was John Smith.
-    const whole = t => one(people.filter(p => p.name === t)) ?? one(people.filter(p => p.aka && p.aka === t))
+    const whole = t => one(people.filter(p => p.name === t)) ?? one(people.filter(p => p.aka && !PRONOUNS.includes(p.aka) && p.aka === t))
       ?? one(people.filter(p => p.first === t)) ?? one(people.filter(p => p.names.includes(t)));
     let id = whole(s);                                        // "My Linh" is a name, not "my" + "Linh"
     if (id !== null) return id;
@@ -105,11 +109,12 @@ export class Family {
     // "Mum and Dad", "Akiyo & Jugo": Happy Home keeps one person on each item.
     const parts = t.split(/\s*(?:,|&|\+|\band\b)\s*/).filter(Boolean);
     if (parts.length > 1) {
-      const found = [...new Set(parts.map(x => whole(x.replace(/^(?:my|our|the)\s+/, ""))).filter(x => x !== null))];
+      const found = [...new Set(parts.map(x => { const y = x.replace(/^(?:my|our|the)\s+/, ""); return PRONOUNS.includes(y) ? this.meId : whole(y); }).filter(x => x !== null))];
       if (found.length > 1) throw new UserError(`"${raw.slice(0, 40)}" is more than one person. Each item in Happy Home is for one person${allowFamily ? ', or "Family" for everyone' : ""}. The family is: ${this.namesList()}.`);
     }
     // The mum and dad words only ever match someone the app calls Mum or Dad, never "Momoko".
-    if (Object.values(ROLE_WORDS).flat().includes(t)) throw unknown();
+    const role = Object.keys(ROLE_WORDS).find(k => ROLE_WORDS[k].includes(t));
+    if (role) { const r = one(people.filter(p => PARENT_NAMES[role].includes(p.name))); if (r !== null) return r; throw unknown(); }
     const starts = people.filter(p => p.partial.some(n => ((t.length >= 2 || n === p.name) && n.startsWith(t)) || (t !== s && n.startsWith(s)) || t.startsWith(n + " ")));
     if (starts.length === 1) return starts[0].id;
     const words = t.split(/\s+/);

@@ -211,7 +211,21 @@ test("people: whole names win, the mum and dad words never guess, two people are
     assert.throws(() => h.who(said), /is more than one person[\s\S]*The family is: Jugo, Mum/, said);
     assert.throws(() => h.who(said, { allowFamily: true }), /"Family" for everyone/, said);
   }
-  assert.equal(h.who("Mum and mummy"), 2);
+  assert.equal(h.who("Mum and mummy"), 2); assert.equal(h.who("mum,"), 2); assert.equal(h.who("Jugo!"), 3); for (const said of ["?", ".", "'s"]) assert.throws(() => fam([{ id: 1, name: "Solo", uid: "u1" }]).who(said), /I don't know who/, said);
+  // "me" in a list is the signed-in person, even when Dad's earlier name was the app's first default, "Me".
+  assert.throws(() => h.who("Mum and me"), /is more than one person/); assert.throws(() => h.who("me and Jugo"), /is more than one person/);
+  assert.equal(h.who("Dad and me"), 1);
+  const m = fam([{ id: 1, name: "Dad", aka: "Me", uid: "u1" }, { id: 2, name: "Mum", aka: "Akiyo", uid: "u2" }, { id: 3, name: "Jugo" }], "u2");
+  for (const said of ["Mum and me", "me and Mum", "Akiyo and me", "Mum & myself"]) assert.equal(m.who(said), 2, said);
+  const n = fam([{ id: 1, name: "Me", uid: "u1" }, { id: 2, name: "Akiyo", uid: "u2" }, { id: 3, name: "Jugo" }], "u2");
+  assert.equal(n.who("Akiyo and me"), 2); assert.equal(n.who("me and Akiyo"), 2);
+  // A parent saved as Mummy or Daddy (never renamed) is still who "mum" and "dad" mean, but a grandparent called Papa is not.
+  const k = fam([{ id: 1, name: "Daddy", uid: "u1" }, { id: 2, name: "Mummy" }, { id: 3, name: "Jugo" }, { id: 4, name: "Momo" }]);
+  for (const [said, id] of [["mum", 2], ["my mum", 2], ["mom", 2], ["dad", 1], ["the dad", 1], ["mu", 2], ["Momo", 4]]) assert.equal(k.who(said), id, said);
+  for (const [people, said, id] of [[[{ id: 1, name: "Dada", uid: "u1" }, { id: 2, name: "Mumma" }], "mum", 2], [[{ id: 1, name: "Dada", uid: "u1" }, { id: 2, name: "Mumma" }], "dad", 1], [[{ id: 1, name: "Daddy", uid: "u1" }, { id: 2, name: "Mommy" }], "mom", 2]]) assert.equal(fam(people).who(said), id, said);
+  const gp = fam([{ id: 1, name: "Old", uid: "u1" }, { id: 2, name: "Akiyo" }, { id: 3, name: "Jugo" }, { id: 4, name: "Papa" }]);
+  for (const said of ["dad", "the dad", "daddy"]) assert.throws(() => gp.who(said), /I don't know who/, said);
+  assert.equal(gp.who("Papa"), 4);
 });
 
 test("only the agreed collections can ever be touched", () => {
