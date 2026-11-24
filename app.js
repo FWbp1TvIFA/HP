@@ -177,7 +177,7 @@ function viewLists(){
     const usual=usualItems();
     body=`<form class="quick" id="shopForm"><input id="shopInput" placeholder="Add an item, e.g. Eggs 12" aria-label="Add shopping item" autocomplete="off" enterkeyhint="done"><button type="submit">Add</button></form>
     ${usual.length?`<div class="usual"><span class="label">Usual items · tap to add</span><div class="chips">${usual.map(u=>`<button class="chip" data-act="reAdd" data-k="${esc(u.name)}">+ ${esc(u.name)}</button>`).join("")}</div></div>`:""}
-    <section class="card"><h2>This week's shopping <span class="sub">(${open.length})</span></h2>
+    <section class="card"><div class="row between"><h2>This week's shopping <span class="sub">(${open.length})</span></h2>${open.length?`<button class="link" data-act="shareShop">Share</button>`:""}</div>
     ${open.length?order.filter(k=>groups[k]).map(k=>`<div class="aisle">${esc(k)}</div><div class="list">${groups[k].map(item).join("")}</div>`).join(""):`<div class="list" style="margin-top:6px"><div class="empty">The list is empty. Add what you need above, or say "buy milk and eggs" in Quick add on Today.</div></div>`}</section>
     ${got.length?`<section class="card"><div class="row between"><h2>In the trolley</h2><button class="link" data-act="newWeek">Start new week</button></div><div class="list" style="margin-top:6px">${got.map(item).join("")}</div></section>`:""}`;
   }
@@ -245,7 +245,7 @@ function viewMore(){
 /* ---------- Notes ---------- */
 function viewNotes(){
   const notes=[...S().notes].sort((a,b)=>(!!b.pinned-!!a.pinned)||((b.updated||0)-(a.updated||0)));
-  return `${backBar}<div class="stack" style="gap:10px">${notes.length?notes.map(n=>`<button class="note" data-act="openNote" data-id="${n.id}"><b>${n.pinned?"📌 ":""}${esc(n.title||"Untitled")}</b><p>${esc(n.body)}</p><span class="m">${esc(pname(n.who))} · ${new Date(n.updated||n.createdAt||Date.now()).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}</span></button>`).join(""):`<div class="card empty">No notes yet. Tap + to write one.</div>`}</div>`;
+  return `${backBar}<div class="stack" style="gap:10px">${notes.length?notes.map(n=>`<button class="note" data-act="openNote" data-id="${n.id}"><b>${n.pinned?"📌 ":""}${esc(n.title||"Untitled")}</b><p>${esc(String(n.body||"").replace(/^\s*\[ \]\s?/gm,"☐ ").replace(/^\s*\[x\]\s?/gim,"☑ "))}</p><span class="m">${esc(pname(n.who))} · ${new Date(n.updated||n.createdAt||Date.now()).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}</span></button>`).join(""):`<div class="card empty">No notes yet. Tap + to write one.</div>`}</div>`;
 }
 
 /* ---------- Calculator ---------- */
@@ -1021,9 +1021,16 @@ function noteSheet(id){
   const n=S().notes.find(x=>x.id===id);if(!n)return;
   openSheet(`${sheetHead("Note")}<form id="f" class="stack" style="gap:12px">
    <div class="field"><label for="n_title">Title</label><input id="n_title" value="${esc(n.title)}"></div>
-   <div class="field"><label for="n_body">Note</label><textarea id="n_body" class="body" rows="9">${esc(n.body)}</textarea></div>
+   <div id="n_ticks" class="ticks"></div>
+   <div class="field"><div class="row between"><label for="n_body">Note</label><button type="button" class="link" id="n_addtick">+ Tick box</button></div><textarea id="n_body" class="body" rows="9" placeholder="Start a line with [ ] to make a tick box">${esc(n.body)}</textarea></div>
    <label class="checkrow" for="n_pin"><input type="checkbox" id="n_pin" ${n.pinned?"checked":""}> Pin to top</label>
    <button class="primary" type="submit">Save</button></form><button class="ghost" id="n_del" type="button">Delete note</button>`,sh=>{
+    const ta=sh.querySelector("#n_body"),tk=sh.querySelector("#n_ticks");
+    const paint=()=>{const lines=ta.value.split("\n");const items=lines.map((l,i)=>{const m=l.match(/^\s*\[( |x|X)\]\s?(.*)$/);return m?{i,on:m[1]!==" ",t:m[2]}:null}).filter(Boolean);
+      tk.innerHTML=items.length?`<div class="label">Tick list · ${items.filter(x=>x.on).length} of ${items.length} done</div>`+items.map(x=>`<button type="button" class="tickrow ${x.on?"on":""}" data-i="${x.i}"><span class="check ${x.on?"on":""}">${x.on?ICON.tick:""}</span><span>${esc(x.t)||"&nbsp;"}</span></button>`).join(""):"";
+      tk.querySelectorAll(".tickrow").forEach(b=>b.onclick=()=>{const ls=ta.value.split("\n"),i=+b.dataset.i;ls[i]=ls[i].replace(/\[( |x|X)\]/,m=>m==="[ ]"?"[x]":"[ ]");ta.value=ls.join("\n");paint();ST.patch("notes",id,{body:ta.value,updated:Date.now()})})};
+    ta.oninput=paint;paint();
+    sh.querySelector("#n_addtick").onclick=()=>{ta.value=(ta.value&&!ta.value.endsWith("\n")?ta.value+"\n":ta.value)+"[ ] ";ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);paint()};
     sh.querySelector("#f").onsubmit=e=>{e.preventDefault();ST.patch("notes",id,{title:sh.querySelector("#n_title").value.trim(),body:sh.querySelector("#n_body").value,pinned:sh.querySelector("#n_pin").checked,updated:Date.now()});closeSheet();toast("Note saved")};
     const d=sh.querySelector("#n_del");d.onclick=()=>{if(d.dataset.arm){closeSheet();delUndo("notes",id,"Note deleted")}else{d.dataset.arm=1;d.textContent="Tap again to delete";d.style.color="var(--bad)"}};
   });
@@ -1130,7 +1137,7 @@ function rollRepeat(t){
   document.addEventListener("pointermove",e=>{
     if(!st||e.pointerId!==st.id)return;
     const dx=e.clientX-st.x0,dy=e.clientY-st.y0;
-    if(!st.dir){if(Math.abs(dx)<10&&Math.abs(dy)<10)return;st.dir=Math.abs(dx)>Math.abs(dy)?"x":"y";if(st.dir==="x"){try{st.sw.setPointerCapture(e.pointerId)}catch(_){}st.it.style.transition="none"}}
+    if(!st.dir){if(Math.abs(dx)<10&&Math.abs(dy)<10)return;st.dir=Math.abs(dx)>Math.abs(dy)?"x":"y";if(st.dir==="x"){try{st.sw.setPointerCapture(e.pointerId)}catch(_){}st.it.style.transition="none";st.sw.classList.add("dragging")}}
     if(st.dir!=="x")return;
     let x=st.base+dx; if(x>0)x=x*0.25; if(x<-W){const o=-W-x;x=-W-(o*W*0.55)/(W+0.55*o)}
     st.dx=x;st.it.style.transform=`translateX(${x}px)`;st.hist.push([e.clientX,e.timeStamp]);if(st.hist.length>5)st.hist.shift();
@@ -1141,7 +1148,7 @@ function rollRepeat(t){
     const [a,b]=[s.hist[0],s.hist[s.hist.length-1]];const v=b[1]>a[1]?(b[0]-a[0])/(b[1]-a[1])*1000:0;
     const target=s.dx+project(v)<-W/2?-W:0;
     s.it.style.transition="transform .3s cubic-bezier(.32,.72,0,1)";s.it.style.transform=target?`translateX(${-W}px)`:"";
-    s.sw.classList.toggle("open",!!target);
+    s.sw.classList.toggle("open",!!target);setTimeout(()=>s.sw.classList.remove("dragging"),320);
     s.sw.dataset.justSwiped="1";setTimeout(()=>delete s.sw.dataset.justSwiped,50);
   };
   document.addEventListener("pointerup",end);document.addEventListener("pointercancel",end);
@@ -1180,6 +1187,9 @@ document.addEventListener("click",e=>{
     case"pgame":pianoGame=a.dataset.k==="find"?{kind:"find",target:"C",score:0}:a.dataset.k==="song"?{kind:"song",i:0}:null;break;
     case"addActivity":return addSheet("event",{who:+a.dataset.k,days:[dow(TODAY())]});
     case"editCountdown":closeSheet();return countdownSheet(id);
+    case"shareShop":{const open=S().shopping.filter(x=>!x.done),order=[...AISLES.map(a=>a[0]),"Other"],g={};open.forEach(x=>{const k=x.aisle||aisleOf(x.name);(g[k]=g[k]||[]).push(x)});
+      const txt="Shopping list\n"+order.filter(k=>g[k]).map(k=>"\n"+k+"\n"+g[k].map(x=>"• "+x.name+(x.qty?" ("+x.qty+")":"")).join("\n")).join("\n");
+      if(navigator.share)navigator.share({title:"Shopping list",text:txt}).catch(()=>{});else{try{navigator.clipboard.writeText(txt).then(()=>toast("List copied"))}catch(_){toast("Couldn't share")}}return}
     case"reAdd":addShopItem(a.dataset.k);toast(a.dataset.k+" added");return;
     case"twoStep":return twoStepSheet();
     case"mfaCancel":ST.cancelMfa();authErr="";return render();
