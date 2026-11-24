@@ -433,7 +433,13 @@ test("piano songs are saved the way the piano page saves them", async () => {
   }
   assert.equal((await docs("families/FAMILY01/songs")).length, 2);
   r = await call(old.client, "find_items", { type: "songs", search: "twinkle" });
-  assert.match(r.text, /1 of the family's own piano songs matching "twinkle"[\s\S]*Notes: C C G G \| A A G-/);
+  assert.match(r.text, /1 piano songs \(the family's own\) matching "twinkle"[\s\S]*Notes: C C G G \| A A G- \| F F E E \| D D C- \[id/);
+  r = await call(old.client, "add_items", { songs: [{ title: "Too long", notes: Array(600).fill("C").join(" ") }] });
+  assert.equal(r.isError, true); assert.match(r.text, /at most 599 notes and rests/);
+  r = await call(old.client, "add_items", { songs: [{ title: "Long one", notes: Array(599).fill("C5/").join(" ") }] });
+  assert.equal(r.isError, false, r.text);
+  r = await call(old.client, "find_items", { type: "songs", search: "zzz" });
+  assert.match(r.text, /^No piano songs \(the family's own\) matching "zzz"\.$/);
   r = await call(old.client, "update_items", { updates: [{ type: "song", id: tw.id, changes: { notes: "C C G G | A A G-", bpm: 80, youtube_link: "" } }] });
   assert.equal(r.isError, false, r.text);
   const after = (await docs("families/FAMILY01/songs")).find(x => x.id === tw.id);
@@ -442,7 +448,7 @@ test("piano songs are saved the way the piano page saves them", async () => {
   assert.equal(r.isError, true); assert.match(r.text, /Nothing was changed/);
   r = await call(old.client, "delete_items", { type: "songs", ids: [wz.id] });
   assert.equal(r.isError, false, r.text);
-  assert.equal((await docs("families/FAMILY01/songs")).length, 1);
+  assert.equal((await docs("families/FAMILY01/songs")).length, 2);
   // Piano practice and its stars stay the app's own.
   assert.equal((await docs("families/FAMILY01/learn")).length, 0);
 });

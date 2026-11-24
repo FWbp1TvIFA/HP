@@ -84,6 +84,8 @@ function weekdays(v) {
 function songNotes(v) {
   const notes = need(text(v, 20000, "Notes"), "notes");
   const p = parseSong(notes);
+  // The page keeps 600 and warns from 600 on (rests count too), so 599 is the most it takes cleanly.
+  if (p.notes.length >= 600) throw new UserError("that song is too long for the piano page: it takes at most 599 notes and rests in all (each rest counts). Split it into two songs, such as Part 1 and Part 2.");
   if (p.errors.length) throw new UserError(`the piano page can't read these notes: ${p.errors.join(" ")} ${NOTES_HELP}`);
   if (!p.notes.some(n => n.midi != null)) throw new UserError(`there are no notes in that. ${NOTES_HELP}`);
   return notes;
@@ -106,7 +108,7 @@ function show(f, type, x, opts = {}) {
       return `⏰ ${x.time ? niceTime(x.time) : "no time"} ${x.title || "Alarm"}, ${weekly ? "every " + daysText(x.days) : x.date ? niceDate(x.date, f.today) : "once"} (${+x.who ? f.name(x.who) : "everyone"})${x.on === false ? ", switched off" : ""}${id}`; }
     case "shopping": return `${x.done ? "✓ " : ""}${x.name}${x.qty ? " (" + x.qty + ")" : ""}${id}`;
     case "songs": { const notes = typeof x.notes === "string" ? x.notes : "", n = noteCount(notes);
-      return `🎵 ${String(x.title ?? "").trim() || "Our song"}: ${n} note${n === 1 ? "" : "s"}, ${+x.beats === 3 ? 3 : 4} counts a bar, speed ${Math.min(240, Math.max(30, Math.round(+x.bpm) || 90))}${safeYt(x.yt) ? ", with a YouTube lesson" : ""}${opts.full && notes ? `. Notes: ${notes.slice(0, 1500)}${notes.length > 1500 ? "…" : ""}` : ""}${id}`; }
+      return `🎵 ${String(x.title ?? "").trim() || "Our song"}: ${n} note${n === 1 ? "" : "s"}, ${+x.beats === 3 ? 3 : 4} counts a bar, speed ${Math.min(240, Math.max(30, Math.round(+x.bpm) || 90))}${safeYt(x.yt) ? ", with a YouTube lesson" : ""}${opts.full && notes ? (notes.length <= 6000 || opts.only ? `. Notes: ${notes}` : `. Notes (only the first 6000 of ${notes.length} characters, so don't rewrite this song's notes from this; look it up on its own to see them all): ${notes.slice(0, 6000)}…`) : ""}${id}`; }
     case "money": return `${niceDate(x.date, f.today)}: ${x.type === "in" ? "+" : "-"}${f.money(x.amount)} ${x.cat || ""}${x.note ? " — " + x.note : ""} (${f.name(x.who)})${id}`;
     case "notes": {
       const body = String(x.body || "");
@@ -247,9 +249,9 @@ async function findItems(f, args) {
   else if (type === "songs") rows.sort((a, b) => String(a.title ?? "").localeCompare(String(b.title ?? "")));
   else if (field) rows.sort((a, b) => String(a[field] || "9999").localeCompare(String(b[field] || "9999")) || (a.time || "99").localeCompare(b.time || "99"));
   const c = cap(rows, limit);
-  const full = (type === "notes" || type === "songs") && c.shown.length <= 5;   // whole notes only for a few; otherwise previews keep the reply small
-  const what = { tasks: includeDone ? "tasks" : "open tasks", homework: includeDone ? "homework items" : "homework items still to do", shopping: includeDone ? "shopping items" : "items on the shopping list", notes: "notes", bills: "bills", meals: "planned dinners", countdowns: "countdowns", alarms: "alarms", songs: "of the family's own piano songs" }[type];
-  return rows.length ? `${rows.length} ${what}${search ? ` matching "${search}"` : ""}:\n${bullets(c.shown.map(x => show(f, type, x, { full })), c.more)}` : `No ${what}${search ? ` matching "${search}"` : ""}.`;
+  const full = (type === "notes" || type === "songs") && c.shown.length <= 5, only = c.shown.length === 1;   // whole notes only for a few; otherwise previews keep the reply small
+  const what = { tasks: includeDone ? "tasks" : "open tasks", homework: includeDone ? "homework items" : "homework items still to do", shopping: includeDone ? "shopping items" : "items on the shopping list", notes: "notes", bills: "bills", meals: "planned dinners", countdowns: "countdowns", alarms: "alarms", songs: "piano songs (the family's own)" }[type];
+  return rows.length ? `${rows.length} ${what}${search ? ` matching "${search}"` : ""}:\n${bullets(c.shown.map(x => show(f, type, x, { full, only })), c.more)}` : `No ${what}${search ? ` matching "${search}"` : ""}.`;
 }
 
 /* ---------------- tool: money_summary ---------------- */
@@ -711,7 +713,7 @@ export function toolDefinitions(f) {
             who: who(", or Family for everyone" + me) } } },
           songs: { type: "array", description: "The family's own songs for the Piano page (they show under Our songs, with sheet music, coloured keys and a play-along). Use it when someone asks for a song to learn or practise. Only write a melody you know well, in an easy key for a child unless asked; say it was written from memory, so they can check it by ear.", items: { type: "object", required: ["title", "notes"], additionalProperties: false, properties: {
             title: { type: "string", description: "Song name, up to 80 characters." },
-            notes: { type: "string", description: "The melody as letter notes with spaces: C D E F G A B (or Do Re Mi). # or b after the letter for a black key (F#, Bb). Octave number after it: no number is octave 4 (middle C is C4), C5 is the C above; ' also means one octave up and , one down. Length: a plain note is 1 count, C- is 2 counts, C-- is 3, C/ is half a count, C// a quarter, a dot after it makes it half as long again (C. is 1 and a half). Rest: _ (or R, R-, _/). Bar line: |. Example: C C G G | A A G- | F F E E | D D C-. Up to 600 notes." },
+            notes: { type: "string", description: "The melody as letter notes with spaces: C D E F G A B (or Do Re Mi). # or b after the letter for a black key (F#, Bb). Octave number after it: no number is octave 4 (middle C is C4), C5 is the C above; ' also means one octave up and , one down. Length: a plain note is 1 count, C- is 2 counts, C-- is 3, C/ is half a count, C// a quarter, a dot after it makes it half as long again (C. is 1 and a half). Rest: _ (or R, R-, _/). Bar line: |. Example: C C G G | A A G- | F F E E | D D C-. At most 599 notes and rests (split a longer song into parts)." },
             bpm: { type: "integer", minimum: 30, maximum: 240, description: "Speed in counts a minute. Default 90." },
             beats_in_a_bar: { type: "integer", enum: [3, 4], description: "Counts in a bar: 4 (default) or 3 for a waltz." },
             youtube_link: { type: "string", description: "Optional https YouTube link to a lesson or performance of the song." } } } },
