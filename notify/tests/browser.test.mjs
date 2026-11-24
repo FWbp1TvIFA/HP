@@ -338,7 +338,8 @@ test("enable / current / disable logic with a stand-in PushManager (no push serv
   // a browser that does not reveal the old key: subscribing fails, so it starts again
   await page.evaluate(() => { window.__pm.hideKey = true; });
   const c = await page.evaluate((k) => HHPush.enable(k), k1);
-  assert.equal(c.endpoint, "https://fcm.googleapis.com/fcm/send/fake-3"); assert.equal(c.key, "");
+  assert.equal(c.endpoint, "https://fcm.googleapis.com/fcm/send/fake-3"); assert.equal(c.key, k1, "enable() names the key it has just used even when the browser hides it");
+  assert.equal((await page.evaluate(() => HHPush.current())).key, "", "a later look cannot know the key on such a browser (the app keeps its own note)");
   assert.deepEqual(await counts(), { s: 3, u: 2 });
   assert.equal(await page.evaluate(() => HHPush.disable()), c.id, "disable() answers with the id that was removed");
   assert.equal(await page.evaluate(() => HHPush.current()), null); assert.equal(await page.evaluate(() => HHPush.disable()), null);
