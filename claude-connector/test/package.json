@@ -1,0 +1,7 @@
+{
+  "name": "happy-home-connector-tests",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end tests: the official MCP client signs in and uses every tool against the Firebase emulators.",
+  "dependencies": { "@modelcontextprotocol/sdk": "1.32.2" }
+}
