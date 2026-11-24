@@ -1,7 +1,7 @@
 /* Happy Home service worker: makes the app open instantly and work offline. */
-const CACHE = "happyhome-v18";
+const CACHE = "happyhome-v19";
 const KEEP = "hh-keep-sounds-1"; // the piano recordings: they never change, so they stay across app updates
-const FILES = ["./", "index.html", "app.css", "theme.css", "piano.css", "piano.js", "confetti.js", "fonts/fredoka-latin.woff2", "fonts/nunito-latin.woff2", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
+const FILES = ["./", "index.html", "app.css", "theme.css", "piano.css", "piano.js", "confetti.js", "push.js", "fonts/fredoka-latin.woff2", "fonts/nunito-latin.woff2", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 const PIANO = ["C4", "Ds4", "Fs4", "A4", "C5", "Ds5", "Fs5", "A5", "C6", "A3", "Fs3"].map(n => "sounds/piano/" + n + ".mp3");
 // After an update: clear old copies, then quietly fetch the piano recordings most songs use, so the piano sounds real even before it is first opened.
@@ -24,11 +24,73 @@ self.addEventListener("fetch", e => {
     net.then(r => { clearTimeout(t); finish(r); }).catch(() => { clearTimeout(t); fromCache().then(r => finish(r || Response.error())); });
   }));
 });
-self.addEventListener("notificationclick", e => {
-  e.notification.close();
-  const url = String((e.notification.data && e.notification.data.url) || "#home");
-  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(cs => {
-    for (const c of cs) { if ("focus" in c) { c.postMessage({ type: "hh-open", url }); return c.focus(); } }
-    return self.clients.openWindow("./" + (url.charAt(0) === "#" ? url : "#home"));
-  }));
-});
+/* ---- Happy Home: phone notifications (sw-push.js). Paste this whole block into sw.js as it is. ----
+   It only adds three listeners and keeps its names to itself, so it cannot clash with the rest of sw.js. */
+(() => {
+  const ICON = "icons/icon-192.png";
+  const scope = () => self.registration.scope;
+  const text = (v, max) => (typeof v === "string" || typeof v === "number" ? String(v).slice(0, max) : "");
+  // Only ever open pages of this app: anything else (another site, another path, javascript:) becomes the app's front page.
+  const inScope = (url) => {
+    try {
+      const abs = new URL(String(url || ""), scope());
+      const base = new URL(scope());
+      return abs.origin === base.origin && abs.pathname.startsWith(base.pathname) ? abs.href : base.href;
+    } catch (e) { return scope(); }
+  };
+
+  self.addEventListener("push", (event) => {
+    // iPhone takes the subscription away when a push arrives and nothing is shown, so EVERY path below shows something.
+    let data = null, raw = "";
+    try { data = event.data ? event.data.json() : null; } catch (e) { try { raw = event.data ? event.data.text() : ""; } catch (e2) { raw = ""; } }
+    const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+    const n = isObj(data) ? (isObj(data.notification) ? data.notification : data) : {};
+    const title = text(n.title, 120) || "Happy Home";
+    const body = text(n.body, 400) || text(typeof data === "string" || typeof data === "number" ? data : raw, 400) || (text(n.title, 1) ? "" : "You have a reminder.");
+    const tag = text(n.tag, 64);
+    const options = { body, icon: ICON, badge: ICON, data: { url: inScope(n.navigate || n.url || (isObj(n.data) ? n.data.url : "")) } };
+    if (tag) { options.tag = tag; options.renotify = true; }
+    if (n.silent === true) options.silent = true;
+    event.waitUntil(
+      self.registration.showNotification(title, options)
+        .catch(() => self.registration.showNotification("Happy Home", { body: "You have a reminder.", icon: ICON }))
+    );
+  });
+
+  self.addEventListener("notificationclick", (event) => {
+    event.notification.close();
+    const url = inScope(event.notification.data && event.notification.data.url);
+    event.waitUntil((async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const mine = windows.filter((c) => typeof c.url === "string" && c.url.startsWith(scope()));
+      const client = mine.find((c) => c.focused) || mine.find((c) => c.visibilityState === "visible") || mine[0];
+      if (!client) { await self.clients.openWindow(url); return; }
+      let shown = client;
+      try { shown = (await client.focus()) || client; } catch (e) { /* focusing is not always allowed */ }
+      // Take the window to the page. A change of #section only does not reload the app (it sees a normal hashchange).
+      if (shown.url !== url && shown.navigate) {
+        try { shown = (await shown.navigate(url)) || shown; } catch (e) { /* not our window to steer: the message below still tells it */ }
+      }
+      // Tell the app as well, so it can react even when the address did not change.
+      try { shown.postMessage({ type: "hh-open", url }); } catch (e) { /* window went away */ }
+    })().catch(() => self.clients.openWindow(url).catch(() => {})));
+  });
+
+  self.addEventListener("pushsubscriptionchange", (event) => {
+    // The browser replaced or dropped the subscription: make a new one with the same key and tell the app to save it.
+    event.waitUntil((async () => {
+      try {
+        if (!event.newSubscription) {
+          const old = event.oldSubscription && event.oldSubscription.options;
+          const current = await self.registration.pushManager.getSubscription();
+          if (!current && old && old.applicationServerKey) {
+            await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: old.applicationServerKey });
+          }
+        }
+      } catch (e) { /* the app will offer to turn notifications on again */ }
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const c of windows) { try { c.postMessage({ type: "hh-push-changed" }); } catch (e) { /* ignore */ } }
+    })());
+  });
+})();
+/* ---- end of sw-push.js ---- */

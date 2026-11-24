@@ -1229,7 +1229,7 @@ function syncAgenda(){
 const deviceTz=()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||"Australia/Brisbane"}catch(e){return"Australia/Brisbane"}};
 function setPrefs(patch){const {id:_i,...cur}=(S().notify.find(x=>x.id==="prefs")||{});ST.put("notify","prefs",{...cur,...patch,updated:Date.now()});agendaDirty=true}
 /* this phone's notification switch */
-let pushState={checked:false,sub:null,busy:false,err:""};
+let pushState={checked:false,sub:null,busy:false,err:"",why:""};
 async function refreshPush(){
   if(!window.HHPush){pushState.checked=true;return}
   try{pushState.sub=await HHPush.current()}catch(e){pushState.sub=null}
@@ -1241,11 +1241,11 @@ async function refreshPush(){
 }
 async function turnOnNotifications(){
   if(pushState.busy)return;const sup=window.HHPush?HHPush.support():{ok:false},pub=SET().push&&SET().push.pub;
-  pushState.busy=true;pushState.err="";
+  pushState.busy=true;pushState.err="";pushState.why="";
   try{
     if(window.HHPush&&pub&&sup.ok){const s=await HHPush.enable(pub);pushState.sub=s;if(ST.mode==="cloud")ST.put("pushSubs",s.id,{who:meId(),endpoint:s.endpoint,p256dh:s.p256dh,auth:s.auth,ua:HHPush.device(),created:Date.now(),seen:Date.now()});ST._localPref("pushOn","1");toast("Notifications are on for this phone")}
     else{const r=("Notification" in window)?await Notification.requestPermission():"denied";if(r==="granted"){ST._localPref("pushOn","1");toast("Notifications are allowed on this phone")}else pushState.err="denied"}
-  }catch(e){pushState.err=(e&&e.code)||"failed"}
+  }catch(e){pushState.err=(e&&typeof e.code==="string"&&e.code)||"failed";pushState.why=String((e&&e.message)||"").replace(/[^\w .:/-]+/g," ").slice(0,60)}
   pushState.busy=false;render();
 }
 async function turnOffNotifications(){
@@ -1273,7 +1273,7 @@ function notifierSheet(){
   openSheet(`${sheetHead("Notifications when the app is closed")}<div class="stack" style="gap:12px">
    <p class="sub" style="margin:0">A free helper on your family's own GitHub page checks every few minutes and sends each reminder to your phones. It takes about two minutes to set up, once, by the person who owns the GitHub page.</p>
    <ol class="steps"><li>Tap <b>Make my code</b>. The app makes a secret code for the helper.</li><li>Tap <b>Copy code</b>, then <b>Open GitHub</b>.</li><li>On GitHub, in <b>Name</b> type <code>HH_NOTIFIER</code>, paste the code into <b>Secret</b>, and tap <b>Add secret</b>.</li><li>Come back here and turn on notifications on each phone.</li></ol>
-   <div class="sub">The code lets the helper read your family's reminders, nothing else can use it. Treat it like a password: paste it only into that GitHub box. ${has?"Making a new code switches the old one off.":""}</div>
+   <div class="sub">The code is a spare key to your family's Happy Home. The helper uses it only to read the list of reminders and send them to your phones. Treat it like a password: paste it only into that GitHub box. ${has?"Making a new code switches the old one off.":""}</div>
    <div class="err" id="nf_err" hidden></div>
    <button class="primary" type="button" id="nf_make">${has?"Make a new code":"Make my code"}</button>
    <div id="nf_out" hidden class="stack" style="gap:10px"><textarea id="nf_code" rows="4" readonly class="codearea"></textarea>
@@ -1283,7 +1283,7 @@ function notifierSheet(){
     const err=m=>{const x=sh.querySelector("#nf_err");x.hidden=!m;x.textContent=m||""};
     sh.querySelector("#nf_make").onclick=async ev=>{const b=ev.currentTarget;b.disabled=true;err("");
       try{const code=await makeNotifier();sh.querySelector("#nf_out").hidden=false;sh.querySelector("#nf_code").value=code;sh.querySelector("#nf_open").href=repoSecretsUrl();b.hidden=true}
-      catch(e){err(navigator.onLine?"That didn't work. Check you're online and try again.":"You're offline. Connect to the internet and try again.");b.disabled=false}};
+      catch(e){err((navigator.onLine?"That didn't work. Check you're online and try again.":"You're offline. Connect to the internet and try again.")+(e&&typeof e.code==="string"?" ("+e.code.replace(/[^\w/-]+/g,"").slice(0,50)+")":""));b.disabled=false}};
     sh.querySelector("#nf_copy").onclick=()=>{const ta=sh.querySelector("#nf_code");try{navigator.clipboard.writeText(ta.value).then(()=>toast("Code copied"),()=>{ta.select();toast("Select all and copy")})}catch(_){ta.select();toast("Select all and copy")}};
     const st=sh.querySelector("#nf_stop");if(st)st.onclick=()=>{if(st.dataset.arm){stopNotifier();closeSheet()}else{st.dataset.arm=1;st.textContent="Tap again to switch it off"}};
   });
@@ -1319,7 +1319,7 @@ function viewAlarms(){
    :perm==="denied"||pushState.err==="denied"?`<div class="sub">Notifications are blocked for Happy Home on this phone. Open the phone's Settings, find Happy Home under Notifications, and allow them. Then come back.</div>`
    :perm==="unsupported"?`<div class="sub">This browser can't show notifications. Alarms still ring inside the app while it is open.</div>`
    :(perm==="granted"&&ST._localPref("pushOn")!=="0"&&(subOk||!helper))?`<div class="row between"><div class="grow"><b>On for this phone ✓</b><div class="sub">${helper?(subOk?"Reminders reach this phone even when Happy Home is closed.":""):"Alarms show a notification while Happy Home is open or was used a moment ago."}</div></div><button class="mini ghostmini" data-act="pushOff">Turn off</button></div>`
-   :`<button class="primary" data-act="pushOn" ${pushState.busy?"disabled":""}>🔔 Turn on notifications on this phone</button>`;
+   :`<button class="primary" data-act="pushOn" ${pushState.busy?"disabled":""}>🔔 Turn on notifications on this phone</button>${pushState.err&&pushState.err!=="denied"?`<div class="sub neg">That did not work on this phone${pushState.why&&pushState.why!==pushState.err?" ("+esc(pushState.why)+")":""}. Close Happy Home, open it again from its Home Screen icon and try once more.</div>`:""}`;
   return `${backBar()}
   <section class="card"><div class="row between"><h2>Alarms</h2><button class="link" data-act="addAlarm">+ New alarm</button></div>
    <div class="list" style="margin-top:6px">${alarms.length?alarms.map(a=>row("alarms",a.id,`<button class="grow tap altap" data-act="editAlarm" data-id="${a.id}"><span class="altime ${a.on===false?"off":""}">${tm(a.time)}</span><span class="t">${esc(a.title||"Alarm")}</span><span class="m">${esc(dayTxt(a))} · ${esc(pname(a.who||0))}</span></button><button class="toggle ${a.on===false?"":"on"}" data-act="alarmToggle" data-id="${a.id}" role="switch" aria-checked="${a.on!==false}" aria-label="Alarm on"></button>`)).join(""):`<div class="empty">No alarms yet. Add one for waking up, leaving for school or practice time.</div>`}</div></section>
