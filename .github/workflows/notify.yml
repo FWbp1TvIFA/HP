@@ -1,11 +1,12 @@
 # Happy Home: sends the family's reminders as phone notifications.
-# Runs every 10 minutes, stays on for about 9 minutes so reminders go out on time, and never fails
+# Runs every 10 minutes (at minutes 4, 14, 24 and so on: GitHub's timer is busiest on the hour and often late then),
+# stays on for up to about 9 minutes when a reminder is close so that it goes out on time, and never fails
 # (a failed run would make GitHub email the repository owner).
 name: Happy Home notifications
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "4,14,24,34,44,54 * * * *"
   workflow_dispatch:
 
 permissions:
