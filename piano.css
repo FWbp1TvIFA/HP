@@ -1,0 +1,359 @@
+/* Happy Home: Piano page. Every class starts with pn- so nothing clashes with the app. */
+
+/* ── Piano-only view: hide the app's header and tab bar, stop the page behind from moving ── */
+html.pn-focus header.top, html.pn-focus nav.tabs{display:none!important}
+html.pn-focus, html.pn-focus body{overflow:hidden!important;overscroll-behavior:none}
+
+/* ── Root. Nothing on the piano page can be selected, long-pressed or double-tap zoomed ── */
+.pn-root{position:relative;display:flex;flex-direction:column;gap:10px;--pn-gold:#F2A900;--pn-bar:48px;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.pn-root *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.pn-root input,.pn-root textarea{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+.pn-root [hidden]{display:none!important}
+.pn-root button{touch-action:manipulation;font-family:inherit}
+.pn-root button svg,.pn-yt svg{width:20px;height:20px;flex:none;display:block}
+
+/* ── Top of the normal page: song, mode, play, speed ── */
+.pn-stage{display:flex;flex-direction:column;gap:8px}
+.pn-row{display:flex;gap:8px;align-items:stretch}
+.pn-songbtn{flex:1;min-width:0;display:flex;align-items:center;gap:10px;text-align:left;border:0;border-radius:14px;background:var(--surface,#fff);color:var(--fg,#16302A);padding:6px 12px;min-height:54px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.pn-songbtn svg{width:24px;height:24px;color:var(--accent,#1F5C4A)}
+.pn-songbtn b{display:block;font-family:var(--display,inherit);font-size:1.02rem;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pn-songbtn small{display:block;color:var(--muted,#5B6F68);font-size:.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pn-songbtn i{flex:none;font-style:normal;font-size:1rem;line-height:1;color:var(--accent,#1F5C4A);background:var(--accent-soft,#D7EAE2);border-radius:50%;width:28px;height:28px;display:grid;place-items:center}
+.pn-sq{flex:none;width:60px;min-height:54px;border:0;border-radius:14px;background:var(--surface,#fff);color:var(--fg,#16302A);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:.62rem;font-weight:700;padding:4px 2px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.pn-sq svg{width:22px;height:22px}
+.pn-mic-on .pn-sq[data-pn=mic],.pn-mic-on .pn-micwide{display:none}
+.pn-root .pn-modeseg button{min-height:44px;font-weight:600;padding:6px 2px}
+.pn-root .pn-modeseg button.on{background:var(--accent,#1F5C4A);color:var(--on-accent,#fff)}
+.pn-root .pn-speedseg button{min-height:46px;padding:6px 0;font-size:.8rem;white-space:nowrap}
+.pn-m-free .pn-stage .pn-row:last-child,.pn-m-free .pn-bar .pn-play{display:none}
+.pn-playbig{flex:none;display:flex;align-items:center;justify-content:center;gap:6px;min-width:132px;min-height:46px;padding:8px 14px;font-size:1rem}
+.pn-root .pn-stopping{background:var(--bad,#B3412F);color:#fff}
+
+/* ── The red "Listening" pill ── */
+.pn-microw:empty{display:none}
+.pn-listen{display:flex;align-items:center;gap:8px;background:#C62828;color:#fff;border-radius:999px;padding:4px 4px 4px 14px;min-height:44px;font-size:.85rem;white-space:nowrap}
+.pn-reddot{flex:none;width:10px;height:10px;border-radius:50%;background:#fff;animation:pn-blink 1.1s infinite}
+.pn-hear em{font-style:normal;opacity:.9}
+.pn-hear b{display:inline-block;min-width:1.7em;font:800 1.1rem var(--display,inherit)}
+.pn-meter{position:relative;flex:1;min-width:44px;max-width:150px;height:10px;border-radius:5px;background:rgba(255,255,255,.3)}
+.pn-meter::before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:rgba(255,255,255,.7)}
+.pn-meter i{position:absolute;top:-4px;left:50%;width:8px;height:18px;margin-left:-4px;border-radius:4px;background:#fff;transition:left .1s linear}
+.pn-meter i.pn-intune{background:#9CF0B5}
+.pn-root .pn-listen button{flex:none;margin-left:auto;border:0;border-radius:999px;background:#fff;color:#C62828;font-weight:700;display:flex;align-items:center;gap:4px;padding:0 13px 0 9px;height:36px}
+.pn-root .pn-listen button svg{width:16px;height:16px}
+.pn-barmic .pn-listen em{display:none}
+.pn-barmic .pn-meter{flex:none;width:44px}
+
+/* ── Follow-along: sheet music, the big "now" note, feedback ── */
+.pn-follow{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"sheet sheet" "now side";gap:8px 12px;align-items:center}
+.pn-sheetbox{grid-area:sheet;position:relative;background:var(--surface,#fff);border-radius:14px;max-height:calc(var(--pn-lineh,104px)*1.55 + 8px);overflow-x:hidden;overflow-y:auto;padding:4px 6px;scrollbar-width:thin;overscroll-behavior:contain;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.pn-m-time .pn-sheetbox{max-height:calc(var(--pn-lineh,104px) + 8px)}
+.pn-m-free .pn-sheet{display:none}
+.pn-line{display:block;max-width:100%;height:auto}
+.pn-sl{fill:none;stroke:var(--fg,#16302A);stroke-width:1;opacity:.5}
+.pn-bl{fill:none;stroke:var(--fg,#16302A);stroke-width:1.5;opacity:.75}
+.pn-clef path{fill:none;stroke:var(--fg,#16302A);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.pn-clef circle,.pn-ink{fill:var(--fg,#16302A)}
+.pn-head{fill:var(--c);stroke:rgba(0,0,0,.5);stroke-width:1}
+.pn-hole{fill:var(--pn-paper,var(--surface,#fff))}
+.pn-stem{fill:none;stroke:var(--fg,#16302A);stroke-width:1.7}
+.pn-flag,.pn-rq{fill:none;stroke:var(--fg,#16302A);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.pn-acc{fill:none;stroke:var(--fg,#16302A);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.pn-nt{font:700 13px var(--body,system-ui,sans-serif);fill:var(--fg,#16302A)}
+.pn-ns{font:600 9px var(--body,system-ui,sans-serif);fill:var(--muted,#5B6F68)}
+.pn-hit{fill:transparent;cursor:pointer}
+.pn-ring{fill:none;stroke:var(--c);stroke-width:3.2;opacity:0}
+.pn-mark{fill:var(--accent,#1F5C4A);opacity:0}
+.pn-hd{transform-box:fill-box;transform-origin:center;transition:transform .12s}
+.pn-n.pn-done{opacity:.36}
+.pn-n.pn-cur{opacity:1}
+.pn-cur .pn-ring{opacity:1}
+.pn-cur .pn-mark{opacity:1;animation:pn-bob .5s ease-in-out infinite alternate}
+.pn-cur .pn-hd{transform:scale(1.28)}
+.pn-cur .pn-nt{font-size:15px;font-weight:800}
+.pn-v-missed .pn-nt,.pn-v-early .pn-nt,.pn-v-late .pn-nt{fill:var(--bad,#B3412F)}
+.pn-sheet .empty{padding:14px 8px}
+
+.pn-now{grid-area:now;display:flex;align-items:center;gap:8px;min-width:0}
+.pn-nowstaff{flex:none;width:98px;height:82px;background:var(--surface,#fff);border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.pn-bs{display:block;width:100%;height:100%}
+.pn-bh{stroke:rgba(0,0,0,.5);stroke-width:1.2}
+.pn-8va{font:700 9px var(--body,sans-serif);fill:var(--muted,#5B6F68)}
+.pn-nowname{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:52px}
+.pn-nowname b{min-width:50px;height:50px;border-radius:15px;display:grid;place-items:center;font:800 1.5rem var(--display,inherit);padding:0 8px;background:var(--sunk,#E6ECE8)}
+.pn-nowname b:empty{visibility:hidden}
+.pn-nowname span{font-size:.72rem;line-height:1.15;color:var(--muted,#5B6F68);font-weight:600;text-align:center;max-width:104px}
+.pn-side{grid-area:side;min-width:0}
+.pn-fbrow{display:flex;align-items:center;gap:8px}
+.pn-fb{font:700 1rem/1.25 var(--display,inherit);color:var(--fg,#16302A);min-height:2.5em;display:flex;align-items:center}
+.pn-fb.pn-good{color:var(--good,#2E7D4F)} .pn-fb.pn-warn{color:var(--warn,#A66A00)} .pn-fb.pn-bad{color:var(--bad,#B3412F)}
+.pn-beat{display:none;flex:none;width:16px;height:16px;border-radius:50%;background:var(--line,#D5DED9)}
+.pn-m-time .pn-beat{display:block}
+.pn-beat.pn-tick{animation:pn-beat-a .28s ease-out} .pn-beat.pn-tock{animation:pn-beat-b .28s ease-out}
+.pn-hold{display:flex;gap:4px;height:12px;margin-top:4px}
+.pn-hold:empty{visibility:hidden}
+.pn-hold i{flex:1;max-width:64px;background:var(--sunk,#E6ECE8);border-radius:6px;overflow:hidden}
+.pn-hold u{display:block;height:100%;background:var(--good,#2E7D4F);transform:scaleX(0);transform-origin:0 50%}
+
+/* Find the note */
+.pn-game{display:none;align-items:center;gap:10px;padding:8px 6px;min-height:66px}
+.pn-m-free .pn-game{display:flex}
+.pn-gq{flex:1;min-width:0;font:700 1.05rem/1.25 var(--display,inherit)}
+.pn-gq small{display:block;font:500 .8rem var(--body,inherit);color:var(--muted,#5B6F68);margin-top:2px}
+.pn-gq b{display:inline-grid;place-items:center;min-width:42px;height:42px;border-radius:12px;font-size:1.45rem;padding:0 6px;vertical-align:middle}
+.pn-gq em{font-style:normal;color:var(--muted,#5B6F68);font-size:.95rem}
+.pn-gside{flex:none;display:flex;align-items:center;gap:8px}
+.pn-score{display:flex;align-items:center;gap:3px;font:800 1.2rem var(--display,inherit)}
+.pn-root .pn-score svg{width:24px;height:24px;fill:var(--pn-gold)}
+.pn-root .pn-game button{min-height:44px;padding:8px 14px;white-space:nowrap}
+
+/* ── Keyboard ── */
+.pn-kb{position:relative;margin-inline:-16px}
+.pn-scroll{display:flex;flex-direction:column;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.pn-scroll::-webkit-scrollbar{display:none}
+.pn-scroll>*{flex:none;position:relative;margin-inline:auto}
+/* falling bars (Play in time) */
+.pn-fall{display:none;height:104px;overflow:hidden;border-bottom:4px solid var(--accent,#1F5C4A);background:linear-gradient(180deg,transparent,rgba(127,127,127,.14))}
+.pn-m-time .pn-fall{display:block}
+.pn-track{position:absolute;left:0;right:0;bottom:0;height:0;will-change:transform}
+.pn-track i{position:absolute;border-radius:8px;font:800 12px/1 var(--display,sans-serif);font-style:normal;display:flex;align-items:flex-end;justify-content:center;padding-bottom:3px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.6),0 1px 2px rgba(0,0,0,.25)}
+.pn-track i.pn-hit{opacity:.22} .pn-track i.pn-miss{opacity:.45;filter:grayscale(1)}
+/* names above the keys */
+.pn-names{height:30px;touch-action:pan-x}
+.pn-nm{position:absolute;top:2px;bottom:3px;display:flex;align-items:center;justify-content:center;gap:3px;border-radius:8px;background:var(--c);color:var(--ct);border:1.5px solid var(--bg,#F2F5F3);background-clip:padding-box;box-sizing:border-box;white-space:nowrap;overflow:hidden}
+.pn-nm b{font:800 14px/1 var(--display,sans-serif)}
+.pn-nm span{font:700 10px/1 var(--body,sans-serif)}
+.pn-nm.pn-lit{box-shadow:0 0 0 2px var(--fg,#16302A);z-index:1}
+.pn-lab-abc .pn-nm span,.pn-lab-doremi .pn-nm b{display:none}
+.pn-lab-doremi .pn-nm span{font-size:12px}
+.pn-lab-none .pn-nm>*{visibility:hidden}
+/* keys */
+.pn-keys{height:198px;touch-action:none;cursor:pointer;background:#111}
+.pn-size-bigger .pn-keys{height:228px}
+.pn-key{position:absolute;top:0;touch-action:none}
+.pn-w{bottom:0;border-radius:0 0 9px 9px;background:linear-gradient(180deg,rgba(255,255,255,.8) 0%,rgba(255,255,255,.55) 46%,rgba(255,255,255,0) 72%),var(--c);box-shadow:inset 0 0 0 1px rgba(0,0,0,.3),inset 0 -7px 0 rgba(0,0,0,.16)}
+.pn-b{height:var(--bh,60%);z-index:2;border-radius:0 0 6px 6px;background:linear-gradient(180deg,#34343a,#141417 75%);box-shadow:inset 0 -5px 0 rgba(255,255,255,.14),0 2px 4px rgba(0,0,0,.45)}
+.pn-kl{position:absolute;left:0;right:0;bottom:11px;display:flex;flex-direction:column;align-items:center;gap:1px;color:var(--ct);pointer-events:none}
+.pn-ms{display:block;width:min(calc(var(--kw,48px)*.8),46px);height:auto;background:rgba(255,255,255,.95);border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.18)}
+.pn-ms .pn-sl{stroke:#333;stroke-width:.75;opacity:1}
+.pn-sh{fill:#111}
+.pn-kl b{font:800 min(calc(var(--kw,48px)*.46),27px)/1.05 var(--display,sans-serif)}
+.pn-kl sub{font-size:.48em;font-weight:700;vertical-align:baseline;margin-left:1px;opacity:.9}
+.pn-kl span{font:700 min(calc(var(--kw,48px)*.26),14px)/1.1 var(--body,sans-serif)}
+.pn-mcdot{position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-style:normal;font-size:12px;line-height:1;color:var(--ct);text-shadow:0 0 2px rgba(0,0,0,.25)}
+.pn-btag{position:absolute;left:2px;right:2px;bottom:6px;border-radius:5px;background:var(--c);color:var(--ct);display:flex;flex-direction:column;align-items:center;padding:2px 0;font:800 min(calc(var(--kw,48px)*.21),12px)/1.15 var(--body,sans-serif);pointer-events:none;overflow:hidden}
+.pn-btag span{display:none;font-size:.82em;letter-spacing:-.03em}
+.pn-lab-abc .pn-ms,.pn-lab-abc .pn-kl span,.pn-lab-doremi .pn-ms,.pn-lab-doremi .pn-kl b{display:none}
+.pn-lab-doremi .pn-kl span{font-size:min(calc(var(--kw,48px)*.36),19px);font-weight:800}
+.pn-lab-doremi .pn-btag b{display:none} .pn-lab-doremi .pn-btag span{display:block}
+.pn-lab-none .pn-kl,.pn-lab-none .pn-btag>*{visibility:hidden}
+/* key states */
+.pn-key.pn-down,.pn-key.pn-auto{filter:brightness(.84)}
+.pn-w.pn-down,.pn-w.pn-auto{box-shadow:inset 0 0 0 1px rgba(0,0,0,.35),inset 0 4px 10px rgba(0,0,0,.4)}
+.pn-down .pn-kl,.pn-auto .pn-kl{transform:translateY(3px)}
+.pn-w.pn-lit{z-index:1;background:var(--c);--ring:inset 0 0 0 4px #fff,inset 0 0 0 7px rgba(0,0,0,.45)}
+.pn-b.pn-lit{background:var(--c);--ring:inset 0 0 0 3px #fff,inset 0 0 0 5px rgba(0,0,0,.45)}
+.pn-key.pn-lit{animation:pn-pulse .9s ease-in-out infinite}
+.pn-lit .pn-kl,.pn-lit .pn-btag{animation:pn-bounce .9s ease-in-out infinite}
+.pn-key.pn-ok::before{content:"";position:absolute;inset:0;border-radius:inherit;background:#fff;pointer-events:none;animation:pn-okflash .4s ease-out forwards}
+.pn-key.pn-bad{animation:pn-shake .38s}
+.pn-key.pn-bad::before{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 4px var(--bad,#B3412F);pointer-events:none}
+/* moving along a long keyboard */
+.pn-mini{display:none;position:relative;height:34px;margin:6px 60px 0;border-radius:9px;overflow:hidden;touch-action:none;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)}
+.pn-scrolls .pn-mini{display:block}
+.pn-minitrack{display:flex;height:100%}
+.pn-minitrack i{flex:1;opacity:.8;border-right:1px solid rgba(255,255,255,.6)}
+.pn-miniview{position:absolute;top:0;bottom:0;box-sizing:border-box;border:3px solid var(--fg,#16302A);border-radius:9px;background:rgba(255,255,255,.35);pointer-events:none}
+.pn-root .pn-arrow{display:none;position:absolute;bottom:0;width:46px;height:34px;border:0;border-radius:10px;background:var(--surface,#fff);color:var(--fg,#16302A);font:800 22px/1 var(--body,sans-serif);padding:0 0 3px;z-index:3;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.pn-scrolls .pn-arrow{display:block;opacity:.35}
+.pn-al{left:8px} .pn-ar{right:8px}
+.pn-canl .pn-al,.pn-canr .pn-ar{opacity:1}
+
+.pn-hint{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--accent-soft,#D7EAE2);color:var(--fg,#16302A);border-radius:12px;padding:6px 12px;font-size:.85rem}
+.pn-root .pn-hint button{min-height:36px;padding:4px 8px}
+
+/* ── Below the piano: lesson link, settings, songs ── */
+.pn-below{display:flex;flex-direction:column;gap:14px;margin-top:4px}
+.pn-yt{display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;color:var(--fg,#16302A);min-height:48px;font-weight:600}
+.pn-yt svg{width:28px;height:28px;color:#E53935}
+.pn-set{display:flex;flex-direction:column;gap:14px}
+.pn-setrow{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pn-two{display:flex;flex-direction:column;gap:14px}
+.pn-root .pn-set .seg button{min-height:42px;font-size:.76rem;padding:6px 0;white-space:nowrap}
+.pn-pals{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.pn-root .pn-pals button{display:flex;align-items:center;height:44px;padding:0 6px;border:2px solid transparent;border-radius:12px;background:var(--sunk,#E6ECE8)}
+.pn-root .pn-pals button.on{border-color:var(--fg,#16302A);background:var(--surface,#fff)}
+.pn-pals i{width:6px;height:24px}
+.pn-pals i:first-child{border-radius:4px 0 0 4px} .pn-pals i:last-child{border-radius:0 4px 4px 0}
+.pn-legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.pn-legend span{display:flex;align-items:baseline;gap:4px;border-radius:8px;padding:3px 7px;font-size:.72rem;font-weight:700}
+.pn-legend b{font-size:.92rem}
+.pn-legend em{font-style:normal;color:var(--muted,#5B6F68);font-size:.76rem;margin-left:4px}
+.pn-micwide{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;font-weight:600}
+
+/* song list (also inside the "Choose a song" sheet, which lives outside .pn-root) */
+.pn-songsui{display:flex;flex-direction:column;gap:10px}
+.pn-songsui h2{font-size:1.1rem}
+.pn-songsui .pn-q,.pn-f-title,.pn-f-bpm,.pn-f-beats,.pn-f-yt{font-size:16px;min-height:44px}
+.pn-songsui .chips{gap:6px}
+.pn-songsui .chip{min-height:38px;padding:6px 10px;font-size:.8rem;-webkit-user-select:none;user-select:none}
+.pn-songsui [data-pn=add]{min-height:44px}
+.pn-list{display:flex;flex-direction:column}
+.pn-song{display:flex;align-items:center;gap:6px;border-top:1px solid var(--line,#D5DED9)}
+.pn-song:first-child{border-top:0}
+.pn-songmain{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;padding:8px 2px;text-align:left;min-height:56px;color:inherit;font:inherit;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.pn-g{flex:none;width:68px;text-align:center;font-size:.66rem;font-weight:700;border-radius:999px;padding:4px 0}
+.pn-g0{background:rgba(46,125,79,.16);color:#1E6B40} .pn-g1{background:rgba(47,111,179,.16);color:#1F5796} .pn-g2{background:rgba(140,70,190,.16);color:#7335A8}
+.pn-st{flex:1;min-width:0}
+.pn-st b{display:block;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.pn-st small{display:block;color:var(--muted,#5B6F68);font-size:.74rem;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pn-sm{flex:none;display:flex;flex-direction:column;align-items:flex-end;font-size:.72rem;color:var(--muted,#5B6F68)}
+.pn-stars{font-style:normal;color:#DB9A00;letter-spacing:1px;font-size:.92rem}
+.pn-nostars{color:var(--line,#D5DED9)}
+.pn-song.pn-on .pn-st b{color:var(--accent,#1F5C4A)}
+.pn-song.pn-on .pn-st b::before{content:"♪ "}
+.pn-edit{flex:none;border:0;background:var(--sunk,#E6ECE8);color:inherit;border-radius:10px;min-height:40px;padding:0 12px;font-weight:600;font-size:.8rem}
+/* add / edit a song */
+.pn-f-notes{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;line-height:1.5;min-height:104px;resize:vertical}
+.pn-help{line-height:1.6}
+.pn-help b{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600;background:var(--sunk,#E6ECE8);border-radius:4px;padding:1px 4px;white-space:nowrap}
+.pn-prev{--pn-paper:var(--bg,#F2F5F3);background:var(--bg,#F2F5F3);border-radius:12px;padding:4px;max-height:200px;overflow:auto}
+.pn-prev .pn-line{max-width:none}
+.pn-err{color:var(--bad,#B3412F);font-size:.86rem;font-weight:500}
+.pn-okmsg{color:var(--good,#2E7D4F);font-size:.86rem;font-weight:500}
+.sheet [data-pn=edplay]{display:flex;align-items:center;justify-content:center;gap:6px}
+.sheet [data-pn=edplay] svg{width:18px;height:18px}
+.pn-del{color:var(--bad,#B3412F);align-self:center;min-height:44px}
+
+/* ── Count-in number, celebration, microphone explanation (all inside the piano's own element) ── */
+.pn-count{position:fixed;left:50%;top:40%;z-index:17;width:124px;height:124px;margin:-62px 0 0 -62px;border-radius:50%;background:var(--accent,#1F5C4A);color:var(--on-accent,#fff);font:800 76px/124px var(--display,sans-serif);text-align:center;pointer-events:none;box-shadow:0 10px 34px rgba(0,0,0,.35)}
+.pn-count.pn-pop1{animation:pn-countin .32s cubic-bezier(.2,1.5,.4,1)}
+.pn-over{position:fixed;top:0;right:0;bottom:0;left:0;z-index:19;display:grid;place-items:center;padding:max(12px,env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px));background:rgba(8,16,14,.6);overflow:auto}
+.pn-pop{position:relative;width:min(420px,100%);background:var(--surface,#fff);color:var(--fg,#16302A);border-radius:24px;padding:18px 18px 16px;text-align:center;box-shadow:0 22px 60px rgba(0,0,0,.4);animation:pn-popin .34s cubic-bezier(.2,1.4,.4,1)}
+.pn-pop h2{font:800 1.45rem/1.2 var(--display,inherit);margin:6px 0 4px}
+.pn-bigstars{display:flex;justify-content:center;align-items:flex-end;gap:4px}
+.pn-bigstars span{display:block}
+.pn-bigstars svg{display:block;width:66px;height:66px;fill:var(--line,#D5DED9)}
+.pn-bigstars span:nth-child(2) svg{width:84px;height:84px}
+.pn-bigstars .pn-won{animation:pn-starin .55s cubic-bezier(.2,1.7,.4,1) backwards}
+.pn-bigstars .pn-won svg{fill:#FFC21A;stroke:#D98E00;stroke-width:.9;stroke-linejoin:round;filter:drop-shadow(0 3px 6px rgba(217,142,0,.45))}
+.pn-popsong{font-size:.95rem}
+.pn-popline{font-weight:700;margin-top:6px}
+.pn-poptip{color:var(--muted,#5B6F68);font-size:.9rem;margin-top:4px}
+.pn-popgive{display:inline-block;margin-top:8px;background:var(--accent-soft,#D7EAE2);color:var(--accent,#1F5C4A);border-radius:999px;padding:3px 12px;font-size:.8rem;font-weight:700}
+.pn-popbtns{display:flex;gap:8px;margin-top:12px}
+.pn-root .pn-popbtns button{flex:1;min-height:46px;padding:8px 4px;font-size:.92rem}
+.pn-confetti{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.pn-confetti i{position:absolute;top:-24px;width:10px;height:16px;border-radius:2px;animation:pn-confetti 2.6s linear 3 both}
+.pn-micpop{text-align:left}
+.pn-micpop h2{font-size:1.2rem;text-align:center}
+.pn-micicon{width:52px;height:52px;border-radius:50%;background:var(--accent-soft,#D7EAE2);color:var(--accent,#1F5C4A);display:grid;place-items:center;margin:0 auto}
+.pn-micicon svg{width:28px;height:28px}
+.pn-micpop ul{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:5px;font-size:.95rem}
+
+/* ── Piano-only view (button, or by itself on a sideways phone) ── */
+.pn-bar{display:none}
+.pn-root.pn-focus-on{position:fixed;top:0;right:0;bottom:0;left:0;z-index:15;gap:0;overflow:hidden;background:var(--bg,#F2F5F3);
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+.pn-focus-on .pn-stage,.pn-focus-on .pn-below,.pn-focus-on .pn-microw{display:none}
+.pn-focus-on .pn-bar{display:flex;flex:none;align-items:center;gap:6px;height:var(--pn-bar);padding:2px 6px}
+.pn-barmid{flex:1;min-width:0;display:flex;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;touch-action:pan-x;overscroll-behavior:contain;padding:1px 0}
+.pn-barmid::-webkit-scrollbar{display:none}
+.pn-root .pn-bb{flex:none;height:42px;min-width:44px;border:0;border-radius:12px;background:var(--surface,#fff);color:var(--fg,#16302A);display:flex;align-items:center;gap:5px;padding:0 10px;font-size:.8rem;font-weight:700;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.pn-root .pn-bb svg{width:18px;height:18px}
+.pn-root .pn-bb[data-pn=cycle]{flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;line-height:1;min-width:58px}
+.pn-bb small{font-size:.6rem;font-weight:600;color:var(--muted,#5B6F68);line-height:1}
+.pn-root .pn-exit{height:44px;background:var(--fg,#16302A);color:var(--bg,#F2F5F3)}
+.pn-bsong{max-width:176px}
+.pn-bsong .pn-title{overflow:hidden;text-overflow:ellipsis}
+.pn-root .pn-bar .pn-play{background:var(--accent,#1F5C4A);color:var(--on-accent,#fff)}
+.pn-root .pn-bar .pn-play.pn-stopping{background:var(--bad,#B3412F);color:#fff}
+.pn-root .pn-bseg{flex:none;height:44px;padding:2px}
+.pn-root .pn-bseg button{padding:0 9px;min-width:50px;font-size:.78rem;font-weight:600}
+.pn-root .pn-bseg button.on{background:var(--accent,#1F5C4A);color:var(--on-accent,#fff)}
+.pn-barmic{flex:none}
+.pn-barmic:empty{display:none}
+.pn-focus-on .pn-follow{flex:1 1 0;min-height:0;padding:4px 10px 6px;grid-template-rows:minmax(0,1fr) auto}
+.pn-focus-on .pn-sheetbox{max-height:none;height:100%;align-self:stretch}
+.pn-focus-on .pn-kb{flex:none;margin-inline:0;padding-bottom:6px}
+.pn-focus-on .pn-keys{height:clamp(180px,38vh,330px)}
+/* the one-time sound hint floats over the middle of the top bar, so it never hides the music or the keys */
+.pn-focus-on .pn-hint{position:absolute;z-index:4;left:50%;top:calc(env(safe-area-inset-top,0px) + 4px);min-height:40px;transform:translateX(-50%);white-space:nowrap;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.pn-focus-on .pn-hint button{pointer-events:auto}
+/* sideways phone: slim bar, one line of music, then keys as tall as the space allows */
+.pn-short .pn-follow{flex:none;height:clamp(76px,25vh,108px);grid-template-columns:auto minmax(0,1fr) minmax(118px,24%);grid-template-rows:100%;grid-template-areas:"now sheet side";gap:6px;padding:2px 6px 3px}
+.pn-short .pn-sheetbox{overflow:hidden;padding:0 3px;border-radius:10px}
+.pn-short .pn-line{display:none;width:100%;max-width:none;height:auto}
+.pn-short .pn-line.pn-on{display:block}
+.pn-short .pn-now{height:100%;gap:5px}
+.pn-short .pn-nowstaff{width:62px;height:100%;border-radius:10px}
+.pn-short .pn-nowname{min-width:40px}
+.pn-short .pn-nowname b{min-width:40px;height:40px;border-radius:12px;font-size:1.25rem;padding:0 5px}
+.pn-short .pn-nowname span{font-size:.62rem;max-width:66px}
+.pn-short .pn-fb{font-size:.86rem;line-height:1.2;min-height:0}
+.pn-short .pn-hold{height:9px}
+.pn-short .pn-game{min-height:0;height:100%;padding:2px 6px}
+.pn-short .pn-gq{font-size:.95rem}
+.pn-short .pn-kb{flex:1 1 0;min-height:0;display:flex;flex-direction:column;padding-bottom:0}
+.pn-short .pn-scroll{flex:1 1 0;min-height:0}
+.pn-short .pn-names{height:24px}
+.pn-short .pn-keys{flex:1 1 0;height:auto;min-height:150px}
+.pn-short .pn-kl{bottom:7px;gap:0}
+.pn-short .pn-ms{width:min(calc(var(--kw,48px)*.7),38px)}
+.pn-short .pn-kl b{font-size:min(calc(var(--kw,48px)*.4),22px)}
+.pn-short .pn-kl span{font-size:min(calc(var(--kw,48px)*.24),12px)}
+.pn-short .pn-mini{display:none}
+.pn-short .pn-arrow{bottom:auto;top:0;height:26px;width:40px;border-radius:0 0 10px 10px;background:var(--fg,#16302A);color:var(--bg,#F2F5F3);opacity:0;pointer-events:none}
+.pn-short.pn-canl .pn-al,.pn-short.pn-canr .pn-ar{opacity:.92;pointer-events:auto}
+.pn-short .pn-al{left:0} .pn-short .pn-ar{right:0}
+/* sideways + Play in time: the falling bars take the place of the sheet strip, feedback floats over them */
+.pn-short .pn-fall{flex:0 0 34%;height:auto}
+.pn-short.pn-m-time .pn-follow{position:absolute;z-index:3;display:block;height:auto;left:env(safe-area-inset-left,0px);right:env(safe-area-inset-right,0px);top:calc(var(--pn-bar) + env(safe-area-inset-top,0px));padding:4px 46px;pointer-events:none}
+.pn-short.pn-m-time .pn-sheetbox,.pn-short.pn-m-time .pn-now{display:none}
+.pn-short.pn-m-time .pn-side{float:right;max-width:46%;background:var(--surface,#fff);border-radius:10px;padding:3px 10px;box-shadow:0 1px 4px rgba(0,0,0,.18);opacity:.94}
+.pn-short.pn-m-time .pn-fb{min-height:0;font-size:.82rem}
+.pn-short.pn-m-time .pn-hold{display:none}
+@media (max-height:520px){
+  .pn-count{top:38%;width:92px;height:92px;margin:-46px 0 0 -46px;font-size:56px;line-height:92px}
+  .pn-pop{width:min(560px,100%);padding:10px 16px 12px;border-radius:20px}
+  .pn-pop h2{font-size:1.15rem;margin:2px 0}
+  .pn-bigstars svg{width:40px;height:40px} .pn-bigstars span:nth-child(2) svg{width:50px;height:50px}
+  .pn-popsong,.pn-poptip{font-size:.84rem} .pn-popline{margin-top:2px;font-size:.9rem} .pn-poptip{margin-top:1px}
+  .pn-popgive{margin-top:4px} .pn-popbtns{margin-top:8px}
+  .pn-micicon{display:none} .pn-micpop ul{font-size:.88rem;gap:2px;margin-top:4px}
+}
+/* wide screens: the keyboard may be wider than the page column (up to 1200px); settings side by side */
+@media (min-width:640px){ .pn-kb{margin-inline:max(calc(284px - 50vw),-336px)} .pn-focus-on .pn-kb{margin-inline:0} }
+@media (min-width:700px){ .pn-two{flex-direction:row} .pn-two>*{flex:1} }
+
+/* ── Dark mode: the app's variables do most of the work ── */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .pn-g0{color:#7FD6A2} :root:not([data-theme="light"]) .pn-g1{color:#8FBEF0} :root:not([data-theme="light"]) .pn-g2{color:#CDA6F2}
+  :root:not([data-theme="light"]) .pn-head,:root:not([data-theme="light"]) .pn-bh{stroke:rgba(255,255,255,.55)}
+  :root:not([data-theme="light"]) .pn-nostars{color:var(--line,#2A3F37)}
+}
+:root[data-theme="dark"] .pn-g0{color:#7FD6A2} :root[data-theme="dark"] .pn-g1{color:#8FBEF0} :root[data-theme="dark"] .pn-g2{color:#CDA6F2}
+:root[data-theme="dark"] .pn-head,:root[data-theme="dark"] .pn-bh{stroke:rgba(255,255,255,.55)}
+
+/* ── Animations ── */
+@keyframes pn-pulse{0%,100%{box-shadow:var(--ring),0 0 6px 1px var(--c)}50%{box-shadow:var(--ring),0 0 22px 9px var(--c)}}
+@keyframes pn-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes pn-okflash{from{opacity:.75}to{opacity:0}}
+@keyframes pn-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+@keyframes pn-bob{from{transform:translateY(0)}to{transform:translateY(-4px)}}
+@keyframes pn-blink{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes pn-beat-a{from{background:var(--accent,#1F5C4A);transform:scale(1.7)}to{transform:scale(1)}}
+@keyframes pn-beat-b{from{background:var(--accent,#1F5C4A);transform:scale(1.7)}to{transform:scale(1)}}
+@keyframes pn-countin{from{transform:scale(.5);opacity:.3}to{transform:scale(1);opacity:1}}
+@keyframes pn-popin{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes pn-starin{from{transform:scale(0) rotate(-40deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+@keyframes pn-confetti{from{transform:translate3d(0,0,0) rotate(0)}to{transform:translate3d(0,110vh,0) rotate(calc(var(--r,90deg)*6))}}
+@media (prefers-reduced-motion: reduce){
+  .pn-key.pn-lit{animation:none;box-shadow:var(--ring),0 0 16px 6px var(--c)}
+  .pn-lit .pn-kl,.pn-lit .pn-btag{animation:none}
+  .pn-key.pn-bad,.pn-cur .pn-mark,.pn-reddot,.pn-count.pn-pop1,.pn-pop,.pn-bigstars .pn-won,.pn-beat.pn-tick,.pn-beat.pn-tock{animation:none}
+  .pn-confetti{display:none}
+  .pn-hd{transition:none}
+}

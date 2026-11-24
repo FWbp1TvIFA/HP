@@ -1,0 +1,8 @@
+Piano sounds in this folder
+
+These recordings come from the Salamander Grand Piano (a Yamaha C5 grand) by Alexander Holm,
+shared under the Creative Commons Attribution 3.0 licence: https://creativecommons.org/licenses/by/3.0/
+They were taken from the audio collection of the Tone.js project (https://github.com/Tonejs/audio, folder "salamander").
+
+Changes made for Happy Home: each note was shortened with a fade-out, made mono, made a little louder and
+saved again as a smaller MP3 file. One note is kept for every three keys; the keys in between are tuned from it.
