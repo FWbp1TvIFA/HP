@@ -1275,7 +1275,7 @@ function notifierSheet(){
   const has=!!SET().push;
   openSheet(`${sheetHead("Notifications when the app is closed")}<div class="stack" style="gap:12px">
    <p class="sub" style="margin:0">A free helper on your family's own GitHub page checks every few minutes and sends each reminder to your phones. It takes about two minutes to set up, once, by the person who owns the GitHub page.</p>
-   <ol class="steps"><li>Tap <b>Make my code</b>. The app makes a secret code for the helper.</li><li>Tap <b>Copy code</b>, then <b>Open GitHub</b>.</li><li>On GitHub, in <b>Name</b> type <code>HH_NOTIFIER</code>, paste the code into <b>Secret</b>, and tap <b>Add secret</b>.</li><li>Come back here and turn on notifications on each phone.</li></ol>
+   <ol class="steps"><li>Tap <b>Make my code</b>. The app adds a helper sign-in and shows its secret code.</li><li>Tap <b>Copy code</b>, then <b>Open GitHub</b>.</li><li>On GitHub, in <b>Name</b> type <code>HH_NOTIFIER</code>, paste the code into <b>Secret</b>, and tap <b>Add secret</b>.</li><li>Come back here and turn on notifications on each phone.</li></ol>
    <div class="sub">The code is a spare key to your family's Happy Home. The helper uses it only to read the list of reminders and send them to your phones. Treat it like a password: paste it only into that GitHub box. ${has?"Making a new code switches the old one off.":""}</div>
    <div class="err" id="nf_err" hidden></div>
    <button class="primary" type="button" id="nf_make">${has?"Make a new code":"Make my code"}</button>
