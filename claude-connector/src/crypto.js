@@ -9,7 +9,7 @@ const subtle = globalThis.crypto.subtle;
 
 export const MIN_SECRET_LENGTH = 32;
 /** A usable HH_SECRET: long, and random-looking rather than a repeated word or a placeholder. */
-export const secretOk = s => typeof s === "string" && s.length >= MIN_SECRET_LENGTH && new Set(s).size >= 16 && !/your|secret|change|example|random/i.test(s);
+export const secretOk = s => typeof s === "string" && s.length >= MIN_SECRET_LENGTH && new Set(s).size >= 12 && !/your|secret|change|example|random/i.test(s);
 
 let cachedSecret = null, cachedKey = null;
 async function keyFor(secret) {
