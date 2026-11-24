@@ -428,6 +428,10 @@ function cleanupMoodSessions(){ // old requests go away after a day
 
 /* ---------- auth & family setup (cloud mode) ---------- */
 function viewAuth(){
+  if(ST.mfaResolver)return `<div class="auth"><div class="logo">H</div><h1>Enter your code</h1><p class="sub" style="margin:0">Open your authenticator app and type the 6-digit code for Happy Home.</p>
+  <form id="mfaForm" class="stack" style="gap:12px"><div class="field"><label for="m_code">Code</label><input id="m_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required style="font-size:24px;letter-spacing:.3em;text-align:center"></div>
+   ${authErr?`<div class="err">${esc(authErr)}</div>`:""}<button class="primary" type="submit" ${busy?"disabled":""}>Sign in</button></form>
+  <button class="link" data-act="mfaCancel">Back</button><p class="sub" style="text-align:center">Lost your phone? Ask whoever set up the family to switch off two-step sign-in for you.</p></div>`;
   return `<div class="auth"><div class="logo">H</div><h1>Happy Home</h1><p class="sub" style="margin:0">One place for your family's money, plans, lists and more.</p>
   <div class="seg"><button class="${authMode==="signin"?"on":""}" data-act="authMode" data-k="signin">Sign in</button><button class="${authMode==="signup"?"on":""}" data-act="authMode" data-k="signup">Create account</button></div>
   <form id="authForm" class="stack" style="gap:12px">
@@ -457,7 +461,7 @@ function viewClaim(){
    <div class="stack" style="gap:10px">${free.map(p=>`<button class="tile" data-act="claim" data-k="${p.id}" style="flex-direction:row;align-items:center">${dot(p.id)}<b>${esc(p.name)}</b></button>`).join("")||`<div class="card">Everyone's name is taken. Ask a family member to add you in Settings.</div>`}</div>
    <button class="link" data-act="signOut">Sign out</button></div>`;
 }
-function authErrorText(e){const c=e&&e.code||"";return c.includes("invalid-credential")||c.includes("wrong-password")||c.includes("user-not-found")?"That email and password don't match. Check them and try again."
+function authErrorText(e){const c=e&&e.code||"";return c.includes("invalid-verification-code")||c.includes("invalid-code")?"That code didn't work. Use the newest code in your authenticator app and try again.":c.includes("mfa-expired")||c.includes("code-expired")||c.includes("session-expired")?"That took too long. Go back and sign in again.":c.includes("unverified-email")?"Confirm your email first. Tap the link we sent you.":c.includes("requires-recent-login")?"Please check your password again.":c.includes("operation-not-allowed")?"Two-step sign-in isn't switched on for your family yet.":c.includes("too-many-requests")?"Too many tries. Wait a few minutes and try again.":c.includes("invalid-credential")||c.includes("wrong-password")||c.includes("user-not-found")?"That email and password don't match. Check them and try again."
   :c.includes("email-already-in-use")?"There's already an account with that email. Tap Sign in instead.":c.includes("weak-password")?"Use a password with at least 6 characters.":c.includes("invalid-email")?"That email address doesn't look right."
   :c.includes("network")?"You seem to be offline. Connect to the internet and try again.":c.includes("permission-denied")||c.includes("not-found")?"That family code didn't work. Check it with the person who set up the family.":"Something went wrong. Please try again."}
 
@@ -492,7 +496,8 @@ function bindForms(){
     const m=v.match(/^(.*?)\s+(?:x\s*)?(\d+(?:\.\d+)?\s*(?:kg|g|l|L|ml|pack|packs|bunch|dozen)?)$/i);
     $("#shopInput").value="";ST.add("shopping",{name:(m?m[1]:v).trim(),qty:m?m[2]:"",done:false,who:meId()});$("#shopInput").focus()};
   const af=$("#authForm");if(af)af.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";const em=$("#a_email").value.trim(),pw=$("#a_pw").value;
-    try{authMode==="signup"?await ST.signUp(em,pw):await ST.signIn(em,pw)}catch(err){authErr=authErrorText(err)}busy=false;render()};
+    try{authMode==="signup"?await ST.signUp(em,pw):await ST.signIn(em,pw)}catch(err){authErr=err&&err.code==="hh/mfa-needed"?"":authErrorText(err)}busy=false;render();const mc=$("#m_code");mc&&mc.focus()};
+  const mf=$("#mfaForm");if(mf)mf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.finishMfaSignIn($("#m_code").value)}catch(err){authErr=authErrorText(err)}busy=false;render()};
   const nf=$("#newFam");if(nf)nf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.createFamily({myName:$("#n_me").value.trim(),otherNames:[$("#n_2").value.trim(),$("#n_3").value.trim()],currency:$("#n_cur").value.trim()})}catch(err){authErr=authErrorText(err)}busy=false;render()};
   const jf=$("#joinFam");if(jf)jf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.joinFamily($("#j_code").value)}catch(err){authErr=authErrorText(err)}busy=false;render()};
 }
@@ -593,6 +598,8 @@ function settingsSheet(){
    ${cloud?`<div class="label" style="margin-top:6px">Family code</div><div class="code" id="s_code">${esc(ST.familyId)}</div>
     <div class="sub">Akiyo and Jugo enter this code after creating their own account to join. Keep it within the family.</div>
     <button class="ghost" type="button" id="s_copy">Copy code</button>
+    <div class="label" style="margin-top:6px">Two-step sign-in</div><div class="sub">${ST.twoStepOn()?"On. You'll need a code from your authenticator app when you sign in.":"Off. Turn it on to need a code from an authenticator app as well as your password."}</div>
+    <button class="ghost" type="button" data-act="twoStep">${ST.twoStepOn()?"Turn off two-step sign-in":"Turn on two-step sign-in"}</button>
     <div class="sub">Signed in as ${esc(ST.me.email)}</div><button class="ghost" type="button" data-act="signOut">Sign out</button>`
    :`<div class="label" style="margin-top:6px">This phone only</div><p class="sub" style="margin:0">Family sharing isn't set up yet, so everything stays on this phone. Copy a backup code to keep it safe, or paste one to restore.</p>
     <div class="two"><button class="ghost" type="button" id="s_copy">Copy backup</button><button class="ghost" type="button" id="s_restore">Restore</button></div>
@@ -613,6 +620,39 @@ function settingsSheet(){
         try{ST.importJSON(box.value);closeSheet();toast("Backup restored")}catch(_){toast("That backup code isn't valid")}};
       const r=sh.querySelector("#s_reset");r.onclick=()=>{if(r.dataset.arm){ST.eraseLocal();closeSheet();toast("Everything erased")}else{r.dataset.arm=1;r.textContent="Tap again to erase all entries";r.style.color="var(--bad)"}};
     }
+  });
+}
+
+/* ---------- two-step sign-in ---------- */
+function twoStepSheet(){
+  const on=ST.twoStepOn();
+  if(!on&&!ST.emailVerified()){
+    openSheet(`${sheetHead("Two-step sign-in")}<div class="stack" style="gap:12px"><p class="sub" style="margin:0">First, confirm your email address (${esc(ST.me.email)}). We'll send you a link. Open it, then come back here.</p>
+     <div class="err" id="t_err" hidden></div><button class="primary" type="button" id="t_send">Send the link</button><button class="ghost" type="button" id="t_check">I've opened the link</button></div>`,sh=>{
+      const err=m=>{const x=sh.querySelector("#t_err");x.hidden=!m;x.textContent=m||""};
+      sh.querySelector("#t_send").onclick=async()=>{try{await ST.sendVerifyEmail();toast("Link sent. Check your email.")}catch(e){err(authErrorText(e))}};
+      sh.querySelector("#t_check").onclick=async()=>{try{if(await ST.refreshUser())twoStepSheet();else err("Not confirmed yet. Open the link in the email, then try again.")}catch(e){err(authErrorText(e))}};
+    });return;
+  }
+  openSheet(`${sheetHead("Two-step sign-in")}<form id="t_pwf" class="stack" style="gap:12px"><p class="sub" style="margin:0">${on?"Enter your password to turn two-step sign-in off.":"You'll need an authenticator app, such as Google Authenticator or the iPhone's Passwords app. Enter your password to start."}</p>
+    <div class="field"><label for="t_pw">Password</label><input id="t_pw" type="password" autocomplete="current-password" required></div><div class="err" id="t_err" hidden></div>
+    <button class="primary" type="submit">${on?"Turn off":"Continue"}</button></form>`,sh=>{
+    const err=m=>{const x=sh.querySelector("#t_err");x.hidden=!m;x.textContent=m||""};
+    sh.querySelector("#t_pwf").onsubmit=async e=>{e.preventDefault();err("");const pw=sh.querySelector("#t_pw").value;
+      try{
+        if(on){await ST.stopTwoStep(pw);closeSheet();toast("Two-step sign-in is off");return}
+        const t=await ST.startTwoStep(pw);
+        openSheet(`${sheetHead("Add Happy Home to your app")}<form id="t_cf" class="stack" style="gap:12px">
+          <p class="sub" style="margin:0">On this phone, tap <b>Open authenticator app</b>. On another device, scan the code. Or type the key in by hand.</p>
+          <a class="ghost" href="${esc(t.url)}" style="text-align:center;text-decoration:none">Open authenticator app</a>
+          <div style="background:#fff;padding:12px;border-radius:12px;width:200px;align-self:center">${Codes.qrSVG(t.url)}</div>
+          <div class="code" style="font-size:15px;word-break:break-all">${esc(t.key.replace(/(.{4})/g,"$1 ").trim())}</div>
+          <div class="field"><label for="t_code">Then enter the 6-digit code it shows</label><input id="t_code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required style="font-size:22px;letter-spacing:.3em;text-align:center"></div>
+          <div class="err" id="t_err2" hidden></div><button class="primary" type="submit">Turn on</button></form>`,sh2=>{
+          sh2.querySelector("#t_cf").onsubmit=async ev=>{ev.preventDefault();try{await ST.finishTwoStep(t.secret,sh2.querySelector("#t_code").value);closeSheet();toast("Two-step sign-in is on")}catch(x){const m=sh2.querySelector("#t_err2");m.hidden=false;m.textContent=authErrorText(x)}};
+        });
+      }catch(x){err(authErrorText(x))}
+    };
   });
 }
 
@@ -664,6 +704,8 @@ document.addEventListener("click",e=>{
   const flip=(col,msg)=>{const t=S()[col].find(x=>x.id===id);if(!t)return;ST.patch(col,id,{done:!t.done});if(!t.done&&msg)toast(msg);return t};
   switch(act){
     case"close":return closeSheet();
+    case"twoStep":return twoStepSheet();
+    case"mfaCancel":ST.cancelMfa();authErr="";return render();
     case"edit":{const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event"}[col],null,r);return}
     case"swipeDel":{const w=a.closest(".swipe");ST.del(w.dataset.col,w.dataset.id);toast("Deleted");return}
     case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was});if(!was){toast("Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}

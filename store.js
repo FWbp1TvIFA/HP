@@ -137,7 +137,39 @@
       });
     },
     async signUp(email, password) { return FB.createUserWithEmailAndPassword(this.auth, email, password); },
-    async signIn(email, password) { return FB.signInWithEmailAndPassword(this.auth, email, password); },
+    async signIn(email, password) {
+      try { return await FB.signInWithEmailAndPassword(this.auth, email, password); }
+      catch (e) { if (e && e.code === "auth/multi-factor-auth-required") { this.mfaResolver = FB.getMultiFactorResolver(this.auth, e); const x = new Error("mfa"); x.code = "hh/mfa-needed"; throw x; } throw e; }
+    },
+    /* ---------- two-step sign-in (authenticator app codes) ---------- */
+    mfaResolver: null,
+    async finishMfaSignIn(code) {
+      const r = this.mfaResolver; if (!r) throw Object.assign(new Error("none"), { code: "hh/mfa-expired" });
+      const hint = r.hints.find(h => h.factorId === "totp") || r.hints[0];
+      await r.resolveSignIn(FB.TotpMultiFactorGenerator.assertionForSignIn(hint.uid, String(code).replace(/\D/g, "")));
+      this.mfaResolver = null;
+    },
+    cancelMfa() { this.mfaResolver = null; },
+    twoStepOn() { const u = this.auth && this.auth.currentUser; return !!(u && FB.multiFactor(u).enrolledFactors.length); },
+    emailVerified() { const u = this.auth && this.auth.currentUser; return !!(u && u.emailVerified); },
+    async sendVerifyEmail() { return FB.sendEmailVerification(this.auth.currentUser); },
+    async refreshUser() { await FB.reload(this.auth.currentUser); return this.auth.currentUser.emailVerified; },
+    async _reauth(password) { const u = this.auth.currentUser; await FB.reauthenticateWithCredential(u, FB.EmailAuthProvider.credential(u.email, password)); },
+    async startTwoStep(password) {
+      await this._reauth(password);
+      const session = await FB.multiFactor(this.auth.currentUser).getSession();
+      const secret = await FB.TotpMultiFactorGenerator.generateSecret(session);
+      return { secret, key: secret.secretKey, url: secret.generateQrCodeUrl(this.auth.currentUser.email, "Happy Home") };
+    },
+    async finishTwoStep(secret, code) {
+      const a = FB.TotpMultiFactorGenerator.assertionForEnrollment(secret, String(code).replace(/\D/g, ""));
+      await FB.multiFactor(this.auth.currentUser).enroll(a, "Authenticator app");
+    },
+    async stopTwoStep(password) {
+      await this._reauth(password);
+      const mf = FB.multiFactor(this.auth.currentUser);
+      for (const f of mf.enrolledFactors.slice()) await mf.unenroll(f);
+    },
     async resetPassword(email) { return FB.sendPasswordResetEmail(this.auth, email); },
     async signOut() { return FB.signOut(this.auth); },
     async createFamily({ myName, otherNames, currency }) {
