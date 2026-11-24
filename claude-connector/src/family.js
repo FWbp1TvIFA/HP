@@ -4,8 +4,8 @@ import { Firestore, idTokenFor } from "./firebase.js";
 import { todayIn, nowTimeIn, DEFAULT_TZ } from "./dates.js";
 
 // The only family collections this connector ever reads or writes. Everything else in the app
-// (wallet, moods, mood sessions, locations, learn, profiles, notify, pushSubs, songs) is off limits.
-export const ALLOWED_COLLECTIONS = ["tasks", "events", "homework", "shopping", "shopFreq", "tx", "notes", "bills", "meals", "countdowns", "board", "alarms", "stars"];
+// (wallet, moods, mood sessions, locations, learn, profiles, notify, pushSubs) is off limits.
+export const ALLOWED_COLLECTIONS = ["tasks", "events", "homework", "shopping", "shopFreq", "tx", "notes", "bills", "meals", "countdowns", "board", "alarms", "stars", "songs"];
 const checkCol = name => { if (!ALLOWED_COLLECTIONS.includes(name)) throw new Error(`collection "${name}" is not one this connector may touch`); return name; };
 
 const PRONOUNS = ["me", "i", "myself", "mine", "my"];

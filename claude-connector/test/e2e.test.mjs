@@ -410,7 +410,41 @@ test("Dad and Mum names, reminders, done times and alarms match the app", async 
   // The family's own settings were never written by the connector.
   const fam = (await docs("families")).find(x => x.id === "FAMILY01");
   assert.equal(fam.roleNames, 1); assert.deepEqual(fam.people.map(x => [x.name, x.aka || ""]), [["Dad", "Old"], ["Mum", "Akiyo"], ["Jugo", ""]]);
-  for (const never of ["profiles", "notify", "pushSubs", "songs", "learn", "moods", "locations"]) assert.equal((await docs(`families/FAMILY01/${never}`)).length, 0, never);
+  for (const never of ["profiles", "notify", "pushSubs", "learn", "moods", "locations"]) assert.equal((await docs(`families/FAMILY01/${never}`)).length, 0, never);
+});
+
+test("piano songs are saved the way the piano page saves them", async () => {
+  let r = await call(old.client, "add_items", { songs: [
+    { title: "Twinkle Twinkle", notes: "C C G G | A A G- | F F E E | D D C-", bpm: 100, youtube_link: "https://www.youtube.com/watch?v=yCjJyiqpAuU" },
+    { title: "Waltz", notes: "do re mi- | fa sol la-", beats_in_a_bar: 3 },
+  ] });
+  assert.equal(r.isError, false, r.text);
+  assert.match(r.text, /Piano song: 🎵 Twinkle Twinkle: 14 notes, 4 counts a bar, speed 100, with a YouTube lesson/);
+  const songs = await rawDocs("families/FAMILY01/songs");
+  const tw = songs.find(x => plain(x).title === "Twinkle Twinkle"), wz = songs.find(x => plain(x).title === "Waltz");
+  assert.deepEqual({ ...plain(tw), id: 0, createdAt: 0 }, { id: 0, title: "Twinkle Twinkle", notes: "C C G G | A A G- | F F E E | D D C-", bpm: 100, beats: 4, yt: "https://www.youtube.com/watch?v=yCjJyiqpAuU", createdAt: 0, by: 1 });
+  assert.deepEqual(tw.bpm, { int: 100 }); assert.deepEqual(tw.beats, { int: 4 });
+  assert.deepEqual({ ...plain(wz), id: 0, createdAt: 0 }, { id: 0, title: "Waltz", notes: "do re mi- | fa sol la-", bpm: 90, beats: 3, yt: "", createdAt: 0, by: 1 });
+  // Notes the piano page couldn't read, a bad link or a missing name: nothing is saved, and Claude is told why.
+  for (const [bad, why] of [[{ title: "X", notes: "C D H" }, /I do not understand "H"/], [{ title: "X", notes: "C9" }, /too high for a piano/], [{ title: "X", notes: "| |" }, /no notes/],
+    [{ title: "X", notes: "C D", youtube_link: "https://example.com/v" }, /youtube_link/], [{ notes: "C D" }, /title is missing/], [{ title: "X", notes: "C", bpm: 10 }, /30 to 240/], [{ title: "X", notes: "C", beats_in_a_bar: 6 }, /3 or 4/]]) {
+    r = await call(old.client, "add_items", { songs: [bad] });
+    assert.equal(r.isError, true, JSON.stringify(bad)); assert.match(r.text, why);
+  }
+  assert.equal((await docs("families/FAMILY01/songs")).length, 2);
+  r = await call(old.client, "find_items", { type: "songs", search: "twinkle" });
+  assert.match(r.text, /1 of the family's own piano songs matching "twinkle"[\s\S]*Notes: C C G G \| A A G-/);
+  r = await call(old.client, "update_items", { updates: [{ type: "song", id: tw.id, changes: { notes: "C C G G | A A G-", bpm: 80, youtube_link: "" } }] });
+  assert.equal(r.isError, false, r.text);
+  const after = (await docs("families/FAMILY01/songs")).find(x => x.id === tw.id);
+  assert.equal(after.notes, "C C G G | A A G-"); assert.equal(after.bpm, 80); assert.equal(after.yt, ""); assert.equal(after.beats, 4);
+  r = await call(old.client, "update_items", { updates: [{ type: "songs", id: tw.id, changes: { notes: "C Q" } }] });
+  assert.equal(r.isError, true); assert.match(r.text, /Nothing was changed/);
+  r = await call(old.client, "delete_items", { type: "songs", ids: [wz.id] });
+  assert.equal(r.isError, false, r.text);
+  assert.equal((await docs("families/FAMILY01/songs")).length, 1);
+  // Piano practice and its stars stay the app's own.
+  assert.equal((await docs("families/FAMILY01/learn")).length, 0);
 });
 
 test("another family can't see or touch this family", async () => {

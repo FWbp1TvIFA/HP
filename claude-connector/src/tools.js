@@ -4,9 +4,10 @@ import { UserError } from "./family.js";
 import { parseDate, parseTime, niceDate, niceTime, longDate, addDays, addOneMonthLikeApp, nextDue, countdownNext, daysBetween, isISODate, UserInputError } from "./dates.js";
 import { newId } from "./crypto.js";
 import { safeId, MAX_WRITES } from "./firebase.js";
+import { parseSong, safeYt, noteCount } from "./songs.js";
 
 /* ---------------- shared bits ---------------- */
-export const TYPE_COLLECTION = { tasks: "tasks", events: "events", homework: "homework", shopping: "shopping", money: "tx", notes: "notes", bills: "bills", meals: "meals", countdowns: "countdowns", board: "board", alarms: "alarms" };
+export const TYPE_COLLECTION = { tasks: "tasks", events: "events", homework: "homework", shopping: "shopping", money: "tx", notes: "notes", bills: "bills", meals: "meals", countdowns: "countdowns", board: "board", alarms: "alarms", songs: "songs" };
 const TYPE_LIST = Object.keys(TYPE_COLLECTION);
 const DAYN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_INDEX = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
@@ -61,7 +62,7 @@ const ids = (v, label = "ids") => {
 };
 const typeArg = (v, allowed = TYPE_LIST) => {
   const s = String(v || "").toLowerCase().trim();
-  const alias = { task: "tasks", event: "events", calendar: "events", spending: "money", tx: "money", transactions: "money", note: "notes", bill: "bills", meal: "meals", dinner: "meals", countdown: "countdowns", alarm: "alarms", shop: "shopping", message: "board", messages: "board", "family board": "board" }[s] || s;
+  const alias = { task: "tasks", event: "events", calendar: "events", spending: "money", tx: "money", transactions: "money", note: "notes", bill: "bills", meal: "meals", dinner: "meals", countdown: "countdowns", alarm: "alarms", song: "songs", "piano songs": "songs", "piano song": "songs", music: "songs", shop: "shopping", message: "board", messages: "board", "family board": "board" }[s] || s;
   if (!allowed.includes(alias)) throw new UserError(`Type must be one of: ${allowed.join(", ")}.`);
   return alias;
 };
@@ -79,6 +80,19 @@ function weekdays(v) {
   return [...new Set(out)].sort();
 }
 
+/** A song's notes, checked with the app's own note reader: every bit must be understood. */
+function songNotes(v) {
+  const notes = need(text(v, 20000, "Notes"), "notes");
+  const p = parseSong(notes);
+  if (p.errors.length) throw new UserError(`the piano page can't read these notes: ${p.errors.join(" ")} ${NOTES_HELP}`);
+  if (!p.notes.some(n => n.midi != null)) throw new UserError(`there are no notes in that. ${NOTES_HELP}`);
+  return notes;
+}
+const bpmArg = v => { const n = Math.round(+v); if (!(n >= 30 && n <= 240)) throw new UserError("bpm (speed, counts a minute) must be from 30 to 240."); return n; };
+const beatsArg = v => { if (+v !== 3 && +v !== 4) throw new UserError("beats_in_a_bar must be 3 or 4."); return +v; };
+const ytArg = v => { const s = text(v, 300, "YouTube link"); if (!s) return ""; const y = safeYt(s); if (!y) throw new UserError("youtube_link must be an https link to youtube.com or youtu.be (or leave it out)."); return y; };
+const NOTES_HELP = 'Write letter notes with spaces, like "C C G G | A A G-".';
+
 /* ---------------- how things are shown back to Claude ---------------- */
 function show(f, type, x, opts = {}) {
   const id = ` [id: ${x.id}]`;
@@ -91,6 +105,8 @@ function show(f, type, x, opts = {}) {
     case "alarms": { const weekly = Array.isArray(x.days) && x.days.length > 0;
       return `⏰ ${x.time ? niceTime(x.time) : "no time"} ${x.title || "Alarm"}, ${weekly ? "every " + daysText(x.days) : x.date ? niceDate(x.date, f.today) : "once"} (${+x.who ? f.name(x.who) : "everyone"})${x.on === false ? ", switched off" : ""}${id}`; }
     case "shopping": return `${x.done ? "✓ " : ""}${x.name}${x.qty ? " (" + x.qty + ")" : ""}${id}`;
+    case "songs": { const notes = typeof x.notes === "string" ? x.notes : "", n = noteCount(notes);
+      return `🎵 ${String(x.title ?? "").trim() || "Our song"}: ${n} note${n === 1 ? "" : "s"}, ${+x.beats === 3 ? 3 : 4} counts a bar, speed ${Math.min(240, Math.max(30, Math.round(+x.bpm) || 90))}${safeYt(x.yt) ? ", with a YouTube lesson" : ""}${opts.full && notes ? `. Notes: ${notes.slice(0, 1500)}${notes.length > 1500 ? "…" : ""}` : ""}${id}`; }
     case "money": return `${niceDate(x.date, f.today)}: ${x.type === "in" ? "+" : "-"}${f.money(x.amount)} ${x.cat || ""}${x.note ? " — " + x.note : ""} (${f.name(x.who)})${id}`;
     case "notes": {
       const body = String(x.body || "");
@@ -218,9 +234,9 @@ async function findItems(f, args) {
     return rows.length ? `${rows.length} family board post${rows.length === 1 ? "" : "s"}, newest first:\n${bullets(c.shown.map(x => show(f, type, x)), c.more)}` : "The family board is empty.";
   }
   rows = await f.fs.list(f.col(col));
-  const field = { tasks: "due", homework: "due", bills: "next", meals: "date", countdowns: "date", shopping: null, notes: null, alarms: null }[type];
-  const searchFields = { tasks: ["title"], homework: ["title", "subject"], shopping: ["name", "qty"], notes: ["title", "body"], bills: ["name", "cat"], meals: ["title", "ingredients"], countdowns: ["title", "kind"], alarms: ["title"] }[type];
-  rows = rows.filter(x => matches(x, searchFields) && whoOk(x));
+  const field = { tasks: "due", homework: "due", bills: "next", meals: "date", countdowns: "date", shopping: null, notes: null, alarms: null, songs: null }[type];
+  const searchFields = { tasks: ["title"], homework: ["title", "subject"], shopping: ["name", "qty"], notes: ["title", "body"], bills: ["name", "cat"], meals: ["title", "ingredients"], countdowns: ["title", "kind"], alarms: ["title"], songs: ["title"] }[type];
+  rows = rows.filter(x => matches(x, searchFields) && (type === "songs" || whoOk(x)));
   if (["tasks", "homework", "shopping"].includes(type) && !includeDone) rows = rows.filter(x => !x.done);
   if (type === "meals" && !from && !to) rows = rows.filter(x => (x.date || x.id) >= f.today);
   if (field && (from || to)) rows = rows.filter(x => { const v = type === "countdowns" ? countdownNext(x, f.today) : x[field]; return v && (!from || v >= from) && (!to || v <= to); });
@@ -228,10 +244,11 @@ async function findItems(f, args) {
   else if (type === "countdowns") rows.sort((a, b) => String(countdownNext(a, f.today)).localeCompare(String(countdownNext(b, f.today))));
   else if (type === "shopping") rows.sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || (a.createdAt || 0) - (b.createdAt || 0));
   else if (type === "alarms") rows.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  else if (type === "songs") rows.sort((a, b) => String(a.title ?? "").localeCompare(String(b.title ?? "")));
   else if (field) rows.sort((a, b) => String(a[field] || "9999").localeCompare(String(b[field] || "9999")) || (a.time || "99").localeCompare(b.time || "99"));
   const c = cap(rows, limit);
-  const full = type === "notes" && c.shown.length <= 5;   // whole notes only for a few; otherwise previews keep the reply small
-  const what = { tasks: includeDone ? "tasks" : "open tasks", homework: includeDone ? "homework items" : "homework items still to do", shopping: includeDone ? "shopping items" : "items on the shopping list", notes: "notes", bills: "bills", meals: "planned dinners", countdowns: "countdowns", alarms: "alarms" }[type];
+  const full = (type === "notes" || type === "songs") && c.shown.length <= 5;   // whole notes only for a few; otherwise previews keep the reply small
+  const what = { tasks: includeDone ? "tasks" : "open tasks", homework: includeDone ? "homework items" : "homework items still to do", shopping: includeDone ? "shopping items" : "items on the shopping list", notes: "notes", bills: "bills", meals: "planned dinners", countdowns: "countdowns", alarms: "alarms", songs: "of the family's own piano songs" }[type];
   return rows.length ? `${rows.length} ${what}${search ? ` matching "${search}"` : ""}:\n${bullets(c.shown.map(x => show(f, type, x, { full })), c.more)}` : `No ${what}${search ? ` matching "${search}"` : ""}.`;
 }
 
@@ -276,7 +293,7 @@ async function addItems(f, args) {
   const ingParts = m => (Array.isArray(m?.ingredients) ? m.ingredients : String(m?.ingredients || "").split(/[,\n]/)).slice(0, 200).filter(x => x !== undefined && x !== null && String(x).trim());
   const ingredientCount = args.add_meal_ingredients_to_shopping === true && Array.isArray(args.meals) ? args.meals.reduce((n, m) => n + Math.min(60, ingParts(m).length), 0) : 0;
   if (ingredientCount > 300) throw new UserError("That's too many meal ingredients to put on the shopping list in one go. Nothing was added. Please add the meals in smaller groups.");
-  if (!total) throw new UserError("Nothing to add. Put the things to add in tasks, events, homework, shopping, money, notes, bills, meals, countdowns or board.");
+  if (!total) throw new UserError("Nothing to add. Put the things to add in tasks, events, homework, shopping, money, notes, bills, meals, countdowns, alarms, songs or board.");
   if (total > 200) throw new UserError("That's a lot at once; add at most 200 things per call.");
 
   each("tasks", t => {
@@ -389,6 +406,10 @@ async function addItems(f, args) {
     const rec = { ...alarmFields(f, { title: text(a.title, 120, "Title") || "Alarm", time: need(timeArg(a.time), "time (HH:MM)"), who: f.who(a.who, { allowFamily: true, fallback: f.meId }), days: weekdays(a.weekly_on_days) || [], date: dateArg(a.date, f, f.today) }), on: true, createdAt: now, by };
     const id = newId(); writes.push(f.fs.create(f.doc("alarms", id), rec)); done.push("Alarm: " + show(f, "alarms", { ...rec, id }));
   });
+  each("songs", g => {
+    const rec = { title: need(text(g.title, 80, "Title"), "title"), notes: songNotes(g.notes), bpm: g.bpm === undefined || g.bpm === null ? 90 : bpmArg(g.bpm), beats: g.beats_in_a_bar === undefined || g.beats_in_a_bar === null ? 4 : beatsArg(g.beats_in_a_bar), yt: ytArg(g.youtube_link), createdAt: now, by };
+    const id = newId(); writes.push(f.fs.create(f.doc("songs", id), rec)); done.push("Piano song: " + show(f, "songs", { ...rec, id }));
+  });
   each("board", m => {
     const msg = need(text(m.text, 500, "Message"), "text");
     const rec = { text: msg, who: f.meId, at: now, ack: {}, createdAt: now, by };
@@ -419,6 +440,7 @@ const CHANGE_FIELDS = {
   events: ["title", "who", "date", "time", "place", "weekly_on_days", "until", "remind_minutes_before"],
   homework: ["title", "subject", "who", "due", "time", "remind_minutes_before"],
   alarms: ["title", "time", "who", "weekly_on_days", "date", "on"],
+  songs: ["title", "notes", "bpm", "beats_in_a_bar", "youtube_link"],
   shopping: ["name", "qty"],
   money: ["amount", "type", "category", "date", "who", "note"],
   notes: ["title", "text", "pinned"],
@@ -450,7 +472,7 @@ async function updateItems(f, args) {
       if (!cur) throw new UserError(`there's no ${p.type} item with id ${p.id}. Use find_items to get the right id.`);
       const c = p.ch, fields = {};
       const has = key => Object.prototype.hasOwnProperty.call(c, key);
-      if (has("title")) fields.title = p.type === "notes" ? text(c.title, 200, "Title") : need(text(c.title, 300, "Title"), "Title");
+      if (has("title")) fields.title = p.type === "notes" ? text(c.title, 200, "Title") : need(text(c.title, p.type === "songs" ? 80 : 300, "Title"), "Title");
       if (has("who")) fields.who = f.who(c.who, { allowFamily: p.type === "events" || p.type === "alarms", fallback: cur.who });
       if (has("time")) fields.time = timeArg(c.time);
       if (has("remind_minutes_before")) fields.remind = remindArg(c.remind_minutes_before) ?? null;   // null = the usual reminder
@@ -512,6 +534,12 @@ async function updateItems(f, args) {
           break;
         case "board":
           if (has("text")) fields.text = need(text(c.text, 500, "Message"), "text");
+          break;
+        case "songs":
+          if (has("notes")) fields.notes = songNotes(c.notes);
+          if (has("bpm")) fields.bpm = bpmArg(c.bpm);
+          if (has("beats_in_a_bar")) fields.beats = beatsArg(c.beats_in_a_bar);
+          if (has("youtube_link")) fields.yt = ytArg(c.youtube_link);
           break;
         case "countdowns":
           if (has("date")) fields.date = need(dateArg(c.date, f, null), "date");
@@ -621,7 +649,7 @@ export function toolDefinitions(f) {
     },
     {
       name: "find_items", title: "Find items",
-      description: "Look things up in Happy Home and get their ids (needed to change, tick off or delete them). Types: tasks, events (calendar), homework, shopping, money (spending and income), notes, bills, meals (dinner plan), countdowns, board (Family board messages), alarms. For events, give from/to to see every occurrence in that window; without dates you get upcoming events and weekly activities. For money, the default range is this month.",
+      description: "Look things up in Happy Home and get their ids (needed to change, tick off or delete them). Types: tasks, events (calendar), homework, shopping, money (spending and income), notes, bills, meals (dinner plan), countdowns, board (Family board messages), alarms, songs (the family's own piano songs, with their notes). For events, give from/to to see every occurrence in that window; without dates you get upcoming events and weekly activities. For money, the default range is this month.",
       inputSchema: {
         type: "object", required: ["type"], additionalProperties: false,
         properties: {
@@ -643,7 +671,7 @@ export function toolDefinitions(f) {
     {
       name: "add_items",
       title: "Add to Happy Home",
-      description: `Add one or many things to Happy Home in a single call: tasks, calendar events or weekly activities, homework, shopping items, spending or income, notes, bills, dinners, countdowns (birthdays, trips), alarms and Family board messages. Great for photos: read a receipt into money, a school newsletter or invitation into events and homework, a recipe into meals plus shopping, a handwritten list into shopping. Only include details the person said or that are visible; ask if something important (like a date or amount) is unclear. Everyone in the family sees new items in the app straight away. Family: ${names}.`,
+      description: `Add one or many things to Happy Home in a single call: tasks, calendar events or weekly activities, homework, shopping items, spending or income, notes, bills, dinners, countdowns (birthdays, trips), alarms, piano songs and Family board messages. Great for photos: read a receipt into money, a school newsletter or invitation into events and homework, a recipe into meals plus shopping, a handwritten list into shopping. Only include details the person said or that are visible; ask if something important (like a date or amount) is unclear. Everyone in the family sees new items in the app straight away. Family: ${names}.`,
       inputSchema: {
         type: "object", additionalProperties: false,
         properties: {
@@ -681,6 +709,12 @@ export function toolDefinitions(f) {
             weekly_on_days: { type: "array", items: { type: "string", enum: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] }, description: "Ring every week on these days. Leave out for a one-time alarm." },
             date: date("For a one-time alarm: the day (default today, or tomorrow if that time has passed)"),
             who: who(", or Family for everyone" + me) } } },
+          songs: { type: "array", description: "The family's own songs for the Piano page (they show under Our songs, with sheet music, coloured keys and a play-along). Use it when someone asks for a song to learn or practise. Only write a melody you know well, in an easy key for a child unless asked; say it was written from memory, so they can check it by ear.", items: { type: "object", required: ["title", "notes"], additionalProperties: false, properties: {
+            title: { type: "string", description: "Song name, up to 80 characters." },
+            notes: { type: "string", description: "The melody as letter notes with spaces: C D E F G A B (or Do Re Mi). # or b after the letter for a black key (F#, Bb). Octave number after it: no number is octave 4 (middle C is C4), C5 is the C above; ' also means one octave up and , one down. Length: a plain note is 1 count, C- is 2 counts, C-- is 3, C/ is half a count, C// a quarter, a dot after it makes it half as long again (C. is 1 and a half). Rest: _ (or R, R-, _/). Bar line: |. Example: C C G G | A A G- | F F E E | D D C-. Up to 600 notes." },
+            bpm: { type: "integer", minimum: 30, maximum: 240, description: "Speed in counts a minute. Default 90." },
+            beats_in_a_bar: { type: "integer", enum: [3, 4], description: "Counts in a bar: 4 (default) or 3 for a waltz." },
+            youtube_link: { type: "string", description: "Optional https YouTube link to a lesson or performance of the song." } } } },
           board: { type: "array", description: "Short messages for the whole family on the Family board on the app's Today screen, e.g. 'Home late tonight, dinner in the fridge'. Posted as the signed-in person.", items: { type: "object", required: ["text"], additionalProperties: false, properties: {
             text: { type: "string", description: "The message (up to 500 characters)." } } } },
           countdowns: { type: "array", description: "Birthdays, anniversaries, trips and other days to count down to.", items: { type: "object", required: ["title", "date"], additionalProperties: false, properties: {
@@ -692,7 +726,7 @@ export function toolDefinitions(f) {
     },
     {
       name: "update_items", title: "Change items",
-      description: "Change existing items (find their ids first with find_items or get_overview). Fields you can change — tasks: title, who, due, time, repeat, stars, remind_minutes_before; events: title, who, date, time, place, weekly_on_days (empty list = one-off), until, remind_minutes_before; homework: title, subject, who, due, time, remind_minutes_before; alarms: title, time, who, weekly_on_days, date, on (false switches it off); shopping: name, qty; money: amount, type, category, date, who, note; notes: title, text, pinned; bills: name, amount, every, next_due, category, who, paid_automatically; meals (id is the date): title, ingredients, cook; countdowns: title, date, kind, every_year; board: text. To tick things off use mark_done.",
+      description: "Change existing items (find their ids first with find_items or get_overview). Fields you can change — tasks: title, who, due, time, repeat, stars, remind_minutes_before; events: title, who, date, time, place, weekly_on_days (empty list = one-off), until, remind_minutes_before; homework: title, subject, who, due, time, remind_minutes_before; alarms: title, time, who, weekly_on_days, date, on (false switches it off); shopping: name, qty; money: amount, type, category, date, who, note; notes: title, text, pinned; bills: name, amount, every, next_due, category, who, paid_automatically; meals (id is the date): title, ingredients, cook; countdowns: title, date, kind, every_year; songs: title, notes, bpm, beats_in_a_bar, youtube_link; board: text. To tick things off use mark_done.",
       inputSchema: {
         type: "object", required: ["updates"], additionalProperties: false,
         properties: { updates: { type: "array", items: { type: "object", required: ["type", "id", "changes"], additionalProperties: false, properties: {
@@ -720,7 +754,7 @@ export function toolDefinitions(f) {
   ];
 }
 
-export const SERVER_INSTRUCTIONS = `Happy Home is this family's shared organiser app (tasks and chores with stars, calendar and weekly activities, homework, shopping list, spending and budgets, notes, bills, dinner plan, birthdays and countdowns, alarms). Everything you add appears for the whole family in the app straight away.
+export const SERVER_INSTRUCTIONS = `Happy Home is this family's shared organiser app (tasks and chores with stars, calendar and weekly activities, homework, shopping list, spending and budgets, notes, bills, dinner plan, birthdays and countdowns, alarms, the family's own piano songs). Everything you add appears for the whole family in the app straight away.
 - Call get_overview first when you need today's date, the family's names, or what's already planned. Dates are YYYY-MM-DD in the family's time zone (Australia/Brisbane); money is in the family's currency (Australian dollars).
 - When the person shares a photo (receipt, school newsletter, invitation, timetable, recipe, handwritten list), pull out the details and save them with one add_items call, then say briefly what you added. Don't invent dates, times or amounts that aren't shown or said; ask when unsure.
 - People can be named the way the family says them: their name in the app (for example Dad, Mum), an earlier name, or mum, mom, dad, daddy. Each item is for one person (or Family where that is offered), so for "Mum and Dad" ask which one, or use Family.
