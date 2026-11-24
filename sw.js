@@ -1,5 +1,5 @@
 /* Happy Home service worker: makes the app open instantly and work offline. */
-const CACHE = "happyhome-v13";
+const CACHE = "happyhome-v14";
 const FILES = ["./", "index.html", "app.css", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
@@ -14,5 +14,13 @@ self.addEventListener("fetch", e => {
     let done = false; const finish = r => { if (!done && r) { done = true; resolve(r); } };
     const t = setTimeout(() => fromCache().then(r => r ? finish(r) : null), 4000);
     net.then(r => { clearTimeout(t); finish(r); }).catch(() => { clearTimeout(t); fromCache().then(r => finish(r || Response.error())); });
+  }));
+});
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const url = String((e.notification.data && e.notification.data.url) || "#home");
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(cs => {
+    for (const c of cs) { if ("focus" in c) { c.postMessage({ type: "hh-open", url }); return c.focus(); } }
+    return self.clients.openWindow("./" + (url.charAt(0) === "#" ? url : "#home"));
   }));
 });

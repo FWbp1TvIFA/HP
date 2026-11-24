@@ -16,14 +16,16 @@ const thisMonth=()=>TODAY().slice(0,7);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const peopleRaw=()=>SET().people||[];
-// shown with the youngest first (Jugo, Akiyo, then the parent who set it up) unless the family picks another order
+// shown with the youngest first, then the other parent, then the parent who set it up, unless the family picks another order
 const people=()=>{const raw=peopleRaw(),ord=SET().order;if(Array.isArray(ord)&&ord.length){const pos=id=>{const i=ord.indexOf(id);return i<0?99:i};return [...raw].sort((a,b)=>pos(a.id)-pos(b.id))}return [...raw].reverse()};
 const kidId=()=>(peopleRaw()[2]||peopleRaw()[peopleRaw().length-1])?.id||meId();
 const person=id=>people().find(p=>p.id===+id);
 const pname=id=>id==0?"Family":(person(id)?.name||"Someone");
 const meId=()=>ST.me.personId||1;
+/* whose things come first on this phone: the person signed in, or the profile picked at the top right */
+const viewId=()=>{if(ST.mode==="cloud"){const v=+ST._localPref("view");if(v&&peopleRaw().some(p=>p.id===v))return v}return meId()};
 const colorIdx=id=>id==0?0:((peopleRaw().findIndex(p=>p.id===+id)%3)+1)||0;
-const dot=id=>`<span class="dot who-${colorIdx(id)}" aria-hidden="true">${id==0?"All":esc(pname(id).slice(0,1).toUpperCase())}</span>`;
+const dot=id=>{const ph=id!=0&&photoOf(id);return `<span class="dot who-${colorIdx(id)}${ph?" ph ph-"+(+id):""}" aria-hidden="true">${id==0?"All":esc(pname(id).slice(0,1).toUpperCase())}</span>`};
 function money(n,sign){const v=Math.abs(n).toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2});return (sign&&n<0?"−":sign&&n>0?"+":"")+(SET().currency||"$")+v}
 function nice(d){const t=TODAY();if(d===t)return"Today";if(d===addDays(t,1))return"Tomorrow";if(d===addDays(t,-1))return"Yesterday";return new Date(d+"T12:00:00").toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"})}
 function ago(ts){const s=Math.round((Date.now()-ts)/1000);if(s<60)return"just now";if(s<3600)return Math.round(s/60)+" min ago";if(s<86400)return Math.round(s/3600)+" h ago";return new Date(ts).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}
@@ -45,14 +47,19 @@ const ICON={
  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
  mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
  spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>',
- back:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>'
+ back:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+ cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+ money:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M16 12.5h2M2 10h20"/></svg>',
+ sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+ bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/></svg>'
 };
 
 /* ---------- view state ---------- */
-let tab="home", listTab="tasks", listWho="all", moneyMonth=thisMonth(), calDay=TODAY(), calMonth=thisMonth();
-const routes=["home","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities","learn","live"];
-const parentTab={notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"money",meals:"more",dates:"more",activities:"more",learn:"more",live:"more"};
-if(routes.includes(location.hash.slice(1)))tab=location.hash.slice(1);
+let tab="home", listTab="tasks", listWho="mine", moneyMonth=thisMonth(), calDay=TODAY(), calMonth=thisMonth(), cameFrom="more";
+const routes=["home","today","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities","learn","piano","alarms"];
+const routeOf=h=>h==="live"?"home":h; // the live view is the home page now
+const parentTab={today:"home",calendar:"more",money:"more",notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"more",meals:"more",dates:"more",activities:"more",learn:"more",alarms:"more"};
+if(routes.includes(routeOf(location.hash.slice(1))))tab=routeOf(location.hash.slice(1));
 let authMode="signin", authErr="", busy=false;
 
 function monthStats(m){
@@ -85,8 +92,17 @@ const joinBtn=e=>isUrl(e.place)?`<a class="mini join" href="${esc(e.place.trim()
 const swipeHint=()=>`<div class="hint">Swipe left on a row to delete it</div>`;
 
 /* ---------- Today ---------- */
-function viewHome(){
-  const t=TODAY();
+const lw=()=>listWho==="mine"?String(viewId()):listWho;
+/* the person whose profile is showing gets their things first, the rest of the family after */
+function mineFirst(arr,item){
+  const v=viewId(),a=arr.filter(x=>+x.who===v),b=arr.filter(x=>+x.who!==v);
+  if(peopleRaw().length<2||!a.length||!b.length)return arr.map(item).join("");
+  return `<div class="aisle rest" style="margin-top:2px">${v===meId()?"Yours":esc(pname(v))}</div>`+a.map(item).join("")+`<div class="aisle rest">Rest of the family</div>`+b.map(item).join("");
+}
+function qaCard(){return `<section class="card qacard"><form id="qaForm" class="quick qa" autocomplete="off"><span class="qaic">${ICON.spark}</span><input id="qa" placeholder="Add anything…" aria-label="Quick add" enterkeyhint="done" autocomplete="off" autocorrect="on">${hasMic?`<button type="button" class="qamic" data-act="voice" aria-label="Speak">${ICON.mic}</button>`:""}<button type="submit">Add</button></form>
+   <div id="qaPrev" class="qaprev" hidden></div><div class="qatip" id="qaTip" ${+(ST._localPref("qaUses")||0)>=3?"hidden":""}>Type or tap the microphone on your keyboard and just say it. The app works out if it's a task, event, shopping or spending.</div></section>`}
+function viewToday(){
+  const t=TODAY(),v=viewId(),kidView=peopleRaw().length>2&&v===kidId(),myStars=starsThisWeek()[v]||0;
   const due=sortTasks(S().tasks.filter(x=>!x.done&&x.due&&x.due<=t));
   const hw=sortTasks(S().homework.filter(h=>!h.done&&h.due&&h.due<=addDays(t,1)));
   const ev=sortEv(evOn(t));
@@ -97,17 +113,15 @@ function viewHome(){
   const upNext=ev.find(e=>e.time&&e.time>=nowT);
   const billsDue=billsSorted().filter(b=>b.next&&b.next<=addDays(t,3));
   const dinner=mealOn(t), cds=countdownsSoon(2).filter(c=>daysUntil(c.nd)<=60);
-  return `${moodRequestBanner()}${syncNote()}
-  <section class="card qacard"><form id="qaForm" class="quick qa" autocomplete="off"><span class="qaic">${ICON.spark}</span><input id="qa" placeholder="Add anything…" aria-label="Quick add" enterkeyhint="done" autocomplete="off" autocorrect="on">${hasMic?`<button type="button" class="qamic" data-act="voice" aria-label="Speak">${ICON.mic}</button>`:""}<button type="submit">Add</button></form>
-   <div id="qaPrev" class="qaprev" hidden></div><div class="qatip" id="qaTip" ${+(ST._localPref("qaUses")||0)>=3?"hidden":""}>Type or tap the microphone on your keyboard and just say it. The app works out if it's a task, event, shopping or spending.</div></section>
+  return `${slotInfo().r==="today"?"":`<button class="back" data-go="home">${ICON.back}Home</button>`}${moodRequestBanner()}${syncNote()}
+  ${qaCard()}
   ${upNext?`<button class="upnext" data-act="edit" data-col="events" data-id="${upNext.id}"><span class="label">Up next · ${tm(upNext.time)}</span><b>${esc(upNext.title)}</b><span>${esc(pname(upNext.who))}${upNext.place?" · "+esc(placeTxt(upNext.place)):""}${(()=>{const [h,m]=upNext.time.split(":").map(Number),d=new Date();d.setHours(h,m,0,0);const mins=Math.round((d-Date.now())/6e4);return mins<=0?" · now":mins<60?" · in "+mins+" min":" · in "+Math.floor(mins/60)+" h "+(mins%60?mins%60+" min":"")})()}</span></button>`:""}
-  ${boardCard()}
-  ${billsDue.length?`<section class="card"><div class="row between"><h2>Bills due</h2><button class="link" data-go="bills">All bills</button></div><div class="list" style="margin-top:6px">${billsDue.map(billRow).join("")}</div></section>`:""}
+  ${billsDue.length&&!kidView?`<section class="card"><div class="row between"><h2>Bills due</h2><button class="link" data-go="bills">All bills</button></div><div class="list" style="margin-top:6px">${billsDue.map(billRow).join("")}</div></section>`:""}
   <section class="card"><div class="row between"><h2>Today's plan</h2><span class="sub">${new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"})}</span></div>
    <div class="list" style="margin-top:6px">${ev.length?ev.map(e=>eventItem(e)).join(""):`<div class="empty">Nothing on the calendar today. Tap + to add an event.</div>`}</div></section>
   <section class="card"><div class="row between"><h2>To do now</h2><button class="link" data-go="lists" data-list="tasks">All tasks</button></div>
-   <div class="list" style="margin-top:6px">${due.length?due.map(taskItem).join(""):`<div class="empty">All caught up.</div>`}</div></section>
-  ${hw.length?`<section class="card"><div class="row between"><h2>Homework due soon</h2><button class="link" data-go="lists" data-list="homework">All homework</button></div><div class="list" style="margin-top:6px">${hw.map(hwItem).join("")}</div></section>`:""}
+   <div class="list" style="margin-top:6px">${due.length?mineFirst(due,taskItem):`<div class="empty">All caught up.</div>`}</div></section>
+  ${hw.length?`<section class="card"><div class="row between"><h2>Homework due soon</h2><button class="link" data-go="lists" data-list="homework">All homework</button></div><div class="list" style="margin-top:6px">${mineFirst(hw,hwItem)}</div></section>`:""}
   ${Object.values(starsThisWeek()).some(v=>v>0)?scoreboard():""}
   <div class="two">
    <button class="tile" data-go="meals"><span class="label">Dinner tonight</span><b>${dinner?esc(dinner.title):"Not planned"}</b><span>${dinner&&dinner.cook?esc(pname(dinner.cook))+" cooking":"Tap to plan the week"}</span></button>
@@ -115,16 +129,16 @@ function viewHome(){
   </div>
   <div class="two">${learnTodayCard()}${(()=>{const k=kidId(),nx=sortEv(evRange(t,addDays(t,6)).filter(e=>isRep(e)&&+e.who===k)).filter(e=>e.date>t||!e.time||e.time>=nowT)[0];return nx?`<button class="tile" data-go="activities"><span class="label">${esc(pname(k))}'s next class</span><b>${esc(nx.title)}</b><span>${nice(nx.date)}${nx.time?" · "+tm(nx.time):""}</span></button>`:`<button class="tile" data-go="activities"><span class="label">Activities</span><b>Weekly classes</b><span>Swimming, lessons, sport</span></button>`})()}</div>
   <div class="two">
-   <button class="tile" data-go="money"><span class="label">Money left</span><b class="num ${left<0?"neg":""}">${left<0?"−":""}${money(left)}</b><span>this month</span></button>
+   ${kidView?`<button class="tile" data-go="lists" data-list="tasks"><span class="label">Stars this week</span><b class="num">★ ${myStars}</b><span>Tick off chores to earn more</span></button>`:`<button class="tile" data-go="money"><span class="label">Money left</span><b class="num ${left<0?"neg":""}">${left<0?"−":""}${money(left)}</b><span>this month</span></button>`}
    <button class="tile" data-go="lists" data-list="shopping"><span class="label">Shopping</span><b class="num">${shopLeft} item${shopLeft===1?"":"s"}</b><span>still to buy</span></button>
   </div>
   <section class="card"><div class="row between"><h2>Coming up this week</h2><button class="link" data-go="calendar">Calendar</button></div>
    <div class="list" style="margin-top:6px">${next.length?next.map(e=>eventItem(e,true)).join(""):`<div class="empty">Nothing planned for the next 7 days.</div>`}</div></section>`;
 }
-/* family board: short notes to each other ("Home late tonight", "Jugo has swimming bag?") */
+/* family board: short notes to each other ("Home late tonight", "Swimming bag packed?") */
 function boardCard(){
   const cut=Date.now()-5*864e5,msgs=[...S().board].filter(m=>(m.at||m.createdAt||0)>cut).sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,4);
-  return `<section class="card board"><div class="row between"><h2>Family board</h2><button class="link" data-go="live"><span class="livedot"></span> Live view</button></div>
+  return `<section class="card board"><div class="row between"><h2>Family board</h2><span class="sub">Notes for each other</span></div>
    ${msgs.length?`<div class="list" style="margin-top:4px">${msgs.map(m=>{const ack=Object.keys(m.ack||{}).filter(k=>(m.ack||{})[k]).map(Number).filter(i=>i!==+m.who);const mine=+m.who===meId(),iAck=(m.ack||{})[meId()];
      return row("board",m.id,`${dot(m.who)}<div class="grow"><div class="t bt">${esc(m.text)}</div><div class="m">${esc(pname(m.who))} · ${ago(m.at||m.createdAt)}${ack.length?" · 👍 "+ack.map(i=>esc(pname(i))).join(", "):""}</div></div>${mine?"":`<button class="mini ${iAck?"ghostmini":""}" data-act="boardAck" data-id="${m.id}">${iAck?"👍":"Got it"}</button>`}`)}).join("")}</div>`:""}
    <form id="boardForm" class="quick" style="margin-top:8px" autocomplete="off"><input id="boardIn" placeholder="${msgs.length?"Reply or post a note…":"e.g. Home late tonight, dinner in the fridge"}" maxlength="200" enterkeyhint="send"><button type="submit">Post</button></form></section>`;
@@ -163,7 +177,7 @@ function viewCalendar(){
   const dayLabel=new Date(calDay+"T12:00:00").toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"});
   const cdDay=S().countdowns.filter(c=>c.yearly?c.date.slice(5)===calDay.slice(5):c.date===calDay),billDay=S().bills.filter(b=>b.next===calDay),dinDay=mealOn(calDay);
   const any=ev.length||hwDay.length||taskDay.length||cdDay.length||billDay.length||dinDay;
-  return `<section class="card">
+  return `${tabBack("calendar")}<section class="card">
    <div class="mhead"><h2>${label}</h2><div class="navbtns"><button class="link" data-act="calToday">Today</button>
     <button class="iconbtn" data-act="cPrev" aria-label="Previous month">‹</button><button class="iconbtn" data-act="cNext" aria-label="Next month">›</button></div></div>
    <div class="wd">${wd.map(w=>`<span>${w}</span>`).join("")}</div><div class="mgrid">${grid}</div></section>
@@ -172,12 +186,12 @@ function viewCalendar(){
 }
 
 /* ---------- Lists ---------- */
-function whoChips(){return `<div class="chips">${[["all","Everyone"],...people().map(p=>[String(p.id),p.name])].map(([k,n])=>`<button class="chip ${listWho==k?"on":""}" data-act="who" data-k="${k}">${esc(n)}</button>`).join("")}</div>`}
+function whoChips(){return `<div class="chips">${[["all","Everyone"],...people().map(p=>[String(p.id),p.name])].map(([k,n])=>`<button class="chip ${lw()==k?"on":""}" data-act="who" data-k="${k}">${esc(n)}</button>`).join("")}</div>`}
 function viewLists(){
   const seg=`<div class="seg sticky">${[["tasks","Tasks"],["shopping","Shopping"],["homework","Homework"]].map(([k,n])=>`<button class="${listTab===k?"on":""}" data-act="listTab" data-k="${k}">${n}</button>`).join("")}</div>`;
   let body="";
   if(listTab==="tasks"){
-    const list=sortTasks(S().tasks.filter(t=>listWho==="all"||t.who==listWho));
+    const list=sortTasks(S().tasks.filter(t=>lw()==="all"||t.who==lw()));
     const open=list.filter(t=>!t.done),done=list.filter(t=>t.done);
     body=`${whoChips()}${scoreboard()}<section class="card"><h2>To do <span class="sub">(${open.length})</span></h2><div class="list" style="margin-top:6px">${open.length?open.map(taskItem).join(""):`<div class="empty">Nothing to do. Tap + to add a task or chore.</div>`}</div></section>
     ${list.length?swipeHint():""}
@@ -195,7 +209,7 @@ function viewLists(){
     ${got.length?`<section class="card"><div class="row between"><h2>In the trolley</h2><button class="link" data-act="newWeek">Start new week</button></div><div class="list" style="margin-top:6px">${got.map(item).join("")}</div></section>`:""}`;
   }
   if(listTab==="homework"){
-    const list=sortTasks(S().homework.filter(h=>listWho==="all"||h.who==listWho));
+    const list=sortTasks(S().homework.filter(h=>lw()==="all"||h.who==lw()));
     const open=list.filter(h=>!h.done),done=list.filter(h=>h.done);
     body=`${whoChips()}<section class="card"><h2>Homework to do <span class="sub">(${open.length})</span></h2><div class="list" style="margin-top:6px">${open.length?open.map(hwItem).join(""):`<div class="empty">No homework due. Tap + to add some.</div>`}</div></section>
     ${done.length?`<section class="card"><div class="row between"><h2>Finished</h2><button class="link" data-act="clearHw">Clear finished</button></div><div class="list" style="margin-top:6px">${done.map(hwItem).join("")}</div></section>`:""}`;
@@ -211,7 +225,7 @@ function viewMoney(){
   const cats=Array.from(new Set([...Object.keys(budgets),...Object.keys(m.byCat)]));
   const tx=S().tx.filter(x=>monthKey(x.date)===moneyMonth).sort((a,b)=>b.date.localeCompare(a.date));
   const byWho=people().map(p=>({p,v:tx.filter(x=>x.type==="out"&&x.who===p.id).reduce((a,x)=>a+x.amount,0)}));
-  return `<div class="row between"><button class="iconbtn" data-act="mPrev" aria-label="Previous month">‹</button><h2>${label}</h2><button class="iconbtn" data-act="mNext" aria-label="Next month">›</button></div>
+  return `${tabBack("money")}<div class="row between"><button class="iconbtn" data-act="mPrev" aria-label="Previous month">‹</button><h2>${label}</h2><button class="iconbtn" data-act="mNext" aria-label="Next month">›</button></div>
   <section class="card"><div class="trio"><div><div class="label">In</div><div class="v num pos">${money(m.inc)}</div></div><div><div class="label">Spent</div><div class="v num">${money(m.out)}</div></div><div><div class="label">Left</div><div class="v num ${m.inc-m.out<0?"neg":""}">${money(m.inc-m.out)}</div></div></div>
    <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:14px">${byWho.map(x=>`<span class="row" style="gap:6px">${dot(x.p.id)}<span class="sub num">${esc(x.p.name)} spent ${money(x.v)}</span></span>`).join("")}</div></section>
   ${trendCard()}
@@ -236,13 +250,18 @@ function billsCard(){
    ${list.length?`<div class="sub" style="margin-top:2px">${money(total)} a month · ${money(total*12)} a year</div><div class="list" style="margin-top:6px">${soon.map(billRow).join("")}</div>`:`<div class="empty">Track rent, power, phone and subscriptions. See what's due and record payments in one tap.</div><button class="ghost" data-act="addBill" style="width:100%">Add a bill</button>`}</section>`;
 }
 /* ---------- More ---------- */
-const backBar=`<button class="back" data-go="more">${ICON.back}More</button>`;
+const backTo=()=>cameFrom==="home"||cameFrom==="today"?cameFrom:"more";
+const backBar=()=>`<button class="back" data-go="${backTo()}">${ICON.back}${{home:"Home",today:"Today",more:"More"}[backTo()]}</button>`;
+const tabBack=r=>slotInfo().r===r?"":backBar(); // pages that can sit in the bottom bar need no back button while they are there
 function viewMore(){
   const tile=(go,icon,title,sub)=>`<button class="tile" data-go="${go}">${icon}<b>${title}</b><span>${sub}</span></button>`;
-  const cards=S().wallet.length+S().myWallet.length;
+  const cards=S().wallet.length+S().myWallet.length,t0=TODAY(),wk=evRange(t0,addDays(t0,6)).length,ms=monthStats(thisMonth()),sl=slotInfo(),na=(S().alarms||[]).filter(a=>a.on!==false).length;
   return `<div class="tiles">
-   <button class="tile livetile" data-go="live"><span class="livemini">${people().map(p=>`<i style="background:${pvar(p.id)}"></i>`).join("")}</span><b>Live view</b><span><span class="livedot"></span> Family tree and who's doing what</span></button>
-   ${tile("learn",'<span class="tilechar">学</span>',"Learn",(()=>{const st=learnStreak(kidId());return st?"🔥 "+st+" day streak":"Chinese and piano for "+esc(pname(kidId()))})())}
+   ${tile("calendar",ICON.cal,"Calendar",wk?wk+" plan"+(wk===1?"":"s")+" this week":"Plans, classes and events")}
+   ${tile("money",ICON.money,"Money",(ms.inc-ms.out<0?"−":"")+money(ms.inc-ms.out)+" left this month")}
+   ${tile("today",ICON.sun,"Today","Today's plan, to-dos and quick add")}
+   ${tile("alarms",ICON.bell,"Alarms",na?na+" alarm"+(na===1?"":"s")+" on, plus reminders":"Wake-ups and reminders")}
+   ${tile("learn",'<span class="tilechar">学</span>',"Chinese",(()=>{const st=learnStreak(kidId());return st?"🔥 "+st+" day streak":"Words and quizzes for "+esc(pname(kidId()))})())}
    ${tile("activities",ICON.swim,"Activities",(()=>{const n=S().events.filter(isRep).length;return n?n+" weekly class"+(n===1?"":"es")+" and lessons":"Swimming, lessons, sport"})())}
    ${tile("meals",ICON.meal,"Dinner plan",(()=>{const m=mealOn(TODAY());return m?"Tonight: "+esc(m.title):"Plan the week's dinners"})())}
    ${tile("dates",ICON.cake,"Dates",(()=>{const c=countdownsSoon(1)[0];return c?esc(c.title)+" · "+esc(cdLabel(c)):"Birthdays and trips"})())}
@@ -252,6 +271,7 @@ function viewMore(){
    ${tile("notes",ICON.note,"Notes",S().notes.length+" note"+(S().notes.length===1?"":"s"))}
    ${tile("calc",ICON.calc,"Calculator","Quick sums, then save as spending")}
    ${tile("location",ICON.pin,"Family location","See where everyone is")}
+   <button class="tile" data-act="slot"><span class="tilechar">🎲</span><b>Bottom shortcut</b><span>This week: ${esc(NAV[sl.r][0])}. Tap to change</span></button>
    <button class="tile" data-act="settings">${ICON.gear}<b>Settings</b><span>Names, currency, ${ST.mode==="cloud"?"family code":"backup"}</span></button>
   </div>`;
 }
@@ -259,7 +279,7 @@ function viewMore(){
 /* ---------- Notes ---------- */
 function viewNotes(){
   const notes=[...S().notes].sort((a,b)=>(!!b.pinned-!!a.pinned)||((b.updated||0)-(a.updated||0)));
-  return `${backBar}<div class="stack" style="gap:10px">${notes.length?notes.map(n=>`<button class="note" data-act="openNote" data-id="${n.id}"><b>${n.pinned?"📌 ":""}${esc(n.title||"Untitled")}</b><p>${esc(String(n.body||"").replace(/^\s*\[ \]\s?/gm,"☐ ").replace(/^\s*\[x\]\s?/gim,"☑ "))}</p><span class="m">${esc(pname(n.who))} · ${new Date(n.updated||n.createdAt||Date.now()).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}</span></button>`).join(""):`<div class="card empty">No notes yet. Tap + to write one.</div>`}</div>`;
+  return `${backBar()}<div class="stack" style="gap:10px">${notes.length?notes.map(n=>`<button class="note" data-act="openNote" data-id="${n.id}"><b>${n.pinned?"📌 ":""}${esc(n.title||"Untitled")}</b><p>${esc(String(n.body||"").replace(/^\s*\[ \]\s?/gm,"☐ ").replace(/^\s*\[x\]\s?/gim,"☑ "))}</p><span class="m">${esc(pname(n.who))} · ${new Date(n.updated||n.createdAt||Date.now()).toLocaleDateString("en-AU",{day:"numeric",month:"short"})}</span></button>`).join(""):`<div class="card empty">No notes yet. Tap + to write one.</div>`}</div>`;
 }
 
 /* ---------- Calculator ---------- */
@@ -276,7 +296,7 @@ function calcPreview(){try{return calcExpr?calcEval(calcExpr):0}catch(e){return 
 function viewCalc(){
   const p=calcPreview();
   const keys=[["C","fn"],["(","fn"],[")","fn"],["÷","op"],["7"],["8"],["9"],["×","op"],["4"],["5"],["6"],["-","op"],["1"],["2"],["3"],["+","op"],["%","fn"],["0"],["."],["=","eq"]];
-  return `${backBar}<div class="calc"><div class="screen" aria-live="polite"><div class="e">${esc(calcExpr)||"&nbsp;"}</div><div class="r">${p===null?"…":p.toLocaleString("en-AU",{maximumFractionDigits:8})}</div></div>
+  return `${backBar()}<div class="calc"><div class="screen" aria-live="polite"><div class="e">${esc(calcExpr)||"&nbsp;"}</div><div class="r">${p===null?"…":p.toLocaleString("en-AU",{maximumFractionDigits:8})}</div></div>
   <div class="keys">${keys.map(([k,c])=>`<button class="key ${c||""}" data-act="key" data-k="${k}" aria-label="${k==="C"?"Clear":k}">${k==="-"?"−":k}</button>`).join("")}</div>
   <div class="two"><button class="ghost" data-act="key" data-k="⌫">⌫ Delete</button><button class="primary" data-act="calcSpend">Save as spending</button></div></div>`;
 }
@@ -296,7 +316,7 @@ function viewLocation(){
   const sharing=mySharing();
   const others=people().map(p=>{const l=locs.find(x=>x.id===String(p.id));
     return `<div class="item">${dot(p.id)}<div class="grow"><div class="t">${esc(p.name)}${p.id===meId()?" (you)":""}</div><div class="m">${l?`Updated ${ago(l.at)} · within ${Math.round(l.acc||0)} m`:"Not sharing"}</div></div>${l?`<a class="mapl" href="https://www.google.com/maps?q=${l.lat},${l.lng}" target="_blank" rel="noopener">Map</a>`:""}</div>`}).join("");
-  return `${backBar}
+  return `${backBar()}
   <section class="card stack" style="gap:12px"><div class="row between"><div class="grow"><h2>Share my location</h2><div class="sub">With ${ST.mode==="cloud"?"your family":"this device only, until family sharing is set up"}</div></div>
    <button class="toggle ${sharing?"on":""}" data-act="toggleLoc" role="switch" aria-checked="${sharing}" aria-label="Share my location"></button></div>
    <div class="sub">Your location updates while Happy Home is open on your phone. Turn this off any time and your location is removed straight away.</div></section>
@@ -323,7 +343,7 @@ function walletCard(w,full){
 }
 function viewWallet(){
   const cards=allCards();
-  return `${backBar}${cards.length?`<div class="wstack">${cards.map(w=>walletCard(w,false)).join("")}</div>`:`<section class="card empty">No cards yet. Add loyalty cards, memberships, tickets or a boarding pass.</section>`}
+  return `${backBar()}${cards.length?`<div class="wstack">${cards.map(w=>walletCard(w,false)).join("")}</div>`:`<section class="card empty">No cards yet. Add loyalty cards, memberships, tickets or a boarding pass.</section>`}
   <section class="card stack" style="gap:8px"><h2>Add to Wallet</h2><div class="sub">Type in the card number to make a scannable barcode or QR code, and add a photo of the card if you like. Shared cards show for the whole family; private ones only for you.</div>
   <button class="primary" data-act="addCard">Add a card or pass</button></section>`;
 }
@@ -381,14 +401,14 @@ function moodRequestBanner(){
 }
 function viewMood(){
   const s=activeSession();
-  if(s&&s.state==="asking")return `${backBar}${moodRequestBanner()}
+  if(s&&s.state==="asking")return `${backBar()}${moodRequestBanner()}
    <section class="card stack" style="gap:12px"><h2>Family mood check</h2><p style="margin:0">It starts only when everyone below has said yes on their own phone.</p>
     <div class="list">${(s.people||[]).map(id=>{const ok=(s.agreed||{})[id],no=(s.declined||{})[id];return `<div class="item">${dot(id)}<div class="grow"><div class="t">${esc(pname(id))}</div><div class="m">${id===s.starter?"Started this":ok?"Agreed":no?"Said no":"Waiting for an answer"}</div></div><span class="pill ${ok?"today":no?"late":""}">${ok?"Agreed":no?"No":"Waiting"}</span></div>`}).join("")}</div>
     <div class="sub">If anyone says no, or doesn't answer within 2 minutes, it won't start.</div>
     <button class="ghost" data-act="moodCancel" data-id="${s.id}">Cancel</button></section>`;
   if(s&&s.state==="ready"){
     const mine=s.starter===meId();
-    return `${backBar}<section class="card stack" style="gap:14px;text-align:center;align-items:center"><h2>Everyone agreed</h2>
+    return `${backBar()}<section class="card stack" style="gap:14px;text-align:center;align-items:center"><h2>Everyone agreed</h2>
      <div class="row" style="justify-content:center;gap:14px;flex-wrap:wrap">${(s.people||[]).map(i=>`<span class="row" style="gap:6px">${dot(i)}<span class="sub">${esc(pname(i))}</span></span>`).join("")}</div>
      ${mine?`<p class="sub" style="margin:0">Your phone will listen for 5 minutes. Keep Happy Home open and the phone in the middle of the room.</p><button class="primary" style="width:100%" data-act="moodListen" data-id="${s.id}">Start listening</button>`:`<p class="sub" style="margin:0">Waiting for ${esc(pname(s.starter))} to start it.</p>`}
      <button class="ghost" style="width:100%" data-act="moodCancel" data-id="${s.id}">Cancel</button></section>`;
@@ -407,7 +427,7 @@ function viewMood(){
   const todays=people().map(p=>{const c=S().moods.filter(m=>m.person===p.id&&m.date===t).sort((a,b)=>b.at-a.at)[0];
     return `<div class="item">${dot(p.id)}<div class="grow"><div class="t">${esc(p.name)}${p.id===meId()?" (you)":""}</div><div class="m">${c?`Checked in ${new Date(c.at).toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"})}${c.note?` · "${esc(c.note)}"`:""}`:"Hasn't shared today"}</div></div>${c?moodBadge(c.mood):`<span class="pill">Private</span>`}</div>`}).join("");
   const week=[...Array(7)].map((_,i)=>addDays(t,i-6));
-  return `${backBar}${res?resultCard(res):""}
+  return `${backBar()}${res?resultCard(res):""}
   <section class="card stack" style="gap:10px"><div class="row between"><h2>How's everyone today?</h2><span class="sub">${nice(t)}</span></div><div class="list">${todays}</div><div class="sub">You only see what each person chooses to share.</div></section>
   <section class="card stack" style="gap:10px"><h2>How are you feeling?</h2>
    <div class="moodpick">${MOODS.map(([k,n,c])=>`<button class="${k===pickMood?"on":""}" style="--m:${c}" data-act="pickMood" data-k="${k}"><i></i>${n}</button>`).join("")}</div>
@@ -496,7 +516,6 @@ function moodTick(){
     else if(all)ST.patch("moodSessions",s.id,{state:"ready"});
   }
 }
-function cleanupBoard(){S().board.filter(m=>+m.who===meId()&&Date.now()-(m.at||m.createdAt||0)>30*864e5).forEach(m=>ST.del("board",m.id))}
 function cleanupMoodSessions(){ // old requests go away after a day
   S().moodSessions.filter(s=>Date.now()-s.createdAt>24*3600e3&&s.starter===meId()).forEach(s=>ST.del("moodSessions",s.id));
 }
@@ -520,8 +539,8 @@ function viewFamilySetup(){
   return `<div class="auth"><h1>Set up your family</h1>
   <section class="card stack" style="gap:12px"><h2>Start a new family</h2>
    <form id="newFam" class="stack" style="gap:10px">
-    <div class="field"><label for="n_me">Your name</label><input id="n_me" required placeholder="Your first name"></div>
-    <div class="two"><div class="field"><label for="n_2">Family member</label><input id="n_2" value="Akiyo"></div><div class="field"><label for="n_3">Family member</label><input id="n_3" value="Jugo"></div></div>
+    <div class="field"><label for="n_me">Your name</label><input id="n_me" required placeholder="e.g. Dad"></div>
+    <div class="two"><div class="field"><label for="n_2">Other parent</label><input id="n_2" placeholder="e.g. Mum"></div><div class="field"><label for="n_3">Child</label><input id="n_3" placeholder="Their name"></div></div>
     <div class="field"><label for="n_cur">Currency symbol</label><input id="n_cur" value="$" maxlength="4"></div>
     <button class="primary" type="submit" ${busy?"disabled":""}>Create family</button></form></section>
   <section class="card stack" style="gap:12px"><h2>Join your family</h2><div class="sub">Ask whoever set it up for the family code. It's in their Settings.</div>
@@ -555,7 +574,7 @@ function parseQuick(txt){
   m=s.match(/\$\s?(\d+(?:\.\d{1,2})?)/)||s.match(/\b(?:spent|paid)\s+\$?(\d+(?:\.\d{1,2})?)/i);
   if(m){out.kind="money";out.amount=+m[1];s=s.replace(m[0]," ").replace(/\b(spent|paid|bought|on|for)\b/gi," ");}
   // person
-  for(const p of people()){const first=p.name.split(/\s+/)[0];for(const nm of [p.name,first]){
+  for(const p of people()){const first=p.name.split(/\s+/)[0],aka=String(p.aka||"").trim(),syn={mum:["mum","mom","mummy","mama"],dad:["dad","daddy","papa"]}[p.name.toLowerCase()]||[];for(const nm of [...new Set([p.name,first,aka,aka.split(/\s+/)[0],...syn])].filter(Boolean)){
     if(new RegExp("\\b(?:pick\\s*up|drop\\s*off|collect|call|meet|ring|text|visit|help)\\s+"+reEsc(nm)+"\\b","i").test(s)){out.keepWho=p.id;break}
     const pos=new RegExp("\\s"+reEsc(nm)+"'s(?=\\s)","i");if(pos.test(s)){out.who=p.id;break}
     const re=new RegExp("\\s(?:for\\s+|with\\s+)?"+reEsc(nm)+"(?=\\s)","i");if(re.test(s)){out.who=p.id;s=s.replace(re," ");break}}
@@ -609,19 +628,19 @@ function parseQuick(txt){
 function quickPreview(q){
   if(!q||(!q.title&&!q.items))return"";
   const bits={shop:()=>`Shopping: ${q.items.map(esc).join(", ")}`,
-    money:()=>`Spending ${money(q.amount||0)}${q.title?" · "+esc(q.title):""} · ${pname(q.who||meId())}`,
+    money:()=>`Spending ${money(q.amount||0)}${q.title?" · "+esc(q.title):""} · ${pname(q.who||viewId())}`,
     event:()=>q.days?`Weekly activity: ${esc(q.title||"Untitled")} · ${repText({repeat:"weekly",days:q.days})}${q.time?" · "+tm(q.time):""} · ${pname(q.who??0)}`:`Event: ${esc(q.title||"Untitled")} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""} · ${pname(q.who??0)}`,
-    task:()=>`Task: ${esc(q.title||"Untitled")} · ${pname(q.who||meId())} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""}${q.repeat?" · repeats "+(q.repeat==="daily"?"every day":"every week"):""}`,
+    task:()=>`Task: ${esc(q.title||"Untitled")} · ${pname(q.who||viewId())} · ${nice(q.date||TODAY())}${q.time?" · "+tm(q.time):""}${q.repeat?" · repeats "+(q.repeat==="daily"?"every day":"every week"):""}`,
     homework:()=>`Homework: ${esc(q.subject||"Homework")} · ${esc(q.title||"")} · due ${nice(q.date||addDays(TODAY(),1))}`}[q.kind];
   return bits?bits():"";
 }
 function saveQuick(q){
   if(q.kind==="shop"){q.items.forEach(n=>addShopItem(n));toast(q.items.length>1?q.items.length+" items added to shopping":"Added to shopping");return}
   if(!q.title&&q.kind!=="money")return toast("Type what it is, e.g. Dentist Friday 3pm");
-  if(q.kind==="money"){if(!(q.amount>0))return;const cat=guessCat(q.title);ST.add("tx",{type:"out",amount:Math.round(q.amount*100)/100,cat,who:q.who||meId(),date:q.date||TODAY(),note:q.title});toast("Spending added to "+cat);return}
+  if(q.kind==="money"){if(!(q.amount>0))return;const cat=guessCat(q.title);ST.add("tx",{type:"out",amount:Math.round(q.amount*100)/100,cat,who:q.who||viewId(),date:q.date||TODAY(),note:q.title});toast("Spending added to "+cat);return}
   if(q.kind==="event"){const d=q.date||TODAY();if(q.days){ST.add("events",{title:q.title,who:q.who??0,date:d,time:q.time||"",place:"",repeat:"weekly",days:q.days.sort(),until:"",skip:[]});toast(q.title+": "+repText({repeat:"weekly",days:q.days}));return}ST.add("events",{title:q.title,who:q.who??0,date:d,time:q.time||"",place:""});toast("Added to the calendar for "+nice(d));return}
   if(q.kind==="homework"){ST.add("homework",{subject:q.subject||"Homework",title:q.title||q.subject||"Homework",who:q.who||kidId(),due:q.date||addDays(TODAY(),1),time:q.time||"",done:false});toast("Homework added");return}
-  ST.add("tasks",{title:q.title,who:q.who||meId(),due:q.date||TODAY(),time:q.time||"",repeat:q.repeat||"none",done:false});toast("Task added for "+nice(q.date||TODAY()));
+  ST.add("tasks",{title:q.title,who:q.who||viewId(),due:q.date||TODAY(),time:q.time||"",repeat:q.repeat||"none",done:false});toast("Task added for "+nice(q.date||TODAY()));
 }
 const CAT_WORDS={Groceries:/grocer|woolies|woolworths|coles|aldi|iga|supermarket|market|food shop/i,Transport:/petrol|fuel|uber|taxi|bus|train|parking|toll|opal|go card|car|rego|servo/i,Bills:/electric|power|gas bill|water|internet|phone|rent|insurance|bill|netflix|spotify|subscription/i,School:/school|uniform|book|excursion|tuition|fees|stationery/i,"Eating out":/lunch|dinner|breakfast|cafe|coffee|restaurant|takeaway|pizza|mcdonald|kfc|sushi|pho|maccas|bubble tea/i,Health:/doctor|dentist|chemist|pharmacy|medicine|physio|gp|optometrist/i,Fun:/movie|cinema|game|toy|gift|present|holiday|concert|netflix|zoo|park/i};
 function guessCat(t){const cats=SET().categories||[];for(const [c,re] of Object.entries(CAT_WORDS))if(re.test(t||"")&&cats.includes(c))return c;return cats.includes("Other")?"Other":(cats[0]||"Other")}
@@ -708,7 +727,7 @@ function viewMeals(){
   const ws=mealWeek||weekStart(TODAY()),days=[...Array(7)].map((_,i)=>addDays(ws,i));
   const label=new Date(ws+"T12:00:00").toLocaleDateString("en-AU",{day:"numeric",month:"short"})+" – "+new Date(days[6]+"T12:00:00").toLocaleDateString("en-AU",{day:"numeric",month:"short"});
   const ingr=days.flatMap(d=>(mealOn(d)?.ingredients||[]));
-  return `${backBar}<div class="row between"><button class="iconbtn" data-act="mealPrev" aria-label="Previous week">‹</button><h2>${label}</h2><button class="iconbtn" data-act="mealNext" aria-label="Next week">›</button></div>
+  return `${backBar()}<div class="row between"><button class="iconbtn" data-act="mealPrev" aria-label="Previous week">‹</button><h2>${label}</h2><button class="iconbtn" data-act="mealNext" aria-label="Next week">›</button></div>
   <section class="card"><h2>Dinners this week</h2><div class="list" style="margin-top:6px">${days.map(d=>{const m=mealOn(d),dt=new Date(d+"T12:00:00");
     return `<button class="item mealrow ${d===TODAY()?"is-today":""}" data-act="editMeal" data-d="${d}"><span class="mday2"><b>${dt.toLocaleDateString("en-AU",{weekday:"short"})}</b><span>${dt.getDate()}</span></span><div class="grow" style="text-align:left"><div class="t">${m?esc(m.title):`<span class="sub">Not planned</span>`}</div>${m&&m.ingredients?.length?`<div class="m">${esc(m.ingredients.join(", "))}</div>`:""}${m&&m.cook?`<div class="m">Cook: ${esc(pname(m.cook))}</div>`:""}</div></button>`}).join("")}</div></section>
   ${ingr.length?`<button class="primary" data-act="mealsToShop">Add ${ingr.length} ingredients to shopping</button>`:`<p class="sub" style="text-align:center">Tap a day to plan a dinner and list what you need. Then add it all to shopping in one tap.</p>`}`;
@@ -739,7 +758,7 @@ function cdLabel(c){const k=daysUntil(c.nd);const age=c.yearly&&c.kind==="birthd
 function countdownSheet(id){
   const c=id?S().countdowns.find(x=>x.id===id):null;
   openSheet(`${sheetHead(c?"Edit date":"A date to remember")}<form id="f" class="stack" style="gap:12px">
-   <div class="field"><label for="c_t">What</label><input id="c_t" required placeholder="e.g. Jugo's birthday, Japan trip" value="${esc(c?.title||"")}"></div>
+   <div class="field"><label for="c_t">What</label><input id="c_t" required placeholder="e.g. A birthday, a trip" value="${esc(c?.title||"")}"></div>
    <div class="two"><div class="field"><label for="c_d">Date</label><input id="c_d" type="date" required value="${c?.date||""}"></div>
     <div class="field"><label for="c_k">Type</label><select id="c_k">${[["birthday","Birthday"],["anniversary","Anniversary"],["trip","Trip or holiday"],["other","Other"]].map(([k,n])=>`<option value="${k}" ${(c?.kind||"birthday")===k?"selected":""}>${n}</option>`).join("")}</select></div></div>
    <label class="checkrow" for="c_y"><input type="checkbox" id="c_y" ${c?(c.yearly?"checked":""):"checked"}> Every year</label>
@@ -788,8 +807,8 @@ function icsFor(e){
   const d=e.date.replace(/-/g,""),p=n=>String(n).padStart(2,"0"),stamp=new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d+/,"");
   let when;if(e.time){const [h,m]=e.time.split(":").map(Number);const end=new Date(2000,0,1,h+1,m);when=`DTSTART:${d}T${p(h)}${p(m)}00\r\nDTEND:${(end.getDate()>1?addDays(e.date,1):e.date).replace(/-/g,"")}T${p(end.getHours())}${p(end.getMinutes())}00`}
   else when=`DTSTART;VALUE=DATE:${d}\r\nDTEND;VALUE=DATE:${addDays(e.date,1).replace(/-/g,"")}`;
-  const clean=s=>String(s||"").replace(/[\\;,]/g,m=>"\\"+m).replace(/\n/g,"\\n");
-  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Happy Home//EN\r\nBEGIN:VEVENT\r\nUID:${e.id}@happyhome\r\nDTSTAMP:${stamp}\r\n${when}\r\nSUMMARY:${clean(e.title)}\r\n${isRep(e)?"RRULE:FREQ=WEEKLY;BYDAY="+e.days.map(i=>["SU","MO","TU","WE","TH","FR","SA"][i]).join(",")+(e.until?";UNTIL="+e.until.replace(/-/g,"")+"T235959":"")+"\r\n":""}${e.place?"LOCATION:"+clean(e.place)+"\r\n":""}BEGIN:VALARM\r\nTRIGGER:-PT30M\r\nACTION:DISPLAY\r\nDESCRIPTION:${clean(e.title)}\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`;
+  const clean=s=>String(s||"").replace(/[\\;,]/g,m=>"\\"+m).replace(/\n/g,"\\n"),lead=e.remind==null?+nprefs().ev:+e.remind;
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Happy Home//EN\r\nBEGIN:VEVENT\r\nUID:${e.id}@happyhome\r\nDTSTAMP:${stamp}\r\n${when}\r\nSUMMARY:${clean(e.title)}\r\n${isRep(e)?"RRULE:FREQ=WEEKLY;BYDAY="+e.days.map(i=>["SU","MO","TU","WE","TH","FR","SA"][i]).join(",")+(e.until?";UNTIL="+e.until.replace(/-/g,"")+"T235959":"")+"\r\n":""}${e.place?"LOCATION:"+clean(e.place)+"\r\n":""}${lead<0?"":`BEGIN:VALARM\r\nTRIGGER:${e.time?(lead>0?"-PT"+lead+"M":"PT0M"):"PT9H"}\r\nACTION:DISPLAY\r\nDESCRIPTION:${clean(e.title)}\r\nEND:VALARM\r\n`}END:VEVENT\r\nEND:VCALENDAR\r\n`;
 }
 function exportEvent(e){
   const blob=new Blob([icsFor(e)],{type:"text/calendar"}),url=URL.createObjectURL(blob),a=document.createElement("a");
@@ -843,7 +862,8 @@ function learnSave(){
   const decks={...(d.decks||{})};if(lzDeck)decks[lzDeck]=Math.max(decks[lzDeck]||0,lz.right);
   const days={...(d.days||{})},td=days[t]||{n:0,r:0,min:0};days[t]={n:td.n+lz.qs.length,r:td.r+lz.right,min:td.min+Math.max(1,Math.round((Date.now()-(lz.started||Date.now()))/60000))};
   Object.keys(days).sort().slice(0,-60).forEach(k=>delete days[k]);
-  ST.put("learn",String(id),{boxes,streak,best:Math.max(d.best||0,streak),last:t,total:(d.total||0)+lz.qs.length,decks,days,level:d.level||1,who:id,updated:Date.now()});
+  const {id:_i,...keep}=d;
+  ST.put("learn",String(id),{...keep,boxes,streak,best:Math.max(d.best||0,streak),last:t,total:(d.total||0)+lz.qs.length,decks,days,level:d.level||1,who:id,updated:Date.now()});
   const pts=Math.max(1,Math.round(lz.right/2)),sid="learn-"+id+"-"+t,prev=S().stars.find(x=>x.id===sid);
   ST.put("stars",sid,{who:id,pts:(prev?.pts||0)+pts,date:t,title:"Chinese practice"});
   return {pts,streak};
@@ -862,12 +882,11 @@ function learnNext(knew){
   render();
 }
 function viewLearn(){
-  const seg=`<div class="seg">${[["chinese","中文 Chinese"],["piano","🎹 Piano"]].map(([k,n])=>`<button class="${learnTab===k?"on":""}" data-act="learnTab" data-k="${k}">${n}</button>`).join("")}</div>`;
-  if(learnTab==="piano")return `${backBar}${seg}${viewPiano()}`;
-  if(lz)return `${backBar}${lessonView()}`;
+  const seg=`<div class="seg"><button class="on">中文 Chinese</button><button data-go="piano">🎹 Piano</button></div>`;
+  if(lz)return `${backBar()}${lessonView()}`;
   const id=learnerId(),d=learnDoc(id),st=learnStreak(id),box=d.boxes||{},known=Object.values(box).filter(v=>v>=2).length,did=d.last===TODAY();
   const who=people().length>1?`<div class="chips">${people().map(p=>`<button class="chip ${p.id===id?"on":""}" data-act="learner" data-k="${p.id}">${esc(p.name)}</button>`).join("")}</div>`:"";
-  return `${backBar}${seg}${who}
+  return `${backBar()}${seg}${who}
   <section class="card learnhero"><div class="row between"><div><div class="label">${esc(pname(id))}'s Chinese</div><div class="lbig">${st?"🔥 "+st+" day"+(st===1?"":"s"):"Start a streak"}</div><div class="sub">${did?"Practised today. Well done!":"A few minutes a day keeps the streak going."} ${known} of ${ZH_ALL.length} words learnt · Level ${learnLevel()}.</div></div><div class="lchar">学</div></div>
    <div class="two" style="margin-top:12px"><button class="primary" data-act="learnGo" data-k="quiz">Today's quiz</button><button class="ghost" data-act="learnGo" data-k="cards">Flashcards</button></div></section>
   <section class="card"><div class="row between"><h2>Pick a topic</h2><div class="seg mini2">${[1,2].map(l=>`<button class="${learnLevel()===l?"on":""}" data-act="learnLevel" data-k="${l}">Level ${l}</button>`).join("")}</div></div>
@@ -878,6 +897,7 @@ function viewLearn(){
   <p class="sub" style="text-align:center">Words are read aloud by the phone's own Chinese voice. Nothing is sent anywhere.</p>`;
 }
 function lessonView(){
+  if(!lz.done&&lz.i>=lz.qs.length)return ""; // the result is being saved; the next draw shows it
   if(lz.done){const pct=Math.round(lz.right/lz.qs.length*100);return `<section class="card stack lessondone" style="gap:12px;text-align:center;align-items:center"><div class="lchar big">${pct>=80?"🏆":pct>=50?"⭐":"💪"}</div><h2>${pct>=80?"Amazing!":pct>=50?"Good work!":"Nice try!"}</h2>
    <div class="lbig">${lz.right} / ${lz.qs.length}</div><div class="sub">★ ${lz.done.pts} star${lz.done.pts===1?"":"s"} for ${esc(pname(learnerId()))} · 🔥 ${lz.done.streak} day streak</div>
    ${lz.missed.length?`<div class="sub">Practise these again: ${lz.missed.map(z=>{const w=ZH_ALL.find(x=>x.zh===z);return `<button class="chip" data-act="say" data-k="${esc(z)}">${esc(z)} ${esc(w.en)}</button>`}).join(" ")}</div>`:""}
@@ -927,6 +947,7 @@ function viewPiano(){
   ${g?`<button class="link" data-act="pgame" data-k="">Stop the game</button>`:""}
   <p class="sub" style="text-align:center">A first step before real lessons: learn where the notes are and play a simple tune.</p>`;
 }
+function viewPianoPage(){return viewPiano()}
 function pianoKey(n){
   const f=NOTES.find(x=>x[0]===n);if(f)tone(f[1],.9);const g=pianoGame;if(!g)return;
   if(g.kind==="find"){if(n===g.target){g.score++;ding();g.msg="Yes! That's "+nlabel(n);const opts=NOTES.filter(x=>!x[0].includes("#")&&x[0]!==n&&x[0]!=="C2").map(x=>x[0]);g.target=opts[Math.floor(Math.random()*opts.length)];if(g.score%5===0)learnPianoStar()}else{g.msg="That's "+(n.includes("#")?"a black key":nlabel(n))+". Try again"}render();return}
@@ -935,61 +956,99 @@ function pianoKey(n){
 function learnPianoStar(){const id=learnerId(),t=TODAY(),sid="learn-"+id+"-"+t,prev=S().stars.find(x=>x.id===sid);ST.put("stars",sid,{who:id,pts:(prev?.pts||0)+1,date:t,title:"Practice"});toast("★ 1 star for "+pname(id))}
 function learnTodayCard(){
   const k=kidId(),d=learnDoc(k),st=learnStreak(k),did=d.last===TODAY();
-  const lbl=meId()===k?"Your Chinese":esc(pname(k))+"'s Chinese";
-  if(!d.last&&meId()!==k)return `<button class="tile learntile" data-go="learn"><span class="label">${lbl}</span><b>学 Start practising</b><span>Flashcards and quizzes read aloud</span></button>`;
+  const lbl=viewId()===k?"Your Chinese":esc(pname(k))+"'s Chinese";
+  if(!d.last&&viewId()!==k)return `<button class="tile learntile" data-go="learn"><span class="label">${lbl}</span><b>学 Start practising</b><span>Flashcards and quizzes read aloud</span></button>`;
   return `<button class="tile learntile" data-go="learn"><span class="label">${lbl}</span><b>${did?"✓ Practised today":"Not practised yet"}</b><span>${st?"🔥 "+st+" day streak":"Tap to start"}</span></button>`;
 }
 
-/* ---------- Live view: the family as a connected tree, plus a live feed ---------- */
-let liveTab="tree", liveSel=null;
+/* ---------- Home: today as a family tree. Every branch is a person, every leaf is a real plan, task or piece of homework ---------- */
+let liveTab="tree", liveSel=null, liveOpen={};
 const pvar=id=>id==0?"var(--muted)":`var(--p${colorIdx(id)})`;
-function personStats(p){
-  const t=TODAY(),w=addDays(t,6),id=p.id;
-  const ev=evRange(t,w).filter(e=>+e.who===id);
-  return [
-    {k:"ev",em:"📅",n:ev.length,label:"plans this week",go:"calendar",items:sortEv(ev).slice(0,5).map(e=>`${nice(e.date)}${e.time?" "+tm(e.time):""} · ${e.title}`)},
-    {k:"tasks",em:"✅",n:S().tasks.filter(x=>!x.done&&+x.who===id).length,label:"to do",go:"lists",list:"tasks",items:sortTasks(S().tasks.filter(x=>!x.done&&+x.who===id)).slice(0,5).map(x=>x.title)},
-    {k:"hw",em:"📝",n:S().homework.filter(x=>!x.done&&+x.who===id).length,label:"homework",go:"lists",list:"homework",items:S().homework.filter(x=>!x.done&&+x.who===id).slice(0,5).map(x=>x.subject+": "+x.title)},
-    {k:"act",em:"🏊",n:S().events.filter(e=>isRep(e)&&+e.who===id&&(!e.until||e.until>=t)).length,label:"weekly classes",go:"activities",items:S().events.filter(e=>isRep(e)&&+e.who===id).map(e=>e.title+" · "+repText(e))},
-    {k:"star",em:"⭐",n:starsThisWeek()[id]||0,label:"stars this week",go:"lists",list:"tasks",items:[]},
-    {k:"learn",em:"学",n:learnStreak(id),label:"day Chinese streak",go:"learn",items:[],hide:!learnDoc(id).last},
-    {k:"spend",em:"💳",n:Math.round(S().tx.filter(x=>x.type==="out"&&+x.who===id&&monthKey(x.date)===thisMonth()).reduce((a,x)=>a+x.amount,0)),label:"spent this month",money:true,go:"money",items:[]}
-  ].filter(x=>!x.hide&&(x.n>0||["ev","tasks"].includes(x.k)));
+function recentIds(){const cut=Date.now()-90e3,ids=new Set();["tasks","events","tx","shopping","homework","board","bills","notes","alarms","songs"].forEach(c=>(S()[c]||[]).forEach(r=>{if((r.createdAt||r.at||0)>cut&&r.by!=null)ids.add(+r.by)}));return ids}
+const lateTxt=d=>{const n=-daysUntil(d);return n===1?"1 day late":n+" days late"};
+const minsOf=x=>{const a=String(x).split(":");return +a[0]*60+ +a[1]};
+const freshRec=x=>Date.now()-(x.createdAt||0)<90e3;
+function evLeaf(e,nowM){
+  const m=TIME_OK.test(e.time||"")?minsOf(e.time):null,st=m===null?"today":nowM>m+60?"past":nowM>=m?"live":"soon",left=m===null?0:m-nowM;
+  return {key:"1"+(e.time||"00:00")+"a",k:"ev",st,ic:isRep(e)?"🔁":"📅",title:e.title,meta:(e.time?tm(e.time):"All day")+(e.place?" · "+placeTxt(e.place):""),tag:st==="live"?"Now":st==="past"?"Earlier":left>0&&left<=90?"in "+left+" min":"",attr:`data-act="edit" data-col="events" data-id="${esc(e.id)}" data-d="${e.date}"`,fresh:freshRec(e)};
 }
-function recentIds(){const cut=Date.now()-90e3,ids=new Set();["tasks","events","tx","shopping","homework","board","bills","notes"].forEach(c=>S()[c].forEach(r=>{if((r.createdAt||r.at||0)>cut&&r.by!=null)ids.add(+r.by)}));return ids}
-function viewLive(){
-  const seg=`<div class="seg">${[["tree","Family tree"],["feed","Live feed"]].map(([k,n])=>`<button class="${liveTab===k?"on":""}" data-act="liveTab" data-k="${k}">${n}</button>`).join("")}</div>`;
-  const livebar=`<div class="livebar"><span class="livedot"></span>Live · updates the moment anyone changes something</div>`;
-  return `${backBar}${livebar}${seg}${liveTab==="tree"?liveTree():liveFeed()}`;
+/* everything one person has on today, most urgent first */
+function dayLeaves(id){
+  const t=TODAY(),d0=new Date(),nowM=d0.getHours()*60+d0.getMinutes(),out=[];
+  const timed=x=>TIME_OK.test(x||""),stars=x=>+x.points>0?" · ★ "+(+x.points):"";
+  const doneToday=x=>x.done&&(x.doneAt?iso(new Date(x.doneAt))===t:x.due===t);
+  evOn(t).filter(e=>+e.who===id).forEach(e=>out.push(evLeaf(e,nowM)));
+  const todo=(col,x,sub,tick)=>{
+    const base={k:col==="tasks"?"task":"hw",title:x.title,tick,id:x.id,attr:`data-act="edit" data-col="${col}" data-id="${esc(x.id)}"`,fresh:freshRec(x)},pre=sub?sub+" · ":"";
+    if(doneToday(x)){out.push({...base,key:"8",st:"done",on:true,meta:pre+"Done"+stars(x),fresh:false});return}
+    if(x.done)return;
+    if(!x.due){out.push({...base,key:"6",st:"any",meta:pre+"Any time"+stars(x)});return}
+    if(x.due>t){if(col==="homework"&&x.due===addDays(t,1))out.push({...base,key:"5",st:"next",meta:pre+"Due tomorrow"});return}
+    const late=x.due<t||(timed(x.time)&&minsOf(x.time)<nowM);
+    out.push({...base,key:x.due<t?"0"+x.due:"1"+(timed(x.time)?x.time:"99:99")+"b",st:late?"late":"now",meta:pre+(x.due<t?lateTxt(x.due):timed(x.time)?tm(x.time):"Today")+stars(x),tag:late?"Late":""});
+  };
+  S().tasks.forEach(x=>{if(+x.who===id)todo("tasks",x,"","toggle")});
+  S().homework.forEach(x=>{if(+x.who===id)todo("homework",x,x.subject,"toggleHw")});
+  const ld=learnDoc(id);
+  if(ld.last){const did=ld.last===t,st=learnStreak(id);out.push({key:did?"8":"7a",k:"habit",st:did?"done":"now",ic:"学",zh:true,title:"Chinese practice",meta:(did?"Practised today":"Not yet today")+(st?" · 🔥 "+st+" day"+(st===1?"":"s"):""),attr:`data-go="learn"`})}
+  if(ld.pianoAt){const did=iso(new Date(ld.pianoAt))===t;out.push({key:did?"8":"7b",k:"habit",st:did?"done":"now",ic:"🎹",title:"Piano practice",meta:did?"Played today":"Not yet today",attr:`data-go="piano"`})}
+  out.sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:0);
+  out.filter(l=>l.st==="any").slice(2).forEach(l=>out.splice(out.indexOf(l),1));
+  return out;
+}
+function nextUp(id){
+  const t=TODAY(),c=[];
+  const e=sortEv(evRange(addDays(t,1),addDays(t,7)).filter(x=>+x.who===id))[0];
+  if(e)c.push([e.date+(e.time||"00:00"),{k:"ev",st:"next",ic:"📅",title:e.title,meta:"Next · "+nice(e.date)+(e.time?" · "+tm(e.time):""),attr:`data-act="edit" data-col="events" data-id="${esc(e.id)}" data-d="${e.date}"`}]);
+  const x=sortTasks(S().tasks.filter(x=>+x.who===id&&!x.done&&x.due&&x.due>t&&x.due<=addDays(t,7)))[0];
+  if(x)c.push([x.due+(x.time||"99:99"),{k:"task",st:"next",ic:"🗓️",title:x.title,meta:"Next · "+nice(x.due)+(x.time?" · "+tm(x.time):""),attr:`data-act="edit" data-col="tasks" data-id="${esc(x.id)}"`}]);
+  c.sort((a,b)=>a[0].localeCompare(b[0]));return c[0]?c[0][1]:null;
+}
+/* the branch for things that belong to everyone: shared plans, dinner, shopping, bills, special days */
+function familyLeaves(){
+  const t=TODAY(),d0=new Date(),nowM=d0.getHours()*60+d0.getMinutes(),out=[],kidView=peopleRaw().length>2&&viewId()===kidId();
+  sortEv(evOn(t).filter(e=>+e.who===0)).forEach(e=>out.push(evLeaf(e,nowM)));
+  const meal=mealOn(t);
+  out.push(meal?{k:"fam",st:"soon",ic:"🍽️",title:"Dinner: "+meal.title,meta:meal.cook?pname(meal.cook)+" is cooking":"Tonight",attr:`data-act="editMeal" data-d="${t}"`}:{k:"fam",st:"any",ic:"🍽️",title:"Dinner isn't planned yet",meta:"Tap to plan the week",attr:`data-go="meals"`});
+  const shop=S().shopping.filter(s=>!s.done);
+  if(shop.length)out.push({k:"fam",st:"soon",ic:"🛒",title:shop.length+" thing"+(shop.length===1?"":"s")+" to buy",meta:shop.slice(0,4).map(s=>s.name).join(", ")+(shop.length>4?"…":""),attr:`data-go="lists" data-list="shopping"`});
+  if(!kidView)billsSorted().filter(b=>b.next&&b.next<=addDays(t,3)&&!b.auto).slice(0,2).forEach(b=>{const dn=nice(b.next);out.push({k:"fam",st:b.next<t?"late":"soon",ic:"🧾",title:b.name+" · "+money(+b.amount||0),meta:b.next<t?"Was due "+dn:"Due "+(dn==="Today"||dn==="Tomorrow"?dn.toLowerCase():dn),tag:b.next<t?"Late":"",attr:`data-act="editBill" data-id="${esc(b.id)}"`})});
+  countdownsSoon(3).filter(c=>daysUntil(c.nd)<=7).slice(0,2).forEach(c=>out.push({k:"fam",st:daysUntil(c.nd)===0?"live":"soon",ic:"🎉",title:c.title,meta:cdLabel(c),attr:`data-act="editCountdown" data-id="${esc(c.id)}"`}));
+  return out;
+}
+function dayStats(leaves){const c=leaves.filter(l=>l.tick||l.k==="habit"),done=c.filter(l=>l.st==="done").length,left=c.filter(l=>l.st==="late"||l.st==="now").length;return {done,left,total:done+left,late:c.filter(l=>l.st==="late").length,plans:leaves.filter(l=>l.k==="ev").length}}
+const pring=(pct,inner)=>`<span class="pring" style="--pct:${Math.max(0,Math.min(100,Math.round(pct)))}">${inner}</span>`;
+const avatarHtml=id=>{const ph=id!=0&&photoOf(id);return `<span class="dot avatar who-${colorIdx(id)}${ph?" ph ph-"+(+id):""}" aria-hidden="true">${id==0?"🏠":esc(pname(id).slice(0,1).toUpperCase())}</span>`};
+function leafHtml(l){
+  const lead=l.tick?`<button class="check ${l.on?"on":""}" data-act="${l.tick}" data-id="${esc(l.id)}" aria-label="${l.on?"Mark not done":"Mark done"}: ${esc(l.title)}">${l.on?ICON.tick:""}</button>`:`<span class="lf-ic${l.zh?" zh":""}" aria-hidden="true">${l.ic||"•"}</span>`;
+  return `<div class="leaf st-${l.st} k-${l.k}${l.fresh?" fresh":""}">${lead}<button class="lf-body" ${l.attr||""}><span class="lf-t">${esc(l.title)}</span>${l.meta?`<span class="lf-m">${esc(l.meta)}</span>`:""}</button>${l.tag?`<span class="lf-tag">${esc(l.tag)}</span>`:""}</div>`;
 }
 function liveTree(){
-  const ppl=people(),n=ppl.length||1,W=380,H=470,cx=W/2,cy=H/2,R=132,busy=recentIds();
-  const homeSats=[{em:"🛒",n:S().shopping.filter(s=>!s.done).length,label:"to buy",go:"lists",list:"shopping"},{em:"🧾",n:S().bills.filter(b=>b.next&&b.next<=addDays(TODAY(),7)).length,label:"bills due",go:"bills"},{em:"💬",n:S().board.filter(m=>(m.at||0)>Date.now()-5*864e5).length,label:"notes",go:"home"}];
-  let links="",nodes="",labels="";
-  const pos=i=>{const a=(-90+i*360/n)*Math.PI/180;return [cx+R*Math.cos(a),cy+R*Math.sin(a),a]};
-  homeSats.forEach((h,i)=>{const a=(-90+(i+.5)*360/3)*Math.PI/180,x=cx+70*Math.cos(a),y=cy+70*Math.sin(a);
-    links+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" class="lk lk-home"/>`;
-    nodes+=`<g class="node sat" data-go="${h.go}" ${h.list?`data-list="${h.list}"`:""} transform="translate(${x},${y})"><circle r="17" class="satc"/><text class="em" dy="5">${h.em}</text>${h.n?`<g transform="translate(12,-12)"><circle r="8.5" class="badge"/><text class="bn" dy="3.2">${h.n>99?"99+":h.n}</text></g>`:""}</g>`});
-  ppl.forEach((p,i)=>{const [x,y,a]=pos(i),st=personStats(p),m=st.length,span=Math.min(170,34*m)*Math.PI/180,col=pvar(p.id),sel=liveSel===p.id,on=busy.has(p.id);
-    links+=`<path d="M${cx},${cy} Q${(cx+x)/2+18*Math.cos(a+1.57)},${(cy+y)/2+18*Math.sin(a+1.57)} ${x},${y}" class="lk lk-main" style="stroke:${col}"/>`;
-    st.forEach((s,j)=>{const b=a+(m>1?-span/2+span*j/(m-1):0),r2=72,sx=x+r2*Math.cos(b),sy=y+r2*Math.sin(b);
-      links+=`<line x1="${x}" y1="${y}" x2="${sx}" y2="${sy}" class="lk lk-sat" style="stroke:${col}"/>`;
-      nodes+=`<g class="node sat ${s.n?"":"zero"}" data-go="${s.go}" ${s.list?`data-list="${s.list}"`:""} transform="translate(${sx},${sy})"><circle r="19" class="satc" style="stroke:${col}"/><text class="em ${s.k==="learn"?"zh":""}" dy="5">${s.em}</text>${s.n?`<g transform="translate(14,-14)"><circle r="9.5" style="fill:${col}"/><text class="bn" dy="3.2">${s.money?(s.n>=1000?Math.round(s.n/100)/10+"k":s.n):s.n>99?"99+":s.n}</text></g>`:""}</g>`});
-    nodes+=`<g class="node person ${sel?"sel":""} ${on?"pulse":""}" data-act="liveSel" data-k="${p.id}" transform="translate(${x},${y})">${on?`<circle r="37" class="ring" style="stroke:${col}"/>`:""}<circle r="29" style="fill:${col}"/><text class="pi" dy="7">${esc(p.name.slice(0,1).toUpperCase())}</text></g>`;
-    const lx=x-46*Math.cos(a),ly=y-46*Math.sin(a)+4;labels+=`<g class="plg" transform="translate(${lx},${ly})"><rect x="${-(p.name.split(" ")[0].length*4+9)}" y="-11" width="${p.name.split(" ")[0].length*8+18}" height="20" rx="10" style="fill:${col}"/><text class="pl" dy="3.5">${esc(p.name.split(" ")[0])}</text></g>`});
-  nodes+=`<g class="node home" data-act="liveSel" data-k="home" transform="translate(${cx},${cy})"><circle r="30" class="homec"/><text class="em big" dy="8">🏠</text></g>`;
-  const sp=liveSel!==null&&liveSel!=="home"?person(liveSel):null;
-  const detail=sp?`<section class="card stack" style="gap:8px"><div class="row" style="gap:10px">${dot(sp.id)}<h2>${esc(sp.name)}</h2></div>${personStats(sp).map(s=>`<button class="item lrow" data-go="${s.go}" ${s.list?`data-list="${s.list}"`:""}><span class="lem ${s.k==="learn"?"zh":""}">${s.em}</span><div class="grow"><div class="t">${s.money?money(s.n):s.n} ${esc(s.label)}</div>${s.items.length?`<div class="m">${s.items.map(esc).join(" · ")}</div>`:""}</div><span class="chev">›</span></button>`).join("")}</section>`
-   :`<p class="sub" style="text-align:center;margin:0">Tap a person to see their week. Tap a bubble to jump to it. Rings glow when someone just added something.</p>`;
-  return `<section class="card livecard"><svg class="livetree" viewBox="0 0 ${W} ${H}" role="img" aria-label="Family tree of plans">${links}${nodes}${labels}</svg></section>${detail}${liveFeedMini()}`;
+  const v=viewId(),busy=recentIds(),ppl=people(),tot=starsThisWeek();
+  const data=ppl.map(p=>{const leaves=dayLeaves(p.id);return {p,leaves,s:dayStats(leaves)}});
+  const sel=liveSel!=null&&data.some(d=>d.p.id===liveSel)?liveSel:null;
+  const all=data.reduce((a,d)=>({done:a.done+d.s.done,total:a.total+d.s.total}),{done:0,total:0});
+  const sub=s=>s.left?s.left+" to do":s.total?"All done ✓":s.plans?s.plans+" plan"+(s.plans===1?"":"s"):"Free day";
+  const top=`<div class="ftop"><button class="fhome${sel===null?" sel":""}" data-act="liveSel" data-k="home">${pring(all.total?all.done/all.total*100:0,`<span class="dot avatar homeic" aria-hidden="true">🏠</span>`)}<span class="fh-t"><b>Our day</b><span>${all.total?all.done+" of "+all.total+" done":"Nothing to tick off yet"}</span></span></button>
+   <div class="frow" style="--n:${ppl.length||1}">${data.map(d=>`<button class="fperson${sel===d.p.id?" sel":""}${busy.has(d.p.id)?" busy":""}" style="--pc:${pvar(d.p.id)}" data-act="liveSel" data-k="${d.p.id}" aria-pressed="${sel===d.p.id}">${pring(d.s.total?d.s.done/d.s.total*100:0,avatarHtml(d.p.id))}${d.s.late?`<i class="fbadge" title="${d.s.late} late">${d.s.late}</i>`:""}<b>${esc(d.p.name.split(" ")[0])}</b><span>${sub(d.s)}</span></button>`).join("")}</div></div>`;
+  const branch=(id,name,leaves,s,cap)=>{
+    const open=sel===id||liveOpen[id],shown=open?leaves:leaves.slice(0,cap),more=leaves.length-shown.length,stars=id?tot[id]||0:0,bits=[];
+    if(s&&s.total)bits.push(s.done+" of "+s.total+" done");if(s&&s.plans)bits.push(s.plans+" plan"+(s.plans===1?"":"s"));if(stars)bits.push("★ "+stars+" this week");
+    const quiet=!leaves.some(l=>["late","now","soon","live","today"].includes(l.st)),nx=id&&quiet?nextUp(id):null;
+    return `<div class="branch${busy.has(id)?" busy":""}" style="--pc:${pvar(id)}"><div class="bhead"><button class="bnode" data-act="liveSel" data-k="${id||"home"}">${avatarHtml(id)}<span class="bn-t"><b>${esc(name)}</b><span>${bits.join(" · ")||(id?"Nothing to tick off today":"Shared by the whole family")}</span></span></button>${id?`<button class="bn-add" data-act="addFor" data-k="${id}" aria-label="Add something for ${esc(name)}">＋</button>`:""}</div>
+     <div class="leaves">${shown.map(leafHtml).join("")}${!leaves.length?`<div class="leaf st-free"><span class="lf-ic" aria-hidden="true">🎉</span><span class="lf-body"><span class="lf-t">Nothing on today</span></span></div>`:""}${nx&&!more?leafHtml(nx):""}${more>0?`<button class="leaf more" data-act="liveMore" data-k="${id}">+${more} more</button>`:(liveOpen[id]&&sel!==id&&leaves.length>cap?`<button class="leaf more" data-act="liveMore" data-k="${id}">Show less</button>`:"")}</div></div>`};
+  const order=sel!==null?data.filter(d=>d.p.id===sel):[...data].sort((a,b)=>(b.p.id===v)-(a.p.id===v));
+  return `<section class="card ftree">${top}<div class="branches">${order.map(d=>branch(d.p.id,d.p.name,d.leaves,d.s,d.p.id===v?6:4)).join("")}${sel===null?branch(0,"Everyone",familyLeaves(),null,6):""}</div>
+   ${sel!==null?`<button class="ghost" data-act="liveSel" data-k="home" style="width:100%;margin-top:12px">Show the whole family</button>`:""}</section>`;
 }
 function feedItems(){
-  const verb={tasks:"added a task",events:"added to the calendar",tx:"recorded money",shopping:"added to shopping",homework:"added homework",notes:"wrote a note",bills:"added a bill",countdowns:"added a date",board:"posted",meals:"planned dinner",stars:"earned stars"};
-  const em={tasks:"✅",events:"📅",tx:"💳",shopping:"🛒",homework:"📝",notes:"🗒️",bills:"🧾",countdowns:"🎉",board:"💬",meals:"🍽️",stars:"⭐"};
+  const verb={tasks:"added a task",events:"added to the calendar",tx:"recorded money",shopping:"added to shopping",homework:"added homework",notes:"wrote a note",bills:"added a bill",countdowns:"added a date",board:"posted",meals:"planned dinner",stars:"earned stars",alarms:"set an alarm",songs:"added a song"};
+  const em={tasks:"✅",events:"📅",tx:"💳",shopping:"🛒",homework:"📝",notes:"🗒️",bills:"🧾",countdowns:"🎉",board:"💬",meals:"🍽️",stars:"⭐",alarms:"⏰",songs:"🎵"};
   const out=[];Object.keys(verb).forEach(c=>(S()[c]||[]).forEach(r=>{const at=r.createdAt||r.at||r.updated;const who=c==="stars"?r.who:(r.by??r.who);if(!at||who==null)return;
-    const what=c==="tx"?(r.note||r.cat)+" "+money(r.type==="in"?r.amount:-r.amount,true):c==="shopping"?r.name:c==="homework"?r.subject+": "+r.title:c==="stars"?"★ "+r.pts+" · "+(r.title||""):c==="meals"?r.title:c==="board"?r.text:(r.title||r.name||"");
+    const what=c==="tx"?(r.note||r.cat)+" "+money(r.type==="in"?r.amount:-r.amount,true):c==="shopping"?r.name:c==="homework"?r.subject+": "+r.title:c==="stars"?"★ "+r.pts+" · "+(r.title||""):c==="meals"?r.title:c==="board"?r.text:c==="alarms"?(r.title||"Alarm")+(r.time?" · "+tm(r.time):""):(r.title||r.name||"");
     out.push({at,who:+who,c,txt:verb[c],what,em:em[c]})}));
-  S().learn.forEach(l=>{if(l.updated)out.push({at:l.updated,who:+l.who,c:"learn",txt:"practised Chinese",what:"🔥 "+(l.streak||1)+" day streak",em:"学"})});
+  ["tasks","homework"].forEach(c=>S()[c].forEach(r=>{if(r.done&&r.doneAt)out.push({at:r.doneAt,who:+r.who,c:"done",txt:c==="tasks"?"finished a task":"finished homework",what:r.title||"",em:"🎉"})}));
+  S().learn.forEach(l=>{if(l.updated)out.push({at:l.updated,who:+l.who,c:"learn",txt:"practised Chinese",what:"🔥 "+(l.streak||1)+" day streak",em:"学"});if(l.pianoAt)out.push({at:l.pianoAt,who:+l.who,c:"piano",txt:"practised piano",what:Object.keys(l.piano||{}).length+" song"+(Object.keys(l.piano||{}).length===1?"":"s")+" played so far",em:"🎹"})});
   return out.sort((a,b)=>b.at-a.at);
 }
 function feedRow(f){return `<div class="item feedrow ${Date.now()-f.at<90e3?"fresh":""}">${dot(f.who)}<div class="grow"><div class="t"><b>${esc(pname(f.who).split(" ")[0])}</b> ${esc(f.txt)}</div><div class="m">${f.em} ${esc(String(f.what).slice(0,80))}</div></div><span class="sub fago">${ago(f.at)}</span></div>`}
@@ -1007,39 +1066,328 @@ function viewActivities(){
      ${mine.length?`<div class="sub" style="margin-top:2px">${cnt} session${cnt===1?"":"s"} a week</div><div class="wkgrid">${[1,2,3,4,5,6,0].map(d=>{const on=mine.filter(e=>e.days.includes(d)).sort((a,b)=>(a.time||"").localeCompare(b.time||""));return `<div class="wkday ${dow(TODAY())===d?"is-today":""}"><b>${DAYN[d]}</b>${on.map(e=>`<button class="wkev" data-act="edit" data-col="events" data-id="${e.id}"><span>${esc(e.title)}</span>${e.time?`<i>${tm(e.time)}</i>`:""}</button>`).join("")}</div>`}).join("")}</div>
       <div class="list" style="margin-top:8px">${mine.map(e=>`<div class="item"><div class="grow tap" data-act="edit" data-col="events" data-id="${e.id}"><div class="t">${esc(e.title)}</div><div class="m">${repText(e)}${e.time?" · "+tm(e.time):""}${e.place?" · "+esc(placeTxt(e.place)):""}</div></div>${joinBtn(e)}</div>`).join("")}</div>`
      :`<div class="empty">No weekly activities yet. Add classes, sport, lessons or practice that happen on the same days each week.</div>`}</section>`};
-  return `${backBar}${people().map(card).join("")}${reps.some(e=>+e.who===0)?card({id:0,name:"Whole family"}):""}`;
+  return `${backBar()}${people().map(card).join("")}${reps.some(e=>+e.who===0)?card({id:0,name:"Whole family"}):""}`;
 }
 /* ---------- important dates view ---------- */
 function viewDates(){
   const list=S().countdowns.map(c=>({...c,nd:cdNext(c)})).sort((a,b)=>(a.nd||"").localeCompare(b.nd||""));
   const up=list.filter(c=>c.nd>=TODAY()),past=list.filter(c=>c.nd<TODAY());
   const item=c=>`<button class="item cdrow" data-act="editCountdown" data-id="${c.id}"><span class="cdnum"><b>${c.nd>=TODAY()?daysUntil(c.nd):"✓"}</b><span>${c.nd>=TODAY()?(daysUntil(c.nd)===1?"day":"days"):"past"}</span></span><div class="grow" style="text-align:left"><div class="t">${esc(c.title)}</div><div class="m">${nice(c.nd)}${c.yearly?" · every year":""}${c.yearly&&c.kind==="birthday"&&+c.date.slice(0,4)>1900&&c.nd>=TODAY()?" · turns "+(+c.nd.slice(0,4)-+c.date.slice(0,4)):""}</div></div></button>`;
-  return `${backBar}<section class="card"><div class="row between"><h2>Coming up</h2><button class="link" data-act="addCountdown">+ Add</button></div>
+  return `${backBar()}<section class="card"><div class="row between"><h2>Coming up</h2><button class="link" data-act="addCountdown">+ Add</button></div>
    <div class="list" style="margin-top:6px">${up.length?up.map(item).join(""):`<div class="empty">Add birthdays, anniversaries, holidays and trips. The next ones show on Today with a countdown.</div>`}</div></section>
   ${past.length?`<section class="card"><h2>Past</h2><div class="list" style="margin-top:6px">${past.map(item).join("")}</div></section>`:""}`;
 }
 
+/* ---------- profiles: whose things come first, and photos ---------- */
+const PHOTO_OK=/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const photoOf=id=>{const p=(S().profiles||[]).find(x=>x.id===String(id));return p&&PHOTO_OK.test(p.photo||"")&&p.photo.length<200000?p.photo:""};
+let photoSig="";
+function syncPhotos(){ // one style rule per person, so a photo is stored once and not repeated in every row
+  const ps=peopleRaw().map(p=>[+p.id,photoOf(p.id)]).filter(x=>x[1]),sig=ps.map(x=>x[0]+":"+x[1].length+":"+x[1].slice(-24)).join("|");
+  if(sig===photoSig)return;photoSig=sig;let el=document.getElementById("hh-photos");if(!el){el=document.createElement("style");el.id="hh-photos";document.head.appendChild(el)}
+  el.textContent=ps.map(([id,ph])=>`.ph-${id}{background-image:url("${ph}")!important}`).join("\n");
+}
+function squarePhoto(file,size,q){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>{try{const s=Math.min(img.width,img.height),c=document.createElement("canvas");c.width=c.height=size;c.getContext("2d").drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,size,size);URL.revokeObjectURL(img.src);res(c.toDataURL("image/jpeg",q))}catch(e){rej(e)}};img.onerror=()=>rej(new Error("photo"));img.src=URL.createObjectURL(file)})}
+function setView(id){
+  id=+id;if(!peopleRaw().some(p=>p.id===id))return;
+  if(ST.mode==="local")ST.setMe(id);else ST._localPref("view",String(id));
+  ST._localPref("learner",String(id===kidId()?id:(+ST._localPref("learner")||kidId())));
+  listWho="mine";liveSel=null;liveOpen={};
+}
+function profileSheet(){
+  const v=viewId(),p=person(v)||{name:"Me"},cloud=ST.mode==="cloud",ph=photoOf(v),t=TODAY();
+  const evs=evRange(t,addDays(t,6)).filter(e=>+e.who===v).length,todo=S().tasks.filter(x=>!x.done&&+x.who===v).length,hw=S().homework.filter(x=>!x.done&&+x.who===v).length,stars=starsThisWeek()[v]||0;
+  const whose=v===meId()?(cloud?"Signed in as "+esc(ST.me.email||""):"Using this phone"):"Showing "+esc(p.name)+"'s things on "+esc(pname(meId()))+"'s phone";
+  openSheet(`${sheetHead("Profile")}
+   <div class="profhead"><button type="button" class="dot avatar who-${colorIdx(v)}${ph?" ph ph-"+v:""}" id="pf_pic" aria-label="Change photo">${esc(p.name.slice(0,1).toUpperCase())}</button>
+    <div class="grow"><h2>${esc(p.name)}</h2><div class="sub">${whose}</div></div></div>
+   <input type="file" id="pf_file" accept="image/*" hidden>
+   ${ph?`<div class="two"><button class="primary" type="button" id="pf_change">Change photo</button><button class="ghost" type="button" id="pf_remove">Remove photo</button></div>`:`<button class="primary" type="button" id="pf_change">📷 Add a photo</button>`}
+   <div class="trio"><div><div class="label">This week</div><div class="v num">${evs} plan${evs===1?"":"s"}</div></div><div><div class="label">To do</div><div class="v num">${todo+hw}</div></div><div><div class="label">Stars</div><div class="v num">★ ${stars}</div></div></div>
+   ${peopleRaw().length>1?`<div class="label" style="margin-top:4px">Whose things come first?</div>
+   <div class="profpick">${people().map(q=>`<button type="button" class="pp ${q.id===v?"on":""}" data-act="viewAs" data-k="${q.id}">${dot(q.id)}<span>${esc(q.name)}</span></button>`).join("")}</div>
+   <div class="sub">Tap a person to see their tasks, plans and stars first, and to add things for them. Everything stays shared with the whole family${cloud&&v!==meId()?". Mood checks, location and private cards always stay with the person who is signed in":""}.</div>`:""}
+   <div class="two"><button class="ghost" type="button" data-go="alarms">Alarms & reminders</button><button class="ghost" type="button" data-act="settings">Settings</button></div>`,sh=>{
+    const file=sh.querySelector("#pf_file"),pick=()=>file.click();
+    sh.querySelector("#pf_pic").onclick=pick;sh.querySelector("#pf_change").onclick=pick;
+    file.onchange=async()=>{const f=file.files&&file.files[0];if(!f)return;
+      try{let data=await squarePhoto(f,192,.82);if(data.length>90000)data=await squarePhoto(f,144,.7);
+        ST.put("profiles",String(v),{photo:data,who:v,updated:Date.now()});toast("Photo saved");setTimeout(profileSheet,60)}
+      catch(e){toast("That photo couldn't be opened. Try another one")}};
+    const rm=sh.querySelector("#pf_remove");if(rm)rm.onclick=()=>{ST.put("profiles",String(v),{photo:"",who:v,updated:Date.now()});toast("Photo removed");setTimeout(profileSheet,60)};
+  });
+}
+
+/* ---------- bottom bar: the fourth button is a shortcut that lasts a week ---------- */
+const NAV={calendar:["Calendar",()=>ICON.cal],money:["Money",()=>ICON.money],today:["Today",()=>ICON.sun],meals:["Dinner",()=>ICON.meal],notes:["Notes",()=>ICON.note],bills:["Bills",()=>ICON.bill],learn:["Chinese",()=>'<span class="tabchar">学</span>'],activities:["Classes",()=>ICON.swim],dates:["Dates",()=>ICON.cake],alarms:["Alarms",()=>ICON.bell],wallet:["Wallet",()=>ICON.wallet],mood:["Mood",()=>ICON.mood],calc:["Sums",()=>ICON.calc],location:["Where",()=>ICON.pin]};
+const SLOT_POOL=["calendar","money","today","meals","notes","bills","learn","activities","dates","alarms"];
+function slotInfo(){
+  let pick=null;try{pick=JSON.parse(ST._localPref("slot")||"null")}catch(e){}
+  if(pick&&pick.wk===weekKey()&&NAV[pick.r])return {r:pick.r,mine:true};
+  let h=7;for(const c of weekKey())h=(h*31+c.charCodeAt(0))>>>0;return {r:SLOT_POOL[h%SLOT_POOL.length],mine:false};
+}
+let slotSig="";
+function renderTabs(){
+  const s=slotInfo(),b=$("#tabSlot");if(!b)return;if(slotSig===s.r+s.mine)return;slotSig=s.r+s.mine;
+  b.dataset.tab=s.r;b.classList.toggle("auto",!s.mine);b.innerHTML=NAV[s.r][1]()+esc(NAV[s.r][0]);b.setAttribute("aria-label",NAV[s.r][0]+". Hold to change this shortcut");
+}
+function slotSheet(){
+  const cur=slotInfo(),end=new Date(addDays(weekKey(),6)+"T12:00:00").toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"short"});
+  openSheet(`${sheetHead("This week's shortcut")}<p class="sub" style="margin:0">Choose what the fourth button at the bottom opens. Your choice stays until ${end}. After that the app picks a different one for you each week, unless you choose again.</p>
+   <div class="pickgrid slotgrid">${Object.entries(NAV).map(([r,[n,ic]])=>`<button type="button" class="${cur.r===r?"on":""}" data-act="slotPick" data-k="${r}">${ic()}<span>${n}</span></button>`).join("")}</div>
+   <button class="ghost" type="button" data-act="slotPick" data-k="">🎲 Surprise me each week</button>
+   <p class="sub" style="margin:0;text-align:center">${cur.mine?"You chose "+NAV[cur.r][0]+" for this week.":"This week the app picked "+NAV[cur.r][0]+"."} Tip: hold the button down to open this any time.</p>`);
+}
+
+/* ---------- Home: the live family view ---------- */
+function viewHomeLive(){
+  const t=TODAY(),v=viewId(),now=new Date(),nowT=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+  const ev=sortEv(evOn(t)),mine=x=>+x.who===v||+x.who===0;
+  const n=ev.filter(mine).length+S().tasks.filter(x=>!x.done&&x.due&&x.due<=t&&+x.who===v).length+S().homework.filter(h=>!h.done&&h.due&&h.due<=addDays(t,1)&&+h.who===v).length;
+  const next=ev.find(e=>e.time&&e.time>=nowT&&mine(e))||ev.find(e=>e.time&&e.time>=nowT),wk=evRange(t,addDays(t,6)).length;
+  const seg=`<div class="seg">${[["tree","Family tree"],["feed","Live feed"]].map(([k,nm])=>`<button class="${liveTab===k?"on":""}" data-act="liveTab" data-k="${k}">${nm}</button>`).join("")}</div>`;
+  return `${moodRequestBanner()}
+  <div class="two homebtns">
+   <button class="tile gotoday" data-go="today"><span class="label">☀️ Today</span><b>${n?n+" thing"+(n===1?"":"s")+" for "+(v===meId()?"you":esc(pname(v))):"All clear"}</b><span>${next?"Next: "+esc(next.title)+" · "+tm(next.time):"Open today's plan"} ›</span></button>
+   <button class="tile gocal" data-go="calendar"><span class="label">📅 Calendar</span><b>${now.toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"})}</b><span>${wk} plan${wk===1?"":"s"} this week ›</span></button>
+  </div>
+  <div class="livebar"><span class="livedot"></span>Live · updates the moment anyone changes something</div>
+  ${seg}${liveTab==="tree"?liveTree()+qaCard()+boardCard()+liveFeedMini():liveFeed()}`;
+}
+
+/* ---------- alarms, reminders and notifications ---------- */
+const nprefs=()=>Object.assign({ev:30,morning:"07:00",bills:"09:00",kids:true,sound:true},(S().notify||[]).find(x=>x.id==="prefs")||{});
+const LEADS=[[-1,"No reminder"],[0,"At the time"],[5,"5 minutes before"],[10,"10 minutes before"],[15,"15 minutes before"],[30,"30 minutes before"],[60,"1 hour before"],[120,"2 hours before"],[1440,"1 day before"]];
+const leadName=m=>(LEADS.find(x=>x[0]===+m)||[0,m+" minutes before"])[1];
+const leadTxt=m=>m>=1440?"1 day":m>=60?(m/60)+" hour"+(m===60?"":"s"):m+" minutes";
+const remindSelect=(val,usual)=>`<div class="field"><label for="f_rem">Remind</label><select id="f_rem"><option value="">Usual (${esc(leadName(usual).toLowerCase())})</option>${LEADS.map(([m,n])=>`<option value="${m}" ${val!=null&&val!==""&&+val===m?"selected":""}>${n}</option>`).join("")}</select></div>`;
+const p2=n=>String(n).padStart(2,"0");
+function whenMinus(date,time,mins){const d=new Date(date+"T"+time+":00");d.setMinutes(d.getMinutes()-mins);return iso(d)+"T"+p2(d.getHours())+":"+p2(d.getMinutes())}
+const TIME_OK=/^([01]\d|2[0-3]):[0-5]\d$/;
+const adultIds=()=>{const k=kidId();return peopleRaw().length>2?peopleRaw().filter(p=>p.id!==k).map(p=>p.id):peopleRaw().map(p=>p.id)};
+function recips(who){who=+who||0;if(!who)return [];const k=kidId();return peopleRaw().length>2&&who===k&&nprefs().kids!==false?[k,...adultIds()]:[who]}
+/* everything that should ring in the next days, as plain rows. The same list drives alarms inside the app and the phone notifications. */
+function buildAgenda(days){
+  const P=nprefs(),t=TODAY(),end=addDays(t,days||7),out=[];
+  const add=(id,when,who,title,body,url,tag)=>{if(!/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(when))return;out.push({id:String(id).slice(0,120),when,who:[...new Set(who)].sort(),title:String(title||"Reminder").slice(0,80),body:String(body||"").slice(0,160),url:url||"#today",tag:String(tag||id).slice(0,120)})};
+  evRange(t,end).forEach(e=>{if(!TIME_OK.test(e.time||""))return;const lead=e.remind==null?+P.ev:+e.remind;if(!(lead>=0))return;
+    add(`ev-${e.id}-${e.date}-${e.time}-${lead}`,whenMinus(e.date,e.time,lead),recips(e.who),lead>0?`${e.title} ${lead>=1440?"is tomorrow":"in "+leadTxt(lead)}`:e.title,`${tm(e.time)} · ${pname(e.who)}${e.place?" · "+placeTxt(e.place):""}`,"#calendar",`ev-${e.id}-${e.date}`)});
+  S().tasks.forEach(x=>{if(x.done||!x.due||!TIME_OK.test(x.time||"")||x.due<t||x.due>end)return;const lead=x.remind==null?0:+x.remind;if(!(lead>=0))return;
+    add(`tk-${x.id}-${x.due}-${x.time}-${lead}`,whenMinus(x.due,x.time,lead),recips(x.who),"To do: "+x.title,`${tm(x.time)} · ${pname(x.who)}`,"#lists")});
+  S().homework.forEach(x=>{if(x.done||!x.due||!TIME_OK.test(x.time||"")||x.due<t||x.due>end)return;const lead=x.remind==null?0:+x.remind;if(!(lead>=0))return;
+    add(`hw-${x.id}-${x.due}-${x.time}-${lead}`,whenMinus(x.due,x.time,lead),recips(x.who),"Homework: "+(x.subject||x.title),`${x.title} · ${tm(x.time)} · ${pname(x.who)}`,"#lists")});
+  if(TIME_OK.test(P.bills||""))S().bills.forEach(b=>{if(!b.next||b.auto||b.next<t||b.next>end)return;add(`bl-${b.id}-${b.next}`,b.next+"T"+P.bills,adultIds(),`${b.name} is due today`,money(+b.amount||0)+" · tap to mark it paid","#bills")});
+  (S().alarms||[]).forEach(a=>{if(a.on===false||!TIME_OK.test(a.time||""))return;const rep=Array.isArray(a.days)&&a.days.length;
+    for(let d=t;d<=end;d=addDays(d,1)){if(rep?a.days.includes(dow(d)):a.date===d)add(`al-${a.id}-${d}-${a.time}`,d+"T"+a.time,recips(a.who),"⏰ "+(a.title||"Alarm"),`${tm(a.time)}${+a.who?" · "+pname(a.who):""}`,"#alarms")}});
+  if(TIME_OK.test(P.morning||""))for(let d=t;d<=end;d=addDays(d,1)){const evs=sortEv(evOn(d)),k=kidId(),three=peopleRaw().length>2;
+    peopleRaw().forEach(p=>{const mine=x=>+x.who===p.id,adult=three&&p.id!==k,bits=[];
+      evs.filter(e=>mine(e)||+e.who===0).forEach(e=>bits.push((e.time?tm(e.time)+" ":"")+e.title));
+      if(adult&&P.kids!==false)evs.filter(e=>+e.who===k).forEach(e=>bits.push(pname(k)+": "+(e.time?tm(e.time)+" ":"")+e.title));
+      const tk=S().tasks.filter(x=>!x.done&&x.due===d&&mine(x)).length;if(tk)bits.push(tk+" thing"+(tk===1?"":"s")+" to do");
+      const hw=S().homework.filter(x=>!x.done&&x.due===d&&(mine(x)||(adult&&P.kids!==false&&+x.who===k)));if(hw.length)bits.push((hw.length===1?hw[0].subject+" homework":hw.length+" lots of homework")+" due");
+      if(adult||!three){const bl=S().bills.filter(b=>b.next===d&&!b.auto);if(bl.length)bits.push(bl.map(b=>b.name).join(", ")+" due")}
+      S().countdowns.filter(c=>(c.yearly?c.date.slice(5)===d.slice(5):c.date===d)).forEach(c=>bits.push("🎉 "+c.title));
+      if(bits.length)add(`am-${d}-${p.id}-${P.morning}`,d+"T"+P.morning,[p.id],"Good morning, "+p.name+" ☀️",bits.slice(0,6).join(" · "),"#today",`am-${d}-${p.id}`)})}
+  ((P.tests||[])).forEach(x=>{if(x&&x.id&&x.when)add("test-"+x.id,x.when,[+x.who||0].filter(Boolean),"Happy Home notifications work 🎉","This is the test you asked for.","#alarms")});
+  return out.sort((a,b)=>a.when.localeCompare(b.when)||a.id.localeCompare(b.id));
+}
+let agendaCache=null,agendaAt=0,agendaDirty=true;
+const agenda=()=>{if(agendaDirty||!agendaCache||Date.now()-agendaAt>60e3){agendaCache=buildAgenda(7);agendaAt=Date.now();agendaDirty=false}return agendaCache};
+const whenMs=w=>new Date(w+":00").getTime();
+const forMe=i=>!i.who.length||i.who.includes(meId())||i.who.includes(viewId());
+/* ringing inside the app */
+let ringing=[],firedMap=null;
+const fired=()=>{if(!firedMap){try{firedMap=JSON.parse(localStorage.getItem("hh.fired")||"{}")||{}}catch(e){firedMap={}}}return firedMap};
+function chime(times){let n=0;const go=()=>{tone(880,.22,"sine");setTimeout(()=>tone(1174.7,.22,"sine"),170);setTimeout(()=>tone(1568,.45,"sine"),340);if(++n<times)setTimeout(go,1300)};go();try{navigator.vibrate&&navigator.vibrate([180,90,180])}catch(e){}}
+function alarmTick(){
+  if(ST.phase!=="ready"||(ST.mode==="cloud"&&!ST.me.personId))return;
+  const now=Date.now(),f=fired();let hit=false;
+  agenda().forEach(i=>{const at=whenMs(i.when);if(!(at<=now)||now-at>20*60e3||f[i.id]||!forMe(i))return;f[i.id]=now;hit=true;
+    ringing=ringing.filter(r=>r.tag!==i.tag);ringing.unshift(i);
+    if(nprefs().sound!==false&&ST._localPref("alarmMute")!=="1")chime(i.id.startsWith("al-")?3:1);
+    if(document.hidden){if(window.HHPush)HHPush.showLocal(i.title,i.body,i.tag,i.url).catch(()=>{});else localNotify(i.title,i.body,i.tag,i.url)}});
+  if(hit){Object.keys(f).forEach(k=>{if(now-f[k]>3*864e5)delete f[k]});try{localStorage.setItem("hh.fired",JSON.stringify(f))}catch(e){}ringing=ringing.slice(0,4);render()}
+}
+function alarmBanner(){return ringing.map(i=>`<div class="alarmbar" role="alert"><span class="bell">🔔</span><button class="grow tap" data-act="alarmGo" data-id="${esc(i.id)}"><b>${esc(i.title)}</b><span>${esc(i.body)}</span></button><button class="mini" data-act="alarmOk" data-id="${esc(i.id)}">OK</button></div>`).join("")}
+/* keep the list for the notification helper up to date (only once phone notifications are set up) */
+let agendaT=null,agendaSig="",agendaSigAt=0;
+const agSig=items=>(items||[]).map(i=>[i.id,i.when,(i.who||[]).join(","),i.title,i.body,i.url,i.tag].join("|")).join("\n");
+function syncAgenda(){
+  if(ST.mode!=="cloud"||ST.phase!=="ready"||!SET().push||!ST.me.personId)return;
+  clearTimeout(agendaT);agendaT=setTimeout(()=>{
+    if(!navigator.onLine||ST.phase!=="ready"||!SET().push)return;
+    const cut=Date.now()-3*3600e3,items=buildAgenda(7).filter(i=>whenMs(i.when)>=cut).slice(0,300),sig=agSig(items),cur=S().notify.find(x=>x.id==="agenda"),tz=SET().push.tz||deviceTz();
+    if(cur&&agSig(cur.items)===sig&&cur.tz===tz)return;
+    if(sig===agendaSig&&Date.now()-agendaSigAt<10*60e3)return; // two phones that disagree must not ping-pong
+    agendaSig=sig;agendaSigAt=Date.now();
+    ST.put("notify","agenda",{v:1,tz,day:TODAY(),updated:Date.now(),by:meId(),items});
+  },5000);
+}
+const deviceTz=()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||"Australia/Brisbane"}catch(e){return"Australia/Brisbane"}};
+function setPrefs(patch){const {id:_i,...cur}=(S().notify.find(x=>x.id==="prefs")||{});ST.put("notify","prefs",{...cur,...patch,updated:Date.now()});agendaDirty=true}
+/* this phone's notification switch */
+let pushState={checked:false,sub:null,busy:false,err:""};
+async function refreshPush(){
+  if(!window.HHPush){pushState.checked=true;return}
+  try{pushState.sub=await HHPush.current()}catch(e){pushState.sub=null}
+  pushState.checked=true;
+  const pub=SET().push&&SET().push.pub,s=pushState.sub;
+  if(ST.mode==="cloud"&&s&&pub&&s.key===pub&&ST.me.personId){const doc=S().pushSubs.find(x=>x.id===s.id);
+    if(!doc||doc.endpoint!==s.endpoint||+doc.who!==meId()||Date.now()-(doc.seen||0)>3*864e5)ST.put("pushSubs",s.id,{who:meId(),endpoint:s.endpoint,p256dh:s.p256dh,auth:s.auth,ua:HHPush.device(),created:(doc&&doc.created)||Date.now(),seen:Date.now()})}
+  if(tab==="alarms")render();
+}
+async function turnOnNotifications(){
+  if(pushState.busy)return;const sup=window.HHPush?HHPush.support():{ok:false},pub=SET().push&&SET().push.pub;
+  pushState.busy=true;pushState.err="";
+  try{
+    if(window.HHPush&&pub&&sup.ok){const s=await HHPush.enable(pub);pushState.sub=s;if(ST.mode==="cloud")ST.put("pushSubs",s.id,{who:meId(),endpoint:s.endpoint,p256dh:s.p256dh,auth:s.auth,ua:HHPush.device(),created:Date.now(),seen:Date.now()});ST._localPref("pushOn","1");toast("Notifications are on for this phone")}
+    else{const r=("Notification" in window)?await Notification.requestPermission():"denied";if(r==="granted"){ST._localPref("pushOn","1");toast("Notifications are allowed on this phone")}else pushState.err="denied"}
+  }catch(e){pushState.err=(e&&e.code)||"failed"}
+  pushState.busy=false;render();
+}
+async function turnOffNotifications(){
+  try{const id=window.HHPush?await HHPush.disable():null;if(id&&ST.mode==="cloud"&&S().pushSubs.some(x=>x.id===id))ST.del("pushSubs",id)}catch(e){}
+  pushState.sub=null;ST._localPref("pushOn","0");toast("Notifications are off for this phone");render();
+}
+/* the helper that sends notifications while the app is closed: a spare family login that only the family's own GitHub page uses */
+async function makeNotifier(){
+  const cfg=window.HH_FIREBASE_CONFIG,rnd=n=>Array.from(crypto.getRandomValues(new Uint8Array(n)),b=>"abcdefghjkmnpqrstuvwxyz23456789"[b%31]).join("");
+  const app2=FB.initializeApp(cfg,"hh-notifier-"+Date.now()),auth2=FB.getAuth(app2);
+  if(cfg.emulatorHost)FB.connectAuthEmulator(auth2,"http://"+cfg.emulatorHost+":9099",{disableWarnings:true});
+  const email="notifier-"+rnd(12)+"@"+(String(cfg.authDomain||"").replace(/[^a-z0-9.-]/gi,"")||"example.com"),pw=rnd(30);
+  const keys=await HHPush.makeKeys();
+  const cred=await FB.createUserWithEmailAndPassword(auth2,email,pw),uid=cred.user.uid,old=SET().push&&SET().push.uid;
+  const members=(SET().members||[]).filter(u=>u!==old).concat(uid);
+  await FB.updateDoc(FB.doc(ST.db,"families",ST.familyId),{members,push:{pub:keys.x,uid,at:Date.now(),tz:deviceTz()}});
+  try{await FB.signOut(auth2)}catch(e){}
+  return HHPush.packSecret({e:email,p:pw,f:ST.familyId,d:keys.d,x:keys.x});
+}
+function stopNotifier(){const p=SET().push;if(!p)return;FB.updateDoc(FB.doc(ST.db,"families",ST.familyId),{members:(SET().members||[]).filter(u=>u!==p.uid),push:null}).catch(e=>ST._fail(e));S().pushSubs.forEach(x=>ST.del("pushSubs",x.id));toast("Closed-app notifications are switched off")}
+function repoSecretsUrl(){const m=location.hostname.match(/^([a-z0-9-]+)\.github\.io$/i),repo=location.pathname.split("/").filter(Boolean)[0];return m&&repo?`https://github.com/${m[1]}/${repo}/settings/secrets/actions/new`:"https://github.com/"}
+function notifierSheet(){
+  if(ST.mode!=="cloud"||!window.HHPush)return;
+  const has=!!SET().push;
+  openSheet(`${sheetHead("Notifications when the app is closed")}<div class="stack" style="gap:12px">
+   <p class="sub" style="margin:0">A free helper on your family's own GitHub page checks every few minutes and sends each reminder to your phones. It takes about two minutes to set up, once, by the person who owns the GitHub page.</p>
+   <ol class="steps"><li>Tap <b>Make my code</b>. The app makes a secret code for the helper.</li><li>Tap <b>Copy code</b>, then <b>Open GitHub</b>.</li><li>On GitHub, in <b>Name</b> type <code>HH_NOTIFIER</code>, paste the code into <b>Secret</b>, and tap <b>Add secret</b>.</li><li>Come back here and turn on notifications on each phone.</li></ol>
+   <div class="sub">The code lets the helper read your family's reminders, nothing else can use it. Treat it like a password: paste it only into that GitHub box. ${has?"Making a new code switches the old one off.":""}</div>
+   <div class="err" id="nf_err" hidden></div>
+   <button class="primary" type="button" id="nf_make">${has?"Make a new code":"Make my code"}</button>
+   <div id="nf_out" hidden class="stack" style="gap:10px"><textarea id="nf_code" rows="4" readonly class="codearea"></textarea>
+    <div class="two"><button class="primary" type="button" id="nf_copy">Copy code</button><a class="ghost" id="nf_open" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Open GitHub</a></div>
+    <div class="sub">This code is shown once. If you lose it, just make a new one.</div></div>
+   ${has?`<button class="link" type="button" id="nf_stop" style="color:var(--bad);align-self:center">Switch closed-app notifications off</button>`:""}</div>`,sh=>{
+    const err=m=>{const x=sh.querySelector("#nf_err");x.hidden=!m;x.textContent=m||""};
+    sh.querySelector("#nf_make").onclick=async ev=>{const b=ev.currentTarget;b.disabled=true;err("");
+      try{const code=await makeNotifier();sh.querySelector("#nf_out").hidden=false;sh.querySelector("#nf_code").value=code;sh.querySelector("#nf_open").href=repoSecretsUrl();b.hidden=true}
+      catch(e){err(navigator.onLine?"That didn't work. Check you're online and try again.":"You're offline. Connect to the internet and try again.");b.disabled=false}};
+    sh.querySelector("#nf_copy").onclick=()=>{const ta=sh.querySelector("#nf_code");try{navigator.clipboard.writeText(ta.value).then(()=>toast("Code copied"),()=>{ta.select();toast("Select all and copy")})}catch(_){ta.select();toast("Select all and copy")}};
+    const st=sh.querySelector("#nf_stop");if(st)st.onclick=()=>{if(st.dataset.arm){stopNotifier();closeSheet()}else{st.dataset.arm=1;st.textContent="Tap again to switch it off"}};
+  });
+}
+function alarmSheet(id){
+  const a=id?S().alarms.find(x=>x.id===id):null,v=viewId();
+  openSheet(`${sheetHead(a?"Edit alarm":"New alarm")}<form id="f" class="stack" style="gap:12px">
+   <div class="field"><label for="al_t">What for?</label><input id="al_t" placeholder="e.g. Wake up, Leave for school, Piano practice" value="${esc(a?.title||"")}" maxlength="60"></div>
+   <div class="two"><div class="field"><label for="al_time">Time</label><input id="al_time" type="time" required value="${esc(a?.time||"07:00")}"></div><div class="field"><label for="al_who">For</label><select id="al_who">${whoOptions(a?a.who:v,true)}</select></div></div>
+   <div class="field"><label>Days (none = just once)</label><div class="daypick">${[1,2,3,4,5,6,0].map(i=>`<button type="button" data-day="${i}" class="${a&&(a.days||[]).includes(i)?"on":""}">${DAYN[i]}</button>`).join("")}</div></div>
+   <div class="field" id="al_datef"><label for="al_date">Date</label><input id="al_date" type="date" value="${esc(a?.date||TODAY())}"></div>
+   <button class="primary" type="submit">Save alarm</button>
+   ${a?`<button type="button" class="ghost" id="al_ics">Add to iPhone Calendar (rings even when the app is closed)</button><button type="button" class="link" id="al_del" style="color:var(--bad);align-self:center">Delete</button>`:""}</form>`,sh=>{
+    const on=new Set(a?(a.days||[]):[]),df=sh.querySelector("#al_datef"),paint=()=>{sh.querySelectorAll("[data-day]").forEach(b=>b.classList.toggle("on",on.has(+b.dataset.day)));df.hidden=on.size>0};
+    sh.querySelectorAll("[data-day]").forEach(b=>b.onclick=()=>{const d=+b.dataset.day;on.has(d)?on.delete(d):on.add(d);paint()});paint();
+    const read=()=>({title:sh.querySelector("#al_t").value.trim()||"Alarm",time:sh.querySelector("#al_time").value,who:+sh.querySelector("#al_who").value||0,days:[...on].sort(),date:on.size?"":(sh.querySelector("#al_date").value||TODAY()),on:true});
+    sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const rec=read();if(!TIME_OK.test(rec.time))return;
+      if(!rec.days.length&&rec.date===TODAY()&&rec.time<=p2(new Date().getHours())+":"+p2(new Date().getMinutes()))rec.date=addDays(TODAY(),1);
+      if(a)ST.patch("alarms",a.id,rec);else ST.add("alarms",rec);agendaDirty=true;closeSheet();toast("Alarm set for "+tm(rec.time)+(rec.days.length?"":" · "+nice(rec.date)));render()};
+    const ic=sh.querySelector("#al_ics");if(ic)ic.onclick=()=>{const r=read();exportEvent({id:"alarm-"+a.id,title:r.title,date:r.days.length?TODAY():r.date,time:r.time,place:"",repeat:r.days.length?"weekly":"none",days:r.days,until:"",remind:0});toast("Opening Calendar…")};
+    const d=sh.querySelector("#al_del");if(d)d.onclick=()=>{closeSheet();delUndo("alarms",a.id,"Alarm deleted");agendaDirty=true;render()};
+  });
+}
+function viewAlarms(){
+  const P=nprefs(),v=viewId(),now=Date.now(),cloud=ST.mode==="cloud";
+  const next=agenda().filter(i=>whenMs(i.when)>now&&forMe(i)).slice(0,6);
+  const alarms=[...(S().alarms||[])].sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+  const dayTxt=a=>Array.isArray(a.days)&&a.days.length?(a.days.length===7?"Every day":[...a.days].sort().join()==="1,2,3,4,5"?"Weekdays":[...a.days].sort((x,y)=>((x+6)%7)-((y+6)%7)).map(i=>DAYN[i]).join(", ")):(a.date?nice(a.date):"Once");
+  const sup=window.HHPush?HHPush.support():{ok:false,why:"no-push"},perm=window.HHPush?HHPush.permission():(("Notification" in window)?Notification.permission:"unsupported");
+  const helper=SET().push,st=(S().notify||[]).find(x=>x.id==="state"),subOk=!!(pushState.sub&&helper&&pushState.sub.key===helper.pub),alive=st&&st.lastRun&&now-st.lastRun<40*60e3;
+  const mineSubs=(S().pushSubs||[]);
+  const phone=!sup.ok&&sup.why==="ios-needs-home-screen"?`<div class="sub">On an iPhone, notifications only work when you open Happy Home from its Home Screen icon. In Safari tap Share, then <b>Add to Home Screen</b>, then open it from there.</div>`
+   :perm==="denied"||pushState.err==="denied"?`<div class="sub">Notifications are blocked for Happy Home on this phone. Open the phone's Settings, find Happy Home under Notifications, and allow them. Then come back.</div>`
+   :perm==="unsupported"?`<div class="sub">This browser can't show notifications. Alarms still ring inside the app while it is open.</div>`
+   :(perm==="granted"&&ST._localPref("pushOn")!=="0"&&(subOk||!helper))?`<div class="row between"><div class="grow"><b>On for this phone ✓</b><div class="sub">${helper?(subOk?"Reminders reach this phone even when Happy Home is closed.":""):"Alarms show a notification while Happy Home is open or was used a moment ago."}</div></div><button class="mini ghostmini" data-act="pushOff">Turn off</button></div>`
+   :`<button class="primary" data-act="pushOn" ${pushState.busy?"disabled":""}>🔔 Turn on notifications on this phone</button>`;
+  return `${backBar()}
+  <section class="card"><div class="row between"><h2>Alarms</h2><button class="link" data-act="addAlarm">+ New alarm</button></div>
+   <div class="list" style="margin-top:6px">${alarms.length?alarms.map(a=>row("alarms",a.id,`<button class="grow tap altap" data-act="editAlarm" data-id="${a.id}"><span class="altime ${a.on===false?"off":""}">${tm(a.time)}</span><span class="t">${esc(a.title||"Alarm")}</span><span class="m">${esc(dayTxt(a))} · ${esc(pname(a.who||0))}</span></button><button class="toggle ${a.on===false?"":"on"}" data-act="alarmToggle" data-id="${a.id}" role="switch" aria-checked="${a.on!==false}" aria-label="Alarm on"></button>`)).join(""):`<div class="empty">No alarms yet. Add one for waking up, leaving for school or practice time.</div>`}</div></section>
+  <section class="card"><div class="row between"><h2>Coming up</h2><span class="sub">for ${v===meId()?"you":esc(pname(v))}</span></div>
+   <div class="list" style="margin-top:6px">${next.length?next.map(i=>`<div class="item"><span class="alwhen">${esc(nice(i.when.slice(0,10)))}<br>${tm(i.when.slice(11))}</span><div class="grow"><div class="t">${esc(i.title)}</div><div class="m">${esc(i.body)}</div></div></div>`).join(""):`<div class="empty">Nothing is set to ring in the next week. Give an event or task a time and it will remind you.</div>`}</div></section>
+  <section class="card stack" style="gap:12px"><h2>Reminders</h2>
+   <div class="field"><label for="np_ev">Events and classes: remind</label><select id="np_ev" data-pref="ev">${LEADS.filter(x=>x[0]>=0).map(([m,n])=>`<option value="${m}" ${+P.ev===m?"selected":""}>${n}</option>`).join("")}</select></div>
+   <div class="two"><div class="field"><label for="np_am">Morning summary at</label><input id="np_am" type="time" data-pref="morning" value="${esc(P.morning||"")}"></div><div class="field"><label for="np_bl">Bills due: remind at</label><input id="np_bl" type="time" data-pref="bills" value="${esc(P.bills||"")}"></div></div>
+   <div class="sub">Clear a time to switch that reminder off. Tasks and homework remind at their own time. You can change the reminder for one event when you edit it.</div>
+   ${peopleRaw().length>2?`<label class="checkrow" for="np_kids"><input type="checkbox" id="np_kids" data-pref="kids" ${P.kids!==false?"checked":""}> ${esc(adultIds().map(pname).join(" and "))} also get ${esc(pname(kidId()))}'s reminders</label>`:""}
+   <label class="checkrow" for="np_snd"><input type="checkbox" id="np_snd" data-pref="mute" ${ST._localPref("alarmMute")==="1"?"":"checked"}> Play a sound on this phone</label></section>
+  <section class="card stack" style="gap:12px"><h2>Notifications on this phone</h2>${phone}
+   ${cloud&&window.HHPush?`<div class="hr"></div><div class="row between"><div class="grow"><b>When the app is closed</b><div class="sub">${helper?(alive?"Helper is working · last checked "+ago(st.lastRun):st&&st.lastRun?"Helper last checked "+ago(st.lastRun)+". It may be paused.":"Code made. Waiting for the helper's first check (up to 15 minutes after the code is saved on GitHub).")+(mineSubs.length?" · "+mineSubs.length+" phone"+(mineSubs.length===1?"":"s")+" on":""):"Not set up yet. Until then, reminders ring only while Happy Home is open."}</div>${st&&st.lastError?`<div class="sub neg">${esc(String(st.lastError).slice(0,140))}</div>`:""}</div><button class="mini" data-act="notifier">${helper?"Manage":"Set up"}</button></div>
+   ${helper&&subOk?`<button class="ghost" data-act="pushTest">Send me a test notification</button>`:""}`:""}
+   <div class="sub">How it works: while Happy Home is open, alarms ring here with a sound. For an alarm that must ring loudly at an exact minute even when the phone is asleep, use <b>Add to iPhone Calendar</b> on the alarm or event, or the phone's Clock app.${cloud?" Notifications sent by the helper can arrive a few minutes late.":""}</div></section>`;
+}
+
+/* ---------- small helpers for the new pages ---------- */
+function localNotify(title,body,tag,url){try{if(!("Notification" in window)||Notification.permission!=="granted"||!navigator.serviceWorker||ST._localPref("pushOn")==="0")return;navigator.serviceWorker.ready.then(r=>r.showNotification(title,{body,tag,data:{url},icon:"icons/icon-192.png"})).catch(()=>{})}catch(e){}}
+const hello=()=>{const h=new Date().getHours(),p=person(viewId());return (h<12?"Good morning":h<18?"Good afternoon":"Good evening")+(p?", "+p.name:"")};
+function setActive(){const slot=slotInfo().r;let active=parentTab[tab]||tab;if(tab===slot||(tab==="bills"&&slot==="money"))active=slot;document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===active))}
+/* piano: the new piano page builds itself once inside #pianoHost and is never rebuilt while someone is playing */
+let pianoOn=false,pianoFail=false;
+function pianoOff(){if(!pianoOn)return;pianoOn=false;try{window.HHPiano&&HHPiano.unmount()}catch(e){console.error(e)}}
+function learnStar(n,title){ // stars from piano practice: at most 10 a day so the scoreboard stays fair
+  n=Math.max(0,Math.min(3,Math.round(+n||0)));if(!n)return 0;
+  const id=learnerId(),t=TODAY(),sid="piano-"+id+"-"+t,prev=S().stars.find(x=>x.id===sid),had=+(prev&&prev.pts)||0,give=Math.min(n,Math.max(0,10-had));
+  if(!give)return 0;ST.put("stars",sid,{who:id,pts:had+give,date:t,title:"Piano: "+String(title||"practice").slice(0,40)});return give;
+}
+function savePiano(key,obj){
+  const id=learnerId(),{id:_i,...d}=learnDoc(id),k=String(key||"song").replace(/[^\w-]+/g,"_").slice(0,60)||"song",o=obj||{};
+  ST.put("learn",String(id),{...d,piano:{...(d.piano||{}),[k]:{stars:+o.stars||0,best:+o.best||0,plays:+o.plays||0,last:String(o.last||TODAY()).slice(0,10)}},pianoAt:Date.now(),who:id});
+}
+/* one-time tidy-up the family asked for: the grown-ups show as Dad and Mum. The old names are kept as "aka" so Quick add still understands them. */
+let roleBusy=false;
+function roleNames(){
+  const s=SET(),raw=peopleRaw();
+  if(roleBusy||s.roleNames||ST.mode!=="cloud"||ST.phase!=="ready"||!ST.settingsLive||raw.length!==3||!s.owner||s.owner!==ST.me.uid||raw[0].uid!==ST.me.uid)return;
+  roleBusy=true;const want=["Dad","Mum"];
+  ST.setSettings({people:raw.map((p,i)=>i<2&&p.name!==want[i]?Object.assign({},p,{name:want[i],aka:p.aka||p.name}):p),roleNames:1});
+}
+
 /* ---------- render ---------- */
-const TITLES={home:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities",learn:"Learn",live:"Live"};
+const TITLES={home:"Happy Home",today:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities",learn:"Chinese",piano:"Piano",alarms:"Alarms"};
 let rendering=false;
 function render(){
   if(rendering)return;rendering=true;
   try{
     const nav=$("nav.tabs"),head=$("header.top");
     if(ST.phase!=="ready"||(ST.mode==="cloud"&&!ST.me.personId)){
-      nav.hidden=true;head.hidden=true;
+      nav.hidden=true;head.hidden=true;pianoOff();
       $("#view").innerHTML=ST.phase==="loading"?`<div class="auth"><div class="logo">H</div><p class="sub">Loading your family…</p></div>`:ST.phase==="signedOut"?viewAuth():ST.phase==="needsFamily"?viewFamilySetup():viewClaim();
       bindForms();return;
     }
     nav.hidden=false;head.hidden=false;
+    syncPhotos();renderTabs();
+    {const pv=viewId(),pb=$("#btnProfile");if(pb){const ph=photoOf(pv),cls="avatarbtn dot who-"+colorIdx(pv)+(ph?" ph ph-"+pv:""),ini=(pname(pv)||"?").slice(0,1).toUpperCase();if(pb.className!==cls)pb.className=cls;if(pb.textContent!==ini)pb.textContent=ini;pb.setAttribute("aria-label","Profile: "+pname(pv))}}
+    if(tab==="piano"&&window.HHPiano&&!pianoFail){
+      $("#title").textContent=TITLES.piano;$("#subtitle").textContent="";
+      if(!pianoOn||!$("#pianoHost")){$("#view").innerHTML=`<div id="pianoTop"></div><div id="pianoHost"></div>`;pianoOn=true;try{HHPiano.mount($("#pianoHost"))}catch(e){console.error(e);pianoOn=false;pianoFail=true}}
+      else{try{HHPiano.refresh()}catch(e){console.error(e)}}
+      if(!pianoFail){const top=$("#pianoTop"),h=alarmBanner()+syncBar();if(top&&top._h!==h){top.innerHTML=h;top._h=h}setActive();return}
+    }
+    pianoOff();
     const keepShop=$("#shopInput"),shopVal=keepShop&&keepShop.value,shopFocus=keepShop&&document.activeElement===keepShop;
     const keepNote=$("#moodNote"),noteVal=keepNote&&keepNote.value;const keepQ=$("#qa"),qVal=keepQ&&keepQ.value,qFocus=keepQ&&document.activeElement===keepQ;const keepB=$("#boardIn"),bVal=keepB&&keepB.value,bFocus=keepB&&document.activeElement===keepB;
+    if(!TITLES[tab])tab="home";
     $("#title").textContent=TITLES[tab];
-    const me=person(meId());
-    $("#subtitle").textContent=tab==="home"?(me?"Hello, "+me.name:""):"";
-    $("#view").innerHTML=syncBar()+{home:viewHome,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn,live:viewLive}[tab]();
-    const active=parentTab[tab]||tab;
-    document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===active));
+    $("#subtitle").textContent=tab==="home"?hello():tab==="today"?new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"}):"";
+    $("#view").innerHTML=alarmBanner()+syncBar()+{home:viewHomeLive,today:viewToday,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn,piano:viewPianoPage,alarms:viewAlarms}[tab]();
+    setActive();
     if(shopVal&&$("#shopInput"))$("#shopInput").value=shopVal; if(shopFocus&&$("#shopInput"))$("#shopInput").focus();
     if(noteVal&&$("#moodNote"))$("#moodNote").value=noteVal;if(qVal&&$("#qa")){$("#qa").value=qVal;showQuick()}if(qFocus&&$("#qa"))$("#qa").focus();if(bVal&&$("#boardIn"))$("#boardIn").value=bVal;if(bFocus&&$("#boardIn"))$("#boardIn").focus();
     bindForms();
@@ -1067,7 +1415,7 @@ function voiceAdd(){
     r.onend=()=>{btn&&btn.classList.remove("on");if(q.value.trim())q.focus()};r.start()}
   catch(e){q.focus();toast("Use the microphone on your keyboard instead")}
 }
-function go(t){const v=$("#view");if(v&&t!==tab){v.classList.remove("enter");void v.offsetWidth;v.classList.add("enter");clearTimeout(go._t);go._t=setTimeout(()=>v.classList.remove("enter"),400)}tab=t;try{history.replaceState(null,"","#"+t)}catch(e){location.hash=t}render();scrollTo(0,0)}
+function go(t){t=routeOf(t);if(!routes.includes(t))t="home";const v=$("#view");if(v&&t!==tab){if(tab==="home"||tab==="today"||tab==="more")cameFrom=tab;v.classList.remove("enter");void v.offsetWidth;v.classList.add("enter");clearTimeout(go._t);go._t=setTimeout(()=>v.classList.remove("enter"),400)}tab=t;try{history.replaceState(null,"","#"+t)}catch(e){location.hash=t}render();scrollTo(0,0)}
 
 /* ---------- sheets ---------- */
 function closeSheet(){$("#sheetHost").innerHTML="";document.body.classList.remove("sheet-open")}
@@ -1084,10 +1432,10 @@ function addSheet(kind,preset,edit){
   if(kind==="card")return cardForm();
   const kinds=[["task","Task"],["event","Event"],["money","Money"],["shop","Shopping"],["homework","Homework"],["note","Note"]];
   const pick=`<div class="pickgrid">${kinds.map(([k,n])=>`<button type="button" class="${k===kind?"on":""}" data-kind="${k}">${n}</button>`).join("")}</div>`;
-  const kid=kidId(), me=meId(), cats=SET().categories||[];
+  const kid=kidId(), me=viewId(), cats=SET().categories||[];
   let body="";
   if(kind==="task")body=`<div class="field"><label for="f_title">What needs doing?</label><input id="f_title" required placeholder="e.g. Take bins out"></div>
-   <div class="two"><div class="field"><label for="f_who">Who</label><select id="f_who">${whoOptions(me)}</select></div><div class="field"><label for="f_due">Date</label><input id="f_due" type="date" value="${TODAY()}"></div></div>
+   <div class="two"><div class="field"><label for="f_who">Who</label><select id="f_who">${whoOptions(preset.who??me)}</select></div><div class="field"><label for="f_due">Date</label><input id="f_due" type="date" value="${TODAY()}"></div></div>
    <div class="two"><div class="field"><label for="f_time">Time (optional)</label><input id="f_time" type="time"></div><div class="field"><label for="f_rep">Repeat</label><select id="f_rep"><option value="none">Doesn't repeat</option><option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option></select></div></div>
    <div class="field"><label for="f_pts">Stars for doing it (chores)</label><select id="f_pts"><option value="0">No stars</option>${[1,2,3,5,10].map(n=>`<option value="${n}">★ ${n}</option>`).join("")}</select></div>`;
   if(kind==="money")body=`<div class="seg" id="f_type"><button type="button" class="on" data-t="out">Spent</button><button type="button" data-t="in">Received</button></div>
@@ -1106,12 +1454,14 @@ function addSheet(kind,preset,edit){
    <div class="two"><div class="field"><label for="f_who">For</label><select id="f_who">${whoOptions(kid)}</select></div><div class="field"><label for="f_time">Time (optional)</label><input id="f_time" type="time"></div></div>`;
   if(kind==="note")body=`<div class="field"><label for="f_title">Title</label><input id="f_title" placeholder="e.g. Holiday ideas"></div>
    <div class="field"><label for="f_body">Note</label><textarea id="f_body" class="body" rows="7"></textarea></div>`;
+  if(kind==="task"||kind==="homework"||kind==="event")body+=remindSelect(edit?edit.remind:null,kind==="event"?+nprefs().ev:0);
   openSheet(`${sheetHead(edit?{task:"Edit task",homework:"Edit homework",event:"Edit event"}[kind]:"Add")}${edit?"":pick}<form id="f" class="stack" style="gap:12px">${body}<button class="primary" type="submit">Save</button>${edit?`<button type="button" class="link" id="f_del" style="color:var(--bad);align-self:center">Delete</button>`:""}</form>`,sh=>{
     sh.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>addSheet(b.dataset.kind,preset));
     if(edit){const set=(id,val)=>{const el=sh.querySelector("#"+id);if(el&&val!=null)el.value=val};
       set("f_title",edit.title);set("f_who",edit.who);set("f_due",edit.due);set("f_time",edit.time||"");set("f_rep",kind==="event"?"0":(edit.repeat||"none"));set("f_subj",edit.subject);set("f_date",edit.date);set("f_place",edit.place||"");set("f_pts",String(+edit.points||0));
       if(kind==="event"){const b=document.createElement("button");b.type="button";b.className="ghost";b.textContent="Add to iPhone Calendar";b.onclick=()=>{exportEvent(edit);toast("Opening Calendar…")};sh.querySelector("#f_del").before(b);
         if(isRep(edit)&&preset.occ){const o=document.createElement("button");o.type="button";o.className="link";o.style.alignSelf="center";o.textContent="Skip just "+nice(preset.occ);o.onclick=()=>{ST.patch("events",edit.id,{skip:[...(edit.skip||[]),preset.occ]});closeSheet();toast("Skipped "+nice(preset.occ))};sh.querySelector("#f_del").before(o);sh.querySelector("#f_del").textContent="Delete every week"}}
+      if((kind==="task"||kind==="homework")&&edit.due){const b=document.createElement("button");b.type="button";b.className="ghost";b.textContent="Add to iPhone Calendar";b.onclick=()=>{exportEvent({id:edit.id,title:(kind==="homework"?(edit.subject||"Homework")+": ":"")+edit.title,date:edit.due,time:edit.time||"",place:"",repeat:"none",remind:edit.remind==null?0:edit.remind});toast("Opening Calendar…")};sh.querySelector("#f_del").before(b)}
       const col={task:"tasks",homework:"homework",event:"events"}[kind],d=sh.querySelector("#f_del");
       d.onclick=()=>{if(d.dataset.arm){closeSheet();delUndo(col,edit.id);render()}else{d.dataset.arm=1;d.textContent="Tap again to delete"}};}
     if(kind==="event"){const rs=sh.querySelector("#f_erep"),df=sh.querySelector("#f_daysf"),uf=sh.querySelector("#f_untilf"),dp=sh.querySelectorAll("[data-day]");
@@ -1123,21 +1473,22 @@ function addSheet(kind,preset,edit){
     let type="out";
     sh.querySelectorAll("#f_type button").forEach(b=>b.onclick=()=>{type=b.dataset.t;sh.querySelectorAll("#f_type button").forEach(x=>x.classList.toggle("on",x===b));sh.querySelector("#f_cat").value=type==="in"?"Salary":cats[0]});
     const first=sh.querySelector("#f_subj,#f_title,#f_amt");if(!edit&&first)first.focus();
-    sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const v=id=>(sh.querySelector("#"+id)?.value??"");
-      if(kind==="task"){if(!v("f_title").trim())return;const rec={title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time"),repeat:v("f_rep"),points:+v("f_pts")||0};if(edit){ST.patch("tasks",edit.id,rec);toast("Task updated")}else{ST.add("tasks",{...rec,done:false});toast("Task added")}}
+    sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const v=id=>(sh.querySelector("#"+id)?.value??""),rem=()=>v("f_rem")===""?null:+v("f_rem");
+      if(kind==="task"){if(!v("f_title").trim())return;const rec={title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time"),repeat:v("f_rep"),points:+v("f_pts")||0,remind:rem()};if(edit){ST.patch("tasks",edit.id,rec);toast("Task updated")}else{ST.add("tasks",{...rec,done:false});toast("Task added")}}
       if(kind==="money"){const a=parseFloat(v("f_amt"));if(!(a>0))return;ST.add("tx",{type,amount:Math.round(a*100)/100,cat:v("f_cat"),who:+v("f_who"),date:v("f_date")||TODAY(),note:v("f_note").trim()});moneyMonth=monthKey(v("f_date")||TODAY());toast(type==="in"?"Income added":"Spending added")}
       if(kind==="event"){if(!v("f_title").trim())return;const d0=v("f_date")||TODAY(),wk=v("f_erep")==="weekly"&&sh._days.size;
-        const rec={title:v("f_title").trim(),who:+v("f_who"),date:d0,time:v("f_time"),place:v("f_place").trim(),repeat:wk?"weekly":"none",days:wk?[...sh._days].sort():[],until:wk?v("f_until"):""};
+        const rec={title:v("f_title").trim(),who:+v("f_who"),date:d0,time:v("f_time"),place:v("f_place").trim(),repeat:wk?"weekly":"none",days:wk?[...sh._days].sort():[],until:wk?v("f_until"):"",remind:rem()};
         if(edit){ST.patch("events",edit.id,rec);toast(wk?"Activity updated":"Event updated")}else{ST.add("events",{...rec,skip:[]});toast(wk?repText(rec)+(rec.time?" at "+tm(rec.time):""):"Event added")}
         if(!edit||!wk){calDay=d0;calMonth=monthKey(d0)}}
       if(kind==="shop"){if(!v("f_title").trim())return;addShopItem(v("f_title").trim()+(v("f_qty").trim()?" "+v("f_qty").trim():""));toast("Added to shopping")}
-      if(kind==="homework"){if(!v("f_title").trim())return;const rec={subject:v("f_subj").trim()||"Homework",title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time")};if(edit){ST.patch("homework",edit.id,rec);toast("Homework updated")}else{ST.add("homework",{...rec,done:false});toast("Homework added")}}
+      if(kind==="homework"){if(!v("f_title").trim())return;const rec={subject:v("f_subj").trim()||"Homework",title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time"),remind:rem()};if(edit){ST.patch("homework",edit.id,rec);toast("Homework updated")}else{ST.add("homework",{...rec,done:false});toast("Homework added")}}
       if(kind==="note"){if(!v("f_title").trim()&&!v("f_body").trim())return;ST.add("notes",{title:v("f_title").trim(),body:v("f_body"),who:meId(),updated:Date.now(),pinned:false});toast("Note saved")}
       closeSheet();
       if(edit){render();return}
       const dest={task:["lists","tasks"],shop:["lists","shopping"],homework:["lists","homework"],note:["notes"],money:["money"],event:["calendar"]}[kind];
       if(dest[1])listTab=dest[1];
-      if(tab!=="home"&&tab!==dest[0])go(dest[0]);else render();
+      agendaDirty=true;
+      if(tab!=="home"&&tab!=="today"&&tab!==dest[0])go(dest[0]);else render();
     };
   });
 }
@@ -1179,7 +1530,7 @@ function settingsSheet(){
     <button class="primary" type="submit">Save</button>
    </form>
    ${cloud?`<div class="label" style="margin-top:6px">Family code</div><div class="code" id="s_code">${esc(ST.familyId)}</div>
-    <div class="sub">Akiyo and Jugo enter this code after creating their own account to join. Keep it within the family.</div>
+    <div class="sub">Everyone else in the family enters this code after creating their own account. Keep it within the family.</div>
     <button class="ghost" type="button" id="s_copy">Copy code</button>
     <div class="label" style="margin-top:6px">Two-step sign-in</div><div class="sub">${ST.twoStepOn()?"On. You'll need a code from your authenticator app when you sign in.":"Off. Turn it on to need a code from an authenticator app as well as your password."}</div>
     <button class="ghost" type="button" data-act="twoStep">${ST.twoStepOn()?"Turn off two-step sign-in":"Turn on two-step sign-in"}</button>
@@ -1284,7 +1635,7 @@ document.addEventListener("click",e=>{
   const g=e.target.closest("[data-go]");if(g){if(g.closest("#sheetHost"))closeSheet();if(g.dataset.list)listTab=g.dataset.list;go(g.dataset.go);return}
   const tb=e.target.closest(".tab");if(tb){go(tb.dataset.tab);return}
   const a=e.target.closest("[data-act]");if(!a)return;const id=a.dataset.id,act=a.dataset.act;
-  const flip=(col,msg)=>{const t=S()[col].find(x=>x.id===id);if(!t)return;ST.patch(col,id,{done:!t.done});if(!t.done&&msg)toast(msg);return t};
+  const flip=(col,msg)=>{const t=S()[col].find(x=>x.id===id);if(!t)return;ST.patch(col,id,{done:!t.done,doneAt:t.done?null:Date.now()});if(!t.done&&msg)toast(msg);return t};
   switch(act){
     case"close":return closeSheet();
     case"voice":return voiceAdd();
@@ -1317,13 +1668,29 @@ document.addEventListener("click",e=>{
       if(navigator.share)navigator.share({title:"Shopping list",text:txt}).catch(()=>{});else{try{navigator.clipboard.writeText(txt).then(()=>toast("List copied"))}catch(_){toast("Couldn't share")}}return}
     case"boardAck":{const m=S().board.find(x=>x.id===id);if(m)setMapKey("board",id,"ack",meId(),!(m.ack||{})[meId()]);return}
     case"liveTab":liveTab=a.dataset.k;break;
+    case"liveMore":liveOpen[a.dataset.k]=!liveOpen[a.dataset.k];break;
+    case"addFor":return addSheet("task",{who:+a.dataset.k});
+    case"profile":return profileSheet();
+    case"viewAs":setView(a.dataset.k);closeSheet();toast("Showing "+pname(viewId())+"'s things first");break;
+    case"slot":return slotSheet();
+    case"slotPick":{const r=a.dataset.k;ST._localPref("slot",r?JSON.stringify({r,wk:weekKey()}):"");closeSheet();slotSig="";toast(r?NAV[r][0]+" is this week's shortcut":"The app will pick a shortcut each week");break}
+    case"alarmOk":ringing=ringing.filter(i=>i.id!==id);break;
+    case"alarmGo":{const i=ringing.find(x=>x.id===id);ringing=ringing.filter(x=>x.id!==id);if(i)go(String(i.url||"#today").replace(/^.*#/,""));else render();return}
+    case"addAlarm":return alarmSheet();
+    case"editAlarm":return alarmSheet(id);
+    case"alarmToggle":{const al=S().alarms.find(x=>x.id===id);if(al){ST.patch("alarms",id,{on:al.on===false});agendaDirty=true}return}
+    case"pushOn":return void turnOnNotifications();
+    case"pushOff":return void turnOffNotifications();
+    case"pushTest":{const d=new Date(Date.now()+2*60e3),when=iso(d)+"T"+p2(d.getHours())+":"+p2(d.getMinutes()),old=(nprefs().tests||[]).filter(x=>x&&x.when&&whenMs(x.when)>Date.now()-864e5).slice(-4);
+      setPrefs({tests:[...old,{id:Math.random().toString(36).slice(2,8),when,who:meId()}]});toast("Test on its way. Close the app: it should arrive within about 15 minutes");return}
+    case"notifier":return notifierSheet();
     case"liveSel":liveSel=a.dataset.k==="home"?null:(liveSel===+a.dataset.k?null:+a.dataset.k);break;
     case"reAdd":addShopItem(a.dataset.k);toast(a.dataset.k+" added");return;
     case"twoStep":return twoStepSheet();
     case"mfaCancel":ST.cancelMfa();authErr="";return render();
     case"edit":{closeSheet();const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event"}[col],{occ:a.dataset.d},r);return}
     case"swipeDel":{const w=a.closest(".swipe");if(w.dataset.occ){const e=S().events.find(x=>x.id===w.dataset.id);if(e){const d=w.dataset.occ,old=e.skip||[];ST.patch("events",e.id,{skip:[...old,d]});toast("Removed for "+nice(d),"Undo",()=>ST.patch("events",e.id,{skip:old}))}return}delUndo(w.dataset.col,w.dataset.id);return}
-    case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was});if(was)takeStars(snap);if(!was){giveStars(snap);toast(+snap.points>0?`Done! ★ ${+snap.points} for ${pname(snap.who)}`:"Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}
+    case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was,doneAt:was?null:Date.now()});if(was)takeStars(snap);if(!was){giveStars(snap);toast(+snap.points>0?`Done! ★ ${+snap.points} for ${pname(snap.who)}`:"Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}
     case"toggleHw":return void flip("homework","Homework finished!");
     case"toggleShop":return void flip("shopping");
     case"clearDone":{const gone=S().tasks.filter(x=>x.done);ST.delMany("tasks",gone.map(x=>x.id));toast(gone.length+" cleared","Undo",()=>gone.forEach(({id:i,...r})=>ST.put("tasks",i,r)));return}
@@ -1367,10 +1734,23 @@ document.addEventListener("click",e=>{
   }
   render();
 });
-$("#fab").onclick=()=>addSheet();
-$("#btnSettings").onclick=settingsSheet;
+$("#fab").onclick=()=>tab==="alarms"?alarmSheet():addSheet();
+{const bs=$("#btnSettings");if(bs)bs.onclick=settingsSheet;const bp=$("#btnProfile");if(bp)bp.onclick=profileSheet}
 $("#btnSearch").onclick=searchSheet;
-addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(routes.includes(h)&&h!==tab){tab=h;render()}});
+addEventListener("hashchange",()=>{const h=routeOf(location.hash.slice(1));if(routes.includes(h)&&h!==tab){tab=h;render()}});
+/* reminder settings save the moment they are changed */
+document.addEventListener("change",e=>{const el=e.target.closest&&e.target.closest("[data-pref]");if(!el)return;const k=el.dataset.pref;
+  if(k==="mute"){ST._localPref("alarmMute",el.checked?"0":"1");return}
+  const val=k==="kids"?el.checked:k==="ev"?+el.value:el.value;if((k==="morning"||k==="bills")&&val&&!TIME_OK.test(val))return;setPrefs({[k]:val})});
+/* hold the shortcut button in the bottom bar to choose what it opens */
+(function(){let t=null,held=false;const off=()=>clearTimeout(t);
+  document.addEventListener("pointerdown",e=>{if(!e.target.closest||!e.target.closest("#tabSlot"))return;held=false;off();t=setTimeout(()=>{held=true;slotSheet()},550)},{passive:true});
+  ["pointerup","pointercancel","pointermove"].forEach(n=>document.addEventListener(n,e=>{if(n!=="pointermove"||Math.abs(e.movementX)+Math.abs(e.movementY)>6)off()},{passive:true}));
+  document.addEventListener("click",e=>{if(held&&e.target.closest&&e.target.closest("#tabSlot")){held=false;e.stopPropagation();e.preventDefault()}},true);
+  document.addEventListener("contextmenu",e=>{if(e.target.closest&&e.target.closest("nav.tabs"))e.preventDefault()});
+})();
+/* sounds may only start after a touch on iPhone, so wake the sound engine on the first touch */
+document.addEventListener("pointerdown",()=>{try{if(actx&&actx.state==="suspended")actx.resume()}catch(e){}},{passive:true});
 addEventListener("online",()=>{render();if(wasOffline)toast(ST.pending?"Back online. Uploading your changes…":"Back online")});addEventListener("offline",()=>{wasOffline=true;render();toast("Offline. Keep going, changes are saved on this phone")});
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape")return closeSheet();
@@ -1379,19 +1759,24 @@ document.addEventListener("keydown",e=>{
     if(/^[\d.+\-×÷%()=⌫C]$/.test(k)){e.preventDefault();calcKey(k)}
   }
 });
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&listener.sid){/* keep listening only while the app is open */ }});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&ST.phase==="ready"){agendaDirty=true;alarmTick();refreshPush();if(tab==="home"||tab==="today")render()}});
+if("serviceWorker" in navigator)navigator.serviceWorker.addEventListener("message",e=>{const d=e.data||{};if(d.type==="hh-open"&&d.url)go(String(d.url).replace(/^.*#/,""));if(d.type==="hh-push-changed")refreshPush()});
 
 /* ---------- start ---------- */
 let lastErr=null, prevPhase=null;
 ST.onChange(()=>{
   if(ST.error&&ST.error!==lastErr){toast(ST.error);lastErr=ST.error;setTimeout(()=>{ST.error=null;lastErr=null},4000)}
-  if(ST.phase==="ready"&&prevPhase!=="ready"){if(ST._localPref("shareLoc")==="1")startGeo();cleanupMoodSessions();setTimeout(()=>{try{cleanupBoard()}catch(e){}},8000)}
+  if(ST.phase==="ready"&&prevPhase!=="ready"){if(ST._localPref("shareLoc")==="1")startGeo();cleanupMoodSessions();refreshPush()}
   prevPhase=ST.phase;
   if(hadPending&&!ST.pending&&navigator.onLine&&wasOffline){wasOffline=false;setTimeout(()=>toast("All changes uploaded ✓"),300)}hadPending=ST.pending;
+  agendaDirty=true;roleNames();syncAgenda();
   moodTick();render();
 });
 setInterval(()=>{if(tab==="mood"&&activeSession())render();moodTick()},1000);
-setInterval(()=>{if(tab==="live"&&!document.hidden&&!$("#sheetHost").innerHTML)render()},20000);
+setInterval(()=>{if((tab==="home"||tab==="today")&&!document.hidden&&!$("#sheetHost").innerHTML&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||""))render()},20000);
+setInterval(()=>{try{alarmTick()}catch(e){console.error(e)}},15000);
+/* what the piano page may use from the app */
+window.HH={S,ST,esc,toast,openSheet,closeSheet,sheetHead,pname,learnerId,pref:(k,v)=>v===undefined?ST._localPref(k):ST._localPref(k,String(v)),star:learnStar,pianoProgress:()=>learnDoc(learnerId()).piano||{},savePianoProgress:savePiano,delUndo,go:t=>go(t)};
 let autoPayDay=null;setInterval(()=>{if(ST.phase==="ready"&&autoPayDay!==TODAY()&&Date.now()-bootAt>6000){autoPayDay=TODAY();try{autoPayBills()}catch(e){}}},3000);
 const bootAt=Date.now();
 ST.init();

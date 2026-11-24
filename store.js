@@ -6,13 +6,13 @@
 (function () {
   "use strict";
   const LOCAL_KEY = "happyhome.v2";
-  const FAMILY_COLS = ["tasks", "events", "tx", "shopping", "homework", "notes", "wallet", "moods", "locations", "moodSessions", "bills", "meals", "countdowns", "shopFreq", "stars", "learn", "board"];
+  const FAMILY_COLS = ["tasks", "events", "tx", "shopping", "homework", "notes", "wallet", "moods", "locations", "moodSessions", "bills", "meals", "countdowns", "shopFreq", "stars", "learn", "board", "alarms", "profiles", "songs", "notify", "pushSubs"];
   const PRIVATE_COLS = ["myWallet", "myMoodResults"]; // stored under users/{uid}/
   const PRIVATE_PATH = { myWallet: "wallet", myMoodResults: "moodResults" };
   const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
   const defaults = () => ({
-    people: [{ id: 1, name: "Me" }, { id: 2, name: "Akiyo" }, { id: 3, name: "Jugo" }],
+    people: [{ id: 1, name: "Dad" }, { id: 2, name: "Mum" }, { id: 3, name: "Kid" }],
     currency: "$",
     categories: ["Groceries", "Bills", "Transport", "School", "Eating out", "Health", "Fun", "Other"],
     budgets: {}
@@ -119,8 +119,9 @@
     },
     _subscribeFamily() {
       const fid = this.familyId;
-      this._unsubs.push(FB.onSnapshot(FB.doc(this.db, "families", fid), snap => {
+      this._unsubs.push(FB.onSnapshot(FB.doc(this.db, "families", fid), { includeMetadataChanges: true }, snap => {
         const d = snap.data(); if (!d) return;
+        this.settingsLive = !snap.metadata.fromCache && !snap.metadata.hasPendingWrites;
         this.state.settings = Object.assign(defaults(), d);
         const mine = (d.people || []).find(p => p.uid === this.me.uid);
         this.me.personId = mine ? mine.id : 0;
@@ -190,7 +191,7 @@
       await FB.setDoc(FB.doc(this.db, "users", this.me.uid), { familyId: fid });
       return fid;
     },
-    claimPerson(personId) { // "I am Akiyo"
+    claimPerson(personId) { // "this one is me"
       const people = this.state.settings.people.map(p => p.id === +personId ? Object.assign({}, p, { uid: this.me.uid }) : (p.uid === this.me.uid ? Object.assign({}, p, { uid: null }) : p));
       this.setSettings({ people });
     },
