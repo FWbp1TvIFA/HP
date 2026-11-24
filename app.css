@@ -442,3 +442,106 @@ header.top .iconbtn+.iconbtn{margin-left:-4px}
 .syncbar .sdot{width:9px;height:9px;border-radius:50%;background:var(--warn);flex:none;margin-top:5px}
 .syncbar .spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--accent);border-top-color:transparent;animation:spin .8s linear infinite;flex:none}
 @keyframes spin{to{transform:rotate(360deg)}}
+#pianoTop:empty{display:none}
+
+/* ===== v7: profiles, new bottom bar, family tree of today, alarms ===== */
+button,.tab,.chip,.dot,.label,.pill{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* profile photos: one background rule per person is written by the app (.ph-<id>) */
+.dot.ph{background-size:cover;background-position:center;color:transparent;overflow:hidden}
+.avatarbtn{width:42px;height:42px;border:0;padding:0;font-size:1rem;cursor:pointer;box-shadow:0 0 0 2px var(--bg),0 0 0 4px color-mix(in srgb,var(--accent) 55%,transparent)}
+.profhead{display:flex;align-items:center;gap:14px}
+.profhead .dot{width:84px;height:84px;font-size:2rem;border:0;padding:0}
+.profhead h2{font-size:1.5rem}
+.profpick{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.profpick .pp{border:2px solid transparent;background:var(--sunk);border-radius:16px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:6px;font-weight:600;color:var(--fg);min-width:0}
+.profpick .pp .dot{width:44px;height:44px;font-size:1.05rem}
+.profpick .pp span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profpick .pp.on{border-color:var(--accent);background:var(--accent-soft)}
+/* bottom bar */
+.tab{min-width:0;position:relative}
+.tab .tabchar{font-size:20px;line-height:22px;height:22px;font-weight:700}
+#tabSlot.auto::after{content:"🎲";position:absolute;top:3px;left:calc(50% + 9px);font-size:.62rem;line-height:1}
+.slotgrid button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;color:var(--fg)}
+.slotgrid button svg{width:24px;height:24px}
+.slotgrid button .tabchar{font-size:20px;line-height:24px;height:24px;font-weight:700}
+.slotgrid button.on svg{color:inherit}
+/* home */
+.homebtns .tile{gap:3px;padding:12px 14px}
+.homebtns .tile b{font-size:1.08rem;line-height:1.2}
+.homebtns .tile span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.aisle.rest{margin:10px 0 2px}
+.ftree{padding:16px 12px 12px}
+.ftop{display:flex;flex-direction:column;align-items:center}
+.fhome{border:0;background:none;display:flex;align-items:center;gap:12px;padding:2px 10px;color:inherit;text-align:left}
+.fh-t{display:flex;flex-direction:column}
+.fh-t b{font-family:var(--display);font-size:1.2rem;line-height:1.2}
+.fh-t span{font-size:.84rem;color:var(--muted)}
+.pring{--pct:0;position:relative;width:62px;height:62px;border-radius:50%;display:grid;place-items:center;flex:none;background:conic-gradient(var(--good) calc(var(--pct)*1%),var(--sunk) 0)}
+.pring>.dot{width:50px;height:50px;font-size:1.25rem;box-shadow:0 0 0 3px var(--surface)}
+.dot.homeic{background:var(--accent-soft);font-size:1.5rem}
+.frow{--n:3;display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));width:100%;position:relative;margin-top:16px;padding-top:18px}
+.frow::before{content:"";position:absolute;top:0;left:calc(50%/var(--n));right:calc(50%/var(--n));height:3px;border-radius:3px;background:color-mix(in srgb,var(--muted) 45%,var(--surface))}
+.frow::after{content:"";position:absolute;top:-16px;left:calc(50% - 1.5px);width:3px;height:16px;background:color-mix(in srgb,var(--muted) 45%,var(--surface))}
+.fperson{position:relative;border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:0 2px 4px;color:inherit;min-width:0}
+.fperson::before{content:"";position:absolute;top:-18px;left:calc(50% - 1.5px);width:3px;height:18px;background:var(--pc);border-radius:0 0 3px 3px}
+.fperson b{font-family:var(--display);font-size:1rem;margin-top:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fperson>span:last-child{font-size:.8rem;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fperson.sel .pring{box-shadow:0 0 0 3px var(--surface),0 0 0 6px var(--pc)}
+.fperson.busy .pring::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:3px solid var(--pc);animation:ringP 1.4s ease-out infinite}
+.fbadge{position:absolute;top:-4px;left:calc(50% + 14px);min-width:22px;height:22px;border-radius:11px;background:var(--bad);color:#fff;font-size:.75rem;font-weight:700;font-style:normal;display:grid;place-items:center;padding:0 5px;box-shadow:0 0 0 2px var(--surface)}
+.branches{display:flex;flex-direction:column;gap:16px;margin-top:16px}
+.bhead{display:flex;align-items:center;gap:8px}
+.bnode{flex:1;min-width:0;border:0;background:none;display:flex;align-items:center;gap:10px;padding:0;text-align:left;color:inherit}
+.bnode>.dot{width:36px;height:36px;font-size:.95rem;box-shadow:0 0 0 3px color-mix(in srgb,var(--pc) 35%,var(--surface))}
+.bn-t{display:flex;flex-direction:column;min-width:0}
+.bn-t b{font-family:var(--display);font-size:1.08rem;line-height:1.2}
+.bn-t span{font-size:.8rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bn-add{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:color-mix(in srgb,var(--pc) 18%,var(--surface));color:var(--fg);font-size:1.3rem;font-weight:600;line-height:1;display:grid;place-items:center}
+.leaves{--twig:color-mix(in srgb,var(--pc) 60%,var(--surface));margin-left:16.5px;padding:8px 0 0 24px;display:flex;flex-direction:column;gap:6px}
+.leaf{position:relative;display:flex;align-items:center;gap:10px;min-height:50px;padding:6px 10px;border-radius:14px;background:var(--sunk);min-width:0;text-align:left;font:inherit;color:inherit}
+/* the twig: an elbow from the stem into each leaf, and the stem carrying on down to the next one */
+.leaf::before{content:"";position:absolute;left:-24px;top:-8px;width:20px;height:calc(50% + 8px);border-left:3px solid var(--twig);border-bottom:3px solid var(--twig);border-bottom-left-radius:12px;box-sizing:border-box;pointer-events:none}
+.leaf:not(:last-child)::after{content:"";position:absolute;left:-24px;top:calc(50% - 8px);bottom:-6px;width:3px;background:var(--twig);pointer-events:none}
+.leaf .check{flex:none;width:30px;height:30px}
+.lf-ic{flex:none;width:30px;height:30px;display:grid;place-items:center;font-size:1.2rem}
+.lf-ic.zh{font-weight:700;color:var(--accent);font-size:1.05rem}
+.lf-body{flex:1;min-width:0;border:0;background:none;padding:2px 0;text-align:left;color:inherit;font:inherit;display:flex;flex-direction:column;gap:1px}
+.lf-t{font-weight:600;font-size:.98rem;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.lf-m{font-size:.8rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lf-tag{flex:none;font-size:.74rem;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--surface);color:var(--muted);white-space:nowrap}
+.leaf.st-late{background:color-mix(in srgb,var(--bad) 13%,var(--surface))}
+.leaf.st-late .lf-tag{background:var(--bad);color:#fff}
+.leaf.st-live{background:color-mix(in srgb,var(--accent) 16%,var(--surface))}
+.leaf.st-live .lf-tag{background:var(--accent);color:var(--on-accent)}
+.leaf.st-done{background:color-mix(in srgb,var(--good) 13%,var(--surface))}
+.leaf.st-done .lf-t{text-decoration:line-through;color:var(--muted)}
+.leaf.st-past,.leaf.st-any,.leaf.st-next,.leaf.st-free{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line)}
+.leaf.st-past .lf-t{color:var(--muted)}
+.leaf.more{border:0;justify-content:center;color:var(--accent);font-weight:600;font-size:.92rem;min-height:44px;background:transparent;width:100%}
+.leaf.fresh .lf-t::after{content:" ✨"}
+@media (prefers-reduced-motion:no-preference){
+  #view.enter .leaf{animation:leafIn .34s cubic-bezier(.32,.72,0,1) both}
+  #view.enter .leaf:nth-child(2){animation-delay:.04s}#view.enter .leaf:nth-child(3){animation-delay:.08s}#view.enter .leaf:nth-child(4){animation-delay:.12s}#view.enter .leaf:nth-child(n+5){animation-delay:.16s}
+  @keyframes leafIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+}
+@media (prefers-reduced-motion: reduce){.fperson.busy .pring::after{animation:none}}
+/* alarms */
+.alarmbar{display:flex;align-items:center;gap:10px;background:var(--fg);color:var(--bg);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow)}
+.alarmbar .bell{font-size:1.4rem}
+.alarmbar .tap{border:0;background:none;color:inherit;text-align:left;display:flex;flex-direction:column;padding:0;font:inherit;min-width:0}
+.alarmbar .tap b{overflow-wrap:anywhere}
+.alarmbar .tap span{font-size:.82rem;opacity:.85}
+.alarmbar .mini{background:var(--bg);color:var(--fg);padding:9px 16px}
+@media (prefers-reduced-motion:no-preference){.alarmbar .bell{animation:wiggle 1s ease-in-out 3}@keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-14deg)}75%{transform:rotate(14deg)}}}
+.altap{border:0;background:none;color:inherit;font:inherit;text-align:left;display:grid;grid-template-columns:auto 1fr;column-gap:12px;align-items:center;padding:0}
+.altime{grid-row:span 2;font-family:var(--display);font-size:1.45rem;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.altime.off{color:var(--muted)}
+.alwhen{width:96px;flex:none;font-size:.85rem;font-weight:600;line-height:1.3;font-variant-numeric:tabular-nums}
+.altap .t{font-weight:600}.altap .m{font-size:.8rem;color:var(--muted)}
+.steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px;font-size:.95rem}
+.steps code{font-family:ui-monospace,Menlo,monospace;background:var(--sunk);border-radius:6px;padding:1px 6px;font-size:.9em}
+.codearea{width:100%;border:0;background:var(--sunk);border-radius:12px;padding:10px;font-family:ui-monospace,Menlo,monospace;font-size:.75rem;word-break:break-all;color:var(--fg)}
+.hr{height:1px;background:var(--line)}
+/* the simple piano: pressing and holding a key must never select text or open the iPhone's Copy bubble */
+.piano,.piano *,.songline,.songline *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.piano .wk span{pointer-events:none}
