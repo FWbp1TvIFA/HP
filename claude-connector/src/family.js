@@ -1,7 +1,22 @@
 // Who is signed in, which family they belong to, and helpers that match the app's
 // own rules (people, categories, money format).
 import { Firestore, idTokenFor } from "./firebase.js";
-import { todayIn, DEFAULT_TZ } from "./dates.js";
+import { todayIn, nowTimeIn, DEFAULT_TZ } from "./dates.js";
+
+// The only family collections this connector ever reads or writes. Everything else in the app
+// (wallet, moods, mood sessions, locations, learn, profiles, notify, pushSubs, songs) is off limits.
+export const ALLOWED_COLLECTIONS = ["tasks", "events", "homework", "shopping", "shopFreq", "tx", "notes", "bills", "meals", "countdowns", "board", "alarms", "stars"];
+const checkCol = name => { if (!ALLOWED_COLLECTIONS.includes(name)) throw new Error(`collection "${name}" is not one this connector may touch`); return name; };
+
+const PRONOUNS = ["me", "i", "myself", "mine", "my"];
+// Like the app's Quick add: the grown-ups show as Dad and Mum, and the usual family words find them.
+const ROLE_WORDS = { mum: ["mum", "mom", "mummy", "mama"], dad: ["dad", "daddy", "papa"] };
+/** Everything a person may be called, in lower case: their name, their earlier name (aka), first names, and mum or dad words. */
+export function namesOf(p) {
+  const name = String(p.name ?? "").trim(), aka = String(p.aka ?? "").trim();
+  return [...new Set([name, name.split(/\s+/)[0], aka, aka.split(/\s+/)[0], ...(ROLE_WORDS[name.toLowerCase()] || [])].map(s => s.toLowerCase()).filter(s => s && !PRONOUNS.includes(s)))];
+}
+const akaOf = p => { const aka = String(p.aka ?? "").trim(); return aka && aka.toLowerCase() !== String(p.name ?? "").trim().toLowerCase() && !PRONOUNS.includes(aka.toLowerCase()) ? aka : ""; };
 
 /** A problem with what was asked; the message is shown to Claude so it can fix the request. */
 export class UserError extends Error {}
@@ -30,6 +45,7 @@ export class Family {
   constructor({ cfg, fs, uid, fid, settings, tz }) {
     Object.assign(this, { cfg, fs, uid, fid, settings, tz });
     this.today = todayIn(tz);
+    this.nowTime = nowTimeIn(tz);
     this.peopleRaw = Array.isArray(settings.people) ? settings.people.filter(p => p && typeof p.id === "number") : [];
     const mine = this.peopleRaw.find(p => p.uid === uid);
     this.myPersonId = mine ? mine.id : 0;        // what the app stores in "by"
@@ -38,8 +54,8 @@ export class Family {
     this.categories = Array.isArray(settings.categories) && settings.categories.length ? settings.categories.map(String) : ["Other"];
     this.budgets = settings.budgets && typeof settings.budgets === "object" ? settings.budgets : {};
   }
-  col(name) { return ["families", this.fid, name]; }
-  doc(name, id) { return ["families", this.fid, name, id]; }
+  col(name) { return ["families", this.fid, checkCol(name)]; }
+  doc(name, id) { return ["families", this.fid, checkCol(name), id]; }
 
   /** People in the app's display order (settings.order, else newest first). */
   get people() {
@@ -50,7 +66,10 @@ export class Family {
   get kidId() { const r = this.peopleRaw; return (r[2] || r[r.length - 1])?.id || this.meId; }
   name(id) { if (+id === 0) return "Family"; return this.peopleRaw.find(p => p.id === +id)?.name || "Someone"; }
   get myName() { return this.myPersonId ? this.name(this.myPersonId) : null; }
-  namesList() { return this.people.map(p => p.name + (p.id === this.myPersonId ? " (you)" : "")).join(", "); }
+  /** "Jugo, Mum (also called Akiyo), Dad (you, also called Old)" */
+  namesList({ you = true } = {}) {
+    return this.people.map(p => { const extra = [you && p.id === this.myPersonId ? "you" : "", akaOf(p) ? `also called ${akaOf(p)}` : ""].filter(Boolean); return p.name + (extra.length ? ` (${extra.join(", ")})` : ""); }).join(", ");
+  }
 
   /** Turn "Akiyo", "me", "family", 2 ... into a person id. */
   who(input, { allowFamily = false, fallback } = {}) {
@@ -66,13 +85,15 @@ export class Family {
       if (allowFamily) return 0;
       throw new UserError(`This needs one person, not the whole family. Choose one of: ${this.namesList()}.`);
     }
-    if (["me", "i", "myself", "mine", "my"].includes(s)) return this.meId;
-    const people = this.peopleRaw;
-    const exact = people.filter(p => String(p.name).toLowerCase() === s);
+    if (PRONOUNS.includes(s)) return this.meId;
+    const t = s.replace(/^(?:my|our|the)\s+/, "");            // "my mum" -> "mum"
+    const people = this.peopleRaw.map(p => ({ id: p.id, names: namesOf(p) }));
+    const exact = people.filter(p => p.names.includes(t));
     if (exact.length === 1) return exact[0].id;
-    const starts = people.filter(p => String(p.name).toLowerCase().startsWith(s) || s.startsWith(String(p.name).toLowerCase() + " "));
+    const starts = people.filter(p => p.names.some(n => (t.length >= 2 && n.startsWith(t)) || t.startsWith(n + " ")));
     if (starts.length === 1) return starts[0].id;
-    const word = people.filter(p => s.split(/\s+/).includes(String(p.name).toLowerCase()));
+    const words = t.split(/\s+/);
+    const word = people.filter(p => p.names.some(n => words.includes(n)));
     if (word.length === 1) return word[0].id;
     throw new UserError(`I don't know who "${raw.slice(0, 40)}" is in Happy Home. The family is: ${this.namesList()}${allowFamily ? ', or "Family" for everyone' : ""}.`);
   }

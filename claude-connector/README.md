@@ -1,6 +1,6 @@
 # Happy Home for Claude
 
-A small connector (a remote MCP server) that lets the Claude apps (web, desktop, iPhone and Android) read and add to the family's Happy Home: tasks and chore stars, calendar and weekly activities, homework, the shopping list, spending and budgets, notes, bills, the dinner plan, birthdays and countdowns, and the Family board. You can ask by typing, by talking, or by sending a photo of a receipt, a school newsletter or a handwritten list.
+A small connector (a remote MCP server) that lets the Claude apps (web, desktop, iPhone and Android) read and add to the family's Happy Home: tasks and chore stars, calendar and weekly activities, homework, the shopping list, spending and budgets, notes, bills, the dinner plan, birthdays and countdowns, alarms, and the Family board. You can ask by typing, by talking, or by sending a photo of a receipt, a school newsletter or a handwritten list.
 
 It lives in its own folder and does not change the app. It runs free on Vercel's Hobby plan.
 
@@ -11,21 +11,23 @@ It lives in its own folder and does not change the app. It runs free on Vercel's
 - **It keeps no database.** The sign-in codes and tokens it gives Claude are encrypted with the `HH_SECRET` key and expire. They contain your Happy Home sign-in, so only this server can use them.
 - **It only works with Claude.** Sign-in results are only ever sent back to Claude's own address (`https://claude.ai/api/mcp/auth_callback`), or to an app on your own computer such as Claude Code. PKCE is required.
 - **How to stop it.** Remove the connector in Claude. To cut off every copy at once, change your Happy Home password; within the hour Claude has to sign in again.
-- **What it never touches.** It never reads or writes wallet cards, moods, mood checks, locations, Chinese practice (`learn`), or anyone's private `users/` records.
+- **What it never touches.** It never reads or writes wallet cards, moods, mood checks, locations, Chinese and piano practice (`learn`, `songs`), profile photos (`profiles`), notification settings (`notify`, `pushSubs`), or anyone's private `users/` records. It never changes the family's own settings (names, budgets, members). The code only allows the collections listed in `ALLOWED_COLLECTIONS` in `src/family.js`.
 
 ## Tools Claude gets
 
 | Tool | What it does |
 | --- | --- |
 | `get_overview` | Today's date, the family, Family board messages, overdue and upcoming tasks, the calendar (with weekly activities), homework, dinners, bills due, countdowns, the shopping list, and this month's money |
-| `find_items` | Looks things up and gives their ids: tasks, events, homework, shopping, money, notes, bills, meals, countdowns, board |
+| `find_items` | Looks things up and gives their ids: tasks, events, homework, shopping, money, notes, bills, meals, countdowns, board, alarms |
 | `money_summary` | A month's spending by category against the budgets, the biggest spends, income, bills still to come, and last month's total |
 | `add_items` | Adds any mix of things in one atomic call, for example everything on a newsletter photo |
 | `update_items` | Changes fields on existing items |
 | `mark_done` | Ticks off tasks (gives chore stars and adds the next repeat, like the app), homework and shopping, and marks bills as paid (records the spending and moves the due date on) |
 | `delete_items` | Deletes items, or skips one day of a weekly activity |
 
-Every write uses the same fields, defaults and side effects as the app, including `createdAt` and `by` for the Live feed. Dates are worked out in Australia/Brisbane time.
+Every write uses the same fields, defaults and side effects as the app, including `createdAt` and `by` for the Live feed, `doneAt` when something is ticked off, and `remind` when a particular reminder is asked for. Dates are worked out in Australia/Brisbane time.
+
+People can be named the way the family says them: the name shown in the app (such as Dad or Mum), an earlier name the app keeps as `aka`, or mum, mom, mummy, dad, daddy.
 
 ## Setup (once)
 

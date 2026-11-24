@@ -6,6 +6,9 @@ import { seal, unseal, pkceMatches, sha256base64url } from "../src/crypto.js";
 import { redirectAllowed } from "../src/oauth.js";
 import { handle } from "../src/handler.js";
 import { toValue, fromValue } from "../src/firebase.js";
+import { Family, namesOf, ALLOWED_COLLECTIONS } from "../src/family.js";
+import { TYPE_COLLECTION } from "../src/tools.js";
+import { nowTimeIn } from "../src/dates.js";
 
 const T = "2026-11-24"; // a Tuesday
 const KEY = "Kq7vT2mX9pL4wR8nB3cF6hJ1sD5gZ0yAe"; // a random-looking HH_SECRET for tests
@@ -160,6 +163,37 @@ test("a weak or placeholder HH_SECRET is not accepted", async () => {
     assert.equal((await (await handle(new Request("https://hh.example/health"), { HH_SECRET: good })).json()).ready, true, good);
   }
   assert.equal((await (await handle(new Request("https://hh.example/health"), { HH_SECRET: "your_secret_key_goes_here_123456789" })).json()).ready, false);
+});
+
+test("people are found by the name in the app, an earlier name, or mum and dad words", () => {
+  const settings = { people: [{ id: 1, name: "Dad", aka: "Nyein Chan", uid: "u1" }, { id: 2, name: "Mum", aka: "Akiyo", uid: "u2" }, { id: 3, name: "Jugo", uid: null }], roleNames: 1 };
+  const f = new Family({ cfg: {}, fs: null, uid: "u2", fid: "F", settings, tz: "Australia/Brisbane" });
+  for (const [said, id] of [["Mum", 2], ["mom", 2], ["Mummy", 2], ["my mum", 2], ["Akiyo", 2], ["akiyo's", 2], ["Dad", 1], ["daddy", 1], ["papa", 1], ["Nyein", 1], ["nyein chan", 1], ["Jugo", 3], ["jug", 3], ["me", 2], ["3", 3]]) {
+    assert.equal(f.who(said), id, said);
+  }
+  assert.equal(f.who("family", { allowFamily: true }), 0);
+  assert.throws(() => f.who("Grandma"), /Jugo, Mum \(you, also called Akiyo\), Dad \(also called Nyein Chan\)/);
+  assert.equal(f.name(1), "Dad"); assert.equal(f.myName, "Mum");
+  // An earlier name of "Me" (the app's first default) never steals the word "me" from whoever is signed in.
+  const g = new Family({ cfg: {}, fs: null, uid: "u2", fid: "F", settings: { people: [{ id: 1, name: "Dad", aka: "Me", uid: "u1" }, { id: 2, name: "Mum", aka: "Akiyo", uid: "u2" }] }, tz: "Australia/Brisbane" });
+  assert.equal(g.who("me"), 2); assert.deepEqual(namesOf({ name: "Dad", aka: "Me" }), ["dad", "daddy", "papa"]);
+  assert.doesNotMatch(g.namesList(), /also called Me/);
+  // Families that keep their own names work as before.
+  const h = new Family({ cfg: {}, fs: null, uid: "u1", fid: "F", settings: { people: [{ id: 1, name: "Old", uid: "u1" }, { id: 2, name: "Akiyo" }, { id: 3, name: "Jugo" }] }, tz: "Australia/Brisbane" });
+  assert.equal(h.who("Akiyo"), 2); assert.equal(h.namesList(), "Jugo, Akiyo, Old (you)"); assert.throws(() => h.who("mum"));
+});
+
+test("only the agreed collections can ever be touched", () => {
+  const f = new Family({ cfg: {}, fs: null, uid: "u1", fid: "F", settings: { people: [] }, tz: "Australia/Brisbane" });
+  for (const ok of ["tasks", "events", "homework", "shopping", "tx", "notes", "bills", "meals", "countdowns", "board", "alarms", "stars", "shopFreq"]) assert.deepEqual(f.col(ok), ["families", "F", ok]);
+  for (const never of ["wallet", "moods", "moodSessions", "locations", "learn", "profiles", "notify", "pushSubs", "songs", "users"]) {
+    assert.throws(() => f.col(never), /not one this connector may touch/, never);
+    assert.throws(() => f.doc(never, "x"), /not one this connector may touch/, never);
+  }
+  assert.deepEqual([...ALLOWED_COLLECTIONS].sort(), ["alarms", "bills", "board", "countdowns", "events", "homework", "meals", "notes", "shopFreq", "shopping", "stars", "tasks", "tx"]);
+  // Every type a tool can name maps to an allowed collection.
+  for (const c of Object.values(TYPE_COLLECTION)) assert.ok(ALLOWED_COLLECTIONS.includes(c), c);
+  assert.match(nowTimeIn("Australia/Brisbane", new Date("2026-11-24T14:05:00Z")), /^00:05$/);
 });
 
 test("Vercel entry point is a web fetch handler that keeps the original path", async () => {

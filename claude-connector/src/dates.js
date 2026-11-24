@@ -8,6 +8,13 @@ export function todayIn(tz = DEFAULT_TZ, now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
+/** The time now in the family's time zone, as HH:MM. */
+export function nowTimeIn(tz = DEFAULT_TZ, now = new Date()) {
+  const p = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const get = t => p.find(x => x.type === t)?.value || "00";
+  return `${get("hour")}:${get("minute")}`;
+}
+
 const asDate = s => new Date(s + "T12:00:00Z");
 const iso = d => d.toISOString().slice(0, 10);
 
