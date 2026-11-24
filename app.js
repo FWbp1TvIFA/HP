@@ -98,9 +98,10 @@ function viewHome(){
   const billsDue=billsSorted().filter(b=>b.next&&b.next<=addDays(t,3));
   const dinner=mealOn(t), cds=countdownsSoon(2).filter(c=>daysUntil(c.nd)<=60);
   return `${moodRequestBanner()}${syncNote()}
-  <section class="card qacard"><form id="qaForm" class="quick qa" autocomplete="off"><span class="qaic">${ICON.spark}</span><input id="qa" placeholder="Add anything… e.g. Dentist Fri 3pm" aria-label="Quick add" enterkeyhint="done" autocomplete="off" autocorrect="on">${hasMic?`<button type="button" class="qamic" data-act="voice" aria-label="Speak">${ICON.mic}</button>`:""}<button type="submit">Add</button></form>
+  <section class="card qacard"><form id="qaForm" class="quick qa" autocomplete="off"><span class="qaic">${ICON.spark}</span><input id="qa" placeholder="Add anything…" aria-label="Quick add" enterkeyhint="done" autocomplete="off" autocorrect="on">${hasMic?`<button type="button" class="qamic" data-act="voice" aria-label="Speak">${ICON.mic}</button>`:""}<button type="submit">Add</button></form>
    <div id="qaPrev" class="qaprev" hidden></div><div class="qatip" id="qaTip" ${+(ST._localPref("qaUses")||0)>=3?"hidden":""}>Type or tap the microphone on your keyboard and just say it. The app works out if it's a task, event, shopping or spending.</div></section>
   ${upNext?`<button class="upnext" data-act="edit" data-col="events" data-id="${upNext.id}"><span class="label">Up next · ${tm(upNext.time)}</span><b>${esc(upNext.title)}</b><span>${esc(pname(upNext.who))}${upNext.place?" · "+esc(placeTxt(upNext.place)):""}${(()=>{const [h,m]=upNext.time.split(":").map(Number),d=new Date();d.setHours(h,m,0,0);const mins=Math.round((d-Date.now())/6e4);return mins<=0?" · now":mins<60?" · in "+mins+" min":" · in "+Math.floor(mins/60)+" h "+(mins%60?mins%60+" min":"")})()}</span></button>`:""}
+  ${boardCard()}
   ${billsDue.length?`<section class="card"><div class="row between"><h2>Bills due</h2><button class="link" data-go="bills">All bills</button></div><div class="list" style="margin-top:6px">${billsDue.map(billRow).join("")}</div></section>`:""}
   <section class="card"><div class="row between"><h2>Today's plan</h2><span class="sub">${new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"})}</span></div>
    <div class="list" style="margin-top:6px">${ev.length?ev.map(e=>eventItem(e)).join(""):`<div class="empty">Nothing on the calendar today. Tap + to add an event.</div>`}</div></section>
@@ -119,6 +120,14 @@ function viewHome(){
   </div>
   <section class="card"><div class="row between"><h2>Coming up this week</h2><button class="link" data-go="calendar">Calendar</button></div>
    <div class="list" style="margin-top:6px">${next.length?next.map(e=>eventItem(e,true)).join(""):`<div class="empty">Nothing planned for the next 7 days.</div>`}</div></section>`;
+}
+/* family board: short notes to each other ("Home late tonight", "Jugo has swimming bag?") */
+function boardCard(){
+  const cut=Date.now()-5*864e5,msgs=[...S().board].filter(m=>(m.at||m.createdAt||0)>cut).sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,4);
+  return `<section class="card board"><div class="row between"><h2>Family board</h2><span class="sub">Notes for everyone</span></div>
+   ${msgs.length?`<div class="list" style="margin-top:4px">${msgs.map(m=>{const ack=Object.keys(m.ack||{}).filter(k=>(m.ack||{})[k]).map(Number).filter(i=>i!==+m.who);const mine=+m.who===meId(),iAck=(m.ack||{})[meId()];
+     return row("board",m.id,`${dot(m.who)}<div class="grow"><div class="t bt">${esc(m.text)}</div><div class="m">${esc(pname(m.who))} · ${ago(m.at||m.createdAt)}${ack.length?" · 👍 "+ack.map(i=>esc(pname(i))).join(", "):""}</div></div>${mine?"":`<button class="mini ${iAck?"ghostmini":""}" data-act="boardAck" data-id="${m.id}">${iAck?"👍":"Got it"}</button>`}`)}).join("")}</div>`:""}
+   <form id="boardForm" class="quick" style="margin-top:8px" autocomplete="off"><input id="boardIn" placeholder="${msgs.length?"Reply or post a note…":"e.g. Home late tonight, dinner in the fridge"}" maxlength="200" enterkeyhint="send"><button type="submit">Post</button></form></section>`;
 }
 function syncNote(){
   if(ST.mode==="local")return "";
@@ -482,6 +491,7 @@ function moodTick(){
     else if(all)ST.patch("moodSessions",s.id,{state:"ready"});
   }
 }
+function cleanupBoard(){S().board.filter(m=>+m.who===meId()&&Date.now()-(m.at||m.createdAt||0)>30*864e5).forEach(m=>ST.del("board",m.id))}
 function cleanupMoodSessions(){ // old requests go away after a day
   S().moodSessions.filter(s=>Date.now()-s.createdAt>24*3600e3&&s.starter===meId()).forEach(s=>ST.del("moodSessions",s.id));
 }
@@ -959,7 +969,7 @@ function render(){
     }
     nav.hidden=false;head.hidden=false;
     const keepShop=$("#shopInput"),shopVal=keepShop&&keepShop.value,shopFocus=keepShop&&document.activeElement===keepShop;
-    const keepNote=$("#moodNote"),noteVal=keepNote&&keepNote.value;const keepQ=$("#qa"),qVal=keepQ&&keepQ.value,qFocus=keepQ&&document.activeElement===keepQ;
+    const keepNote=$("#moodNote"),noteVal=keepNote&&keepNote.value;const keepQ=$("#qa"),qVal=keepQ&&keepQ.value,qFocus=keepQ&&document.activeElement===keepQ;const keepB=$("#boardIn"),bVal=keepB&&keepB.value,bFocus=keepB&&document.activeElement===keepB;
     $("#title").textContent=TITLES[tab];
     const me=person(meId());
     $("#subtitle").textContent=tab==="home"?(me?"Hello, "+me.name:""):"";
@@ -967,13 +977,14 @@ function render(){
     const active=parentTab[tab]||tab;
     document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===active));
     if(shopVal&&$("#shopInput"))$("#shopInput").value=shopVal; if(shopFocus&&$("#shopInput"))$("#shopInput").focus();
-    if(noteVal&&$("#moodNote"))$("#moodNote").value=noteVal;if(qVal&&$("#qa")){$("#qa").value=qVal;showQuick()}if(qFocus&&$("#qa"))$("#qa").focus();
+    if(noteVal&&$("#moodNote"))$("#moodNote").value=noteVal;if(qVal&&$("#qa")){$("#qa").value=qVal;showQuick()}if(qFocus&&$("#qa"))$("#qa").focus();if(bVal&&$("#boardIn"))$("#boardIn").value=bVal;if(bFocus&&$("#boardIn"))$("#boardIn").focus();
     bindForms();
   }finally{rendering=false}
 }
 function bindForms(){
   const sf=$("#shopForm");if(sf)sf.onsubmit=e=>{e.preventDefault();const v=$("#shopInput").value.trim();if(!v)return;
     $("#shopInput").value="";v.split(/\s*,\s*/).filter(Boolean).forEach(addShopItem);$("#shopInput").focus()};
+  const bf=$("#boardForm");if(bf)bf.onsubmit=e=>{e.preventDefault();const v=$("#boardIn").value.trim();if(!v)return;ST.add("board",{text:v,who:meId(),at:Date.now(),ack:{}});$("#boardIn").value="";$("#boardIn").blur();toast("Posted for the family")};
   const qf=$("#qaForm");if(qf){const q=$("#qa");q.oninput=showQuick;qf.onsubmit=e=>{e.preventDefault();const v=q.value.trim();if(!v){q.focus();return}
     saveQuick(parseQuick(v));try{ST._localPref("qaUses",String(+(ST._localPref("qaUses")||0)+1))}catch(_){}q.value="";showQuick();q.blur()}}
   const af=$("#authForm");if(af)af.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";const em=$("#a_email").value.trim(),pw=$("#a_pw").value;
@@ -992,7 +1003,7 @@ function voiceAdd(){
     r.onend=()=>{btn&&btn.classList.remove("on");if(q.value.trim())q.focus()};r.start()}
   catch(e){q.focus();toast("Use the microphone on your keyboard instead")}
 }
-function go(t){tab=t;try{history.replaceState(null,"","#"+t)}catch(e){location.hash=t}render();scrollTo(0,0)}
+function go(t){const v=$("#view");if(v&&t!==tab){v.classList.remove("enter");void v.offsetWidth;v.classList.add("enter");clearTimeout(go._t);go._t=setTimeout(()=>v.classList.remove("enter"),400)}tab=t;try{history.replaceState(null,"","#"+t)}catch(e){location.hash=t}render();scrollTo(0,0)}
 
 /* ---------- sheets ---------- */
 function closeSheet(){$("#sheetHost").innerHTML="";document.body.classList.remove("sheet-open")}
@@ -1240,6 +1251,7 @@ document.addEventListener("click",e=>{
     case"shareShop":{const open=S().shopping.filter(x=>!x.done),order=[...AISLES.map(a=>a[0]),"Other"],g={};open.forEach(x=>{const k=x.aisle||aisleOf(x.name);(g[k]=g[k]||[]).push(x)});
       const txt="Shopping list\n"+order.filter(k=>g[k]).map(k=>"\n"+k+"\n"+g[k].map(x=>"• "+x.name+(x.qty?" ("+x.qty+")":"")).join("\n")).join("\n");
       if(navigator.share)navigator.share({title:"Shopping list",text:txt}).catch(()=>{});else{try{navigator.clipboard.writeText(txt).then(()=>toast("List copied"))}catch(_){toast("Couldn't share")}}return}
+    case"boardAck":{const m=S().board.find(x=>x.id===id);if(m)setMapKey("board",id,"ack",meId(),!(m.ack||{})[meId()]);return}
     case"reAdd":addShopItem(a.dataset.k);toast(a.dataset.k+" added");return;
     case"twoStep":return twoStepSheet();
     case"mfaCancel":ST.cancelMfa();authErr="";return render();
@@ -1307,7 +1319,7 @@ document.addEventListener("visibilitychange",()=>{if(document.hidden&&listener.s
 let lastErr=null, prevPhase=null;
 ST.onChange(()=>{
   if(ST.error&&ST.error!==lastErr){toast(ST.error);lastErr=ST.error;setTimeout(()=>{ST.error=null;lastErr=null},4000)}
-  if(ST.phase==="ready"&&prevPhase!=="ready"){if(ST._localPref("shareLoc")==="1")startGeo();cleanupMoodSessions()}
+  if(ST.phase==="ready"&&prevPhase!=="ready"){if(ST._localPref("shareLoc")==="1")startGeo();cleanupMoodSessions();setTimeout(()=>{try{cleanupBoard()}catch(e){}},8000)}
   prevPhase=ST.phase;
   moodTick();render();
 });
