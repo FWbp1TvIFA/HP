@@ -77,7 +77,7 @@ const row=(col,id,inner,done)=>`<div class="swipe" data-col="${col}" data-id="${
 function taskItem(t){return row("tasks",t.id,`${checkBtn(t.done,"toggle",t.id)}<div class="grow tap" data-act="edit" data-col="tasks" data-id="${t.id}"><div class="t">${esc(t.title)}</div><div class="m">${esc(pname(t.who))}${t.repeat&&t.repeat!=="none"?" · "+t.repeat:""}${+t.points>0?` · <span class="star">★ ${+t.points}</span>`:""}</div></div>${duePill(t.due,t.done,t.time)}`,t.done)}
 function hwItem(h){return row("homework",h.id,`${checkBtn(h.done,"toggleHw",h.id)}<div class="grow tap" data-act="edit" data-col="homework" data-id="${h.id}"><div class="t">${esc(h.title)}</div><div class="m">${esc(h.subject)} · ${esc(pname(h.who))}</div></div>${duePill(h.due,h.done,h.time)}`,h.done)}
 function eventItem(e,showDate){return row("events",e.id,`<span class="time">${e.time?tm(e.time):"All day"}</span>${dot(e.who)}<div class="grow tap" data-act="edit" data-col="events" data-id="${e.id}" data-d="${e.date}"><div class="t">${esc(e.title)}${isRep(e)?' <span class="rep" title="Repeats">↻</span>':""}</div><div class="m">${showDate?nice(e.date)+" · ":""}${esc(pname(e.who))}${e.place?" · "+esc(placeTxt(e.place)):""}</div></div>${joinBtn(e)}`).replace('class="swipe"',isRep(e)?'class="swipe" data-occ="'+e.date+'"':'class="swipe"')}
-function txItem(x){const n=x.type==="in"?x.amount:-x.amount;return row("tx",x.id,`${dot(x.who)}<div class="grow"><div class="t">${esc(x.note||x.cat)}</div><div class="m">${esc(x.cat)} · ${nice(x.date)} · ${esc(pname(x.who))}</div></div><span class="num ${n>0?"pos":""}" style="font-weight:600">${money(n,true)}</span>`)}
+function txItem(x){const n=x.type==="in"?x.amount:-x.amount;return row("tx",x.id,`${dot(x.who)}<div class="grow tap" data-act="edit" data-col="tx" data-id="${x.id}"><div class="t">${esc(x.note||x.cat)}</div><div class="m">${esc(x.cat)} · ${nice(x.date)} · ${esc(pname(x.who))}</div></div><span class="num ${n>0?"pos":""}" style="font-weight:600">${money(n,true)}</span>`)}
 const sortTasks=a=>a.sort((x,y)=>(!!x.done-!!y.done)||((x.due||"9")+(x.time||"99")>(y.due||"9")+(y.time||"99")?1:-1));
 const sortEv=a=>a.sort((x,y)=>(x.date+(x.time||"00:00")).localeCompare(y.date+(y.time||"00:00")));
 /* weekly activities: one event with repeat:"weekly", days:[0-6 Sun..Sat], optional until and skip dates */
@@ -94,6 +94,8 @@ const swipeHint=()=>`<div class="hint">Swipe left on a row to delete it</div>`;
 
 /* ---------- Today ---------- */
 const lw=()=>listWho==="mine"?String(viewId()):listWho;
+/* "Yours first" falls back to everyone when you have nothing of your own in that list (a parent opening Homework) */
+const lwFor=col=>listWho==="mine"&&!S()[col].some(x=>x.who==viewId())?"all":lw();
 /* the person whose profile is showing gets their things first, the rest of the family after */
 function mineFirst(arr,item){
   const v=viewId(),a=arr.filter(x=>+x.who===v),b=arr.filter(x=>+x.who!==v);
@@ -187,14 +189,14 @@ function viewCalendar(){
 }
 
 /* ---------- Lists ---------- */
-function whoChips(){return `<div class="chips">${[["all","Everyone"],...people().map(p=>[String(p.id),p.name])].map(([k,n])=>`<button class="chip ${lw()==k?"on":""}" data-act="who" data-k="${k}">${esc(n)}</button>`).join("")}</div>`}
+function whoChips(col){const cur=col?lwFor(col):lw();return `<div class="chips">${[["all","Everyone"],...people().map(p=>[String(p.id),p.name])].map(([k,n])=>`<button class="chip ${cur==k?"on":""}" data-act="who" data-k="${k}">${esc(n)}</button>`).join("")}</div>`}
 function viewLists(){
   const seg=`<div class="seg sticky">${[["tasks","Tasks"],["shopping","Shopping"],["homework","Homework"]].map(([k,n])=>`<button class="${listTab===k?"on":""}" data-act="listTab" data-k="${k}">${n}</button>`).join("")}</div>`;
   let body="";
   if(listTab==="tasks"){
-    const list=sortTasks(S().tasks.filter(t=>lw()==="all"||t.who==lw()));
+    const tw=lwFor("tasks"),list=sortTasks(S().tasks.filter(t=>tw==="all"||t.who==tw));
     const open=list.filter(t=>!t.done),done=list.filter(t=>t.done);
-    body=`${whoChips()}${scoreboard()}<section class="card"><h2>To do <span class="sub">(${open.length})</span></h2><div class="list" style="margin-top:6px">${open.length?open.map(taskItem).join(""):`<div class="empty">Nothing to do. Tap + to add a task or chore.</div>`}</div></section>
+    body=`${whoChips("tasks")}${scoreboard()}<section class="card"><h2>To do <span class="sub">(${open.length})</span></h2><div class="list" style="margin-top:6px">${open.length?open.map(taskItem).join(""):`<div class="empty">Nothing to do. Tap + to add a task or chore.</div>`}</div></section>
     ${list.length?swipeHint():""}
     ${done.length?`<section class="card"><div class="row between"><h2>Done</h2><button class="link" data-act="clearDone">Clear done</button></div><div class="list" style="margin-top:6px">${done.map(taskItem).join("")}</div></section>`:""}`;
   }
@@ -210,9 +212,9 @@ function viewLists(){
     ${got.length?`<section class="card"><div class="row between"><h2>In the trolley</h2><button class="link" data-act="newWeek">Start new week</button></div><div class="list" style="margin-top:6px">${got.map(item).join("")}</div></section>`:""}`;
   }
   if(listTab==="homework"){
-    const list=sortTasks(S().homework.filter(h=>lw()==="all"||h.who==lw()));
+    const hw=lwFor("homework"),list=sortTasks(S().homework.filter(h=>hw==="all"||h.who==hw));
     const open=list.filter(h=>!h.done),done=list.filter(h=>h.done);
-    body=`${whoChips()}<section class="card"><h2>Homework to do <span class="sub">(${open.length})</span></h2><div class="list" style="margin-top:6px">${open.length?open.map(hwItem).join(""):`<div class="empty">No homework due. Tap + to add some.</div>`}</div></section>
+    body=`${whoChips("homework")}<section class="card"><h2>Homework to do <span class="sub">(${open.length})</span></h2><div class="list" style="margin-top:6px">${open.length?open.map(hwItem).join(""):`<div class="empty">No homework due. Tap + to add some.</div>`}</div></section>
     ${done.length?`<section class="card"><div class="row between"><h2>Finished</h2><button class="link" data-act="clearHw">Clear finished</button></div><div class="list" style="margin-top:6px">${done.map(hwItem).join("")}</div></section>`:""}`;
   }
   return seg+body;
@@ -1468,14 +1470,14 @@ function addSheet(kind,preset,edit){
   if(kind==="note")body=`<div class="field"><label for="f_title">Title</label><input id="f_title" placeholder="e.g. Holiday ideas"></div>
    <div class="field"><label for="f_body">Note</label><textarea id="f_body" class="body" rows="7"></textarea></div>`;
   if(kind==="task"||kind==="homework"||kind==="event")body+=remindSelect(edit?edit.remind:null,kind==="event"?+nprefs().ev:0);
-  openSheet(`${sheetHead(edit?{task:"Edit task",homework:"Edit homework",event:"Edit event"}[kind]:"Add")}${edit?"":pick}<form id="f" class="stack" style="gap:12px">${body}<button class="primary" type="submit">Save</button>${edit?`<button type="button" class="link" id="f_del" style="color:var(--bad);align-self:center">Delete</button>`:""}</form>`,sh=>{
+  openSheet(`${sheetHead(edit?{task:"Edit task",homework:"Edit homework",event:"Edit event",money:"Edit money entry"}[kind]:"Add")}${edit?"":pick}<form id="f" class="stack" style="gap:12px">${body}<button class="primary" type="submit">Save</button>${edit?`<button type="button" class="link" id="f_del" style="color:var(--bad);align-self:center">Delete</button>`:""}</form>`,sh=>{
     sh.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>addSheet(b.dataset.kind,preset));
     if(edit){const set=(id,val)=>{const el=sh.querySelector("#"+id);if(el&&val!=null)el.value=val};
       set("f_title",edit.title);set("f_who",edit.who);set("f_due",edit.due);set("f_time",edit.time||"");set("f_rep",kind==="event"?"0":(edit.repeat||"none"));set("f_subj",edit.subject);set("f_date",edit.date);set("f_place",edit.place||"");set("f_pts",String(+edit.points||0));
       if(kind==="event"){const b=document.createElement("button");b.type="button";b.className="ghost";b.textContent="Add to iPhone Calendar";b.onclick=()=>{exportEvent(edit);toast("Opening Calendar…")};sh.querySelector("#f_del").before(b);
         if(isRep(edit)&&preset.occ){const o=document.createElement("button");o.type="button";o.className="link";o.style.alignSelf="center";o.textContent="Skip just "+nice(preset.occ);o.onclick=()=>{ST.patch("events",edit.id,{skip:[...(edit.skip||[]),preset.occ]});closeSheet();toast("Skipped "+nice(preset.occ))};sh.querySelector("#f_del").before(o);sh.querySelector("#f_del").textContent="Delete every week"}}
       if((kind==="task"||kind==="homework")&&edit.due){const b=document.createElement("button");b.type="button";b.className="ghost";b.textContent="Add to iPhone Calendar";b.onclick=()=>{exportEvent({id:edit.id,title:(kind==="homework"?(edit.subject||"Homework")+": ":"")+edit.title,date:edit.due,time:edit.time||"",place:"",repeat:"none",remind:edit.remind==null?0:edit.remind});toast("Opening Calendar…")};sh.querySelector("#f_del").before(b)}
-      const col={task:"tasks",homework:"homework",event:"events"}[kind],d=sh.querySelector("#f_del");
+      const col={task:"tasks",homework:"homework",event:"events",money:"tx"}[kind],d=sh.querySelector("#f_del");
       d.onclick=()=>{if(d.dataset.arm){closeSheet();delUndo(col,edit.id);render()}else{d.dataset.arm=1;d.textContent="Tap again to delete"}};}
     if(kind==="event"){const rs=sh.querySelector("#f_erep"),df=sh.querySelector("#f_daysf"),uf=sh.querySelector("#f_untilf"),dp=sh.querySelectorAll("[data-day]");
       const on=new Set(edit&&isRep(edit)?edit.days:[]);const paint=()=>dp.forEach(b=>b.classList.toggle("on",on.has(+b.dataset.day)));
@@ -1484,11 +1486,14 @@ function addSheet(kind,preset,edit){
       if(edit&&isRep(edit)){rs.value="weekly";sh.querySelector("#f_until").value=edit.until||""}else if(preset.days){rs.value="weekly"}
       paint();sync();sh._days=on}
     let type="out";
+    if(edit&&kind==="money"){type=edit.type==="in"?"in":"out";sh.querySelectorAll("#f_type button").forEach(x=>x.classList.toggle("on",x.dataset.t===type));
+      const cs=sh.querySelector("#f_cat");if(edit.cat&&![...cs.options].some(o=>o.value===edit.cat)){const o=document.createElement("option");o.textContent=edit.cat;cs.append(o)}
+      cs.value=edit.cat||cs.value;sh.querySelector("#f_amt").value=edit.amount;sh.querySelector("#f_note").value=edit.note||""}
     sh.querySelectorAll("#f_type button").forEach(b=>b.onclick=()=>{type=b.dataset.t;sh.querySelectorAll("#f_type button").forEach(x=>x.classList.toggle("on",x===b));sh.querySelector("#f_cat").value=type==="in"?"Salary":cats[0]});
     const first=sh.querySelector("#f_subj,#f_title,#f_amt");if(!edit&&first)first.focus();
     sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const v=id=>(sh.querySelector("#"+id)?.value??""),rem=()=>v("f_rem")===""?null:+v("f_rem");
       if(kind==="task"){if(!v("f_title").trim())return;const rec={title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time"),repeat:v("f_rep"),points:+v("f_pts")||0,remind:rem()};if(edit){ST.patch("tasks",edit.id,rec);toast("Task updated")}else{ST.add("tasks",{...rec,done:false});toast("Task added")}}
-      if(kind==="money"){const a=parseFloat(v("f_amt"));if(!(a>0))return;ST.add("tx",{type,amount:Math.round(a*100)/100,cat:v("f_cat"),who:+v("f_who"),date:v("f_date")||TODAY(),note:v("f_note").trim()});moneyMonth=monthKey(v("f_date")||TODAY());toast(type==="in"?"Income added":"Spending added")}
+      if(kind==="money"){const a=parseFloat(v("f_amt"));if(!(a>0))return;const rec={type,amount:Math.round(a*100)/100,cat:v("f_cat"),who:+v("f_who"),date:v("f_date")||TODAY(),note:v("f_note").trim()};if(edit){ST.patch("tx",edit.id,rec);toast("Entry updated")}else{ST.add("tx",rec);toast(type==="in"?"Income added":"Spending added")}moneyMonth=monthKey(rec.date)}
       if(kind==="event"){if(!v("f_title").trim())return;const d0=v("f_date")||TODAY(),wk=v("f_erep")==="weekly"&&sh._days.size;
         const rec={title:v("f_title").trim(),who:+v("f_who"),date:d0,time:v("f_time"),place:v("f_place").trim(),repeat:wk?"weekly":"none",days:wk?[...sh._days].sort():[],until:wk?v("f_until"):"",remind:rem()};
         if(edit){ST.patch("events",edit.id,rec);toast(wk?"Activity updated":"Event updated")}else{ST.add("events",{...rec,skip:[]});toast(wk?repText(rec)+(rec.time?" at "+tm(rec.time):""):"Event added")}
@@ -1702,7 +1707,7 @@ document.addEventListener("click",e=>{
     case"reAdd":addShopItem(a.dataset.k);toast(a.dataset.k+" added");return;
     case"twoStep":return twoStepSheet();
     case"mfaCancel":ST.cancelMfa();authErr="";return render();
-    case"edit":{closeSheet();const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event"}[col],{occ:a.dataset.d},r);return}
+    case"edit":{closeSheet();const col=a.dataset.col,r=S()[col].find(x=>x.id===id);if(r)addSheet({tasks:"task",homework:"homework",events:"event",tx:"money"}[col],{occ:a.dataset.d},r);return}
     case"swipeDel":{const w=a.closest(".swipe");if(w.dataset.occ){const e=S().events.find(x=>x.id===w.dataset.id);if(e){const d=w.dataset.occ,old=e.skip||[];ST.patch("events",e.id,{skip:[...old,d]});toast("Removed for "+nice(d),"Undo",()=>ST.patch("events",e.id,{skip:old}))}return}delUndo(w.dataset.col,w.dataset.id);return}
     case"toggle":{const t=S().tasks.find(x=>x.id===id);if(!t)return;const was=!!t.done,snap={...t};ST.patch("tasks",id,{done:!was,doneAt:was?null:Date.now()});if(was)takeStars(snap);if(!was){party();giveStars(snap);toast(+snap.points>0?`Done! ★ ${+snap.points} for ${pname(snap.who)}`:"Done!");if(snap.repeat&&snap.repeat!=="none"&&!snap.rolled){ST.patch("tasks",id,{rolled:true});rollRepeat(snap)}}return}
     case"toggleHw":return void flip("homework","Homework finished!");
@@ -1742,7 +1747,7 @@ document.addEventListener("click",e=>{
       ST.add("moods",{person:meId(),mood:m,note:"Family check: "+s.result.label,date:TODAY(),at:Date.now()});setMapKey("moodSessions",id,"seen",meId(),true);toast("Shared");return}
     case"authMode":authMode=a.dataset.k;authErr="";break;
     case"forgot":{const em=$("#a_email")?.value.trim();if(!em){authErr="Type your email above first, then tap Forgot password.";break}ST.resetPassword(em).then(()=>toast("Check your email for a reset link"),err=>{authErr=authErrorText(err);render()});return}
-    case"signOut":closeSheet();stopGeo(false);ST.signOut();return;
+    case"signOut":closeSheet();stopGeo(false);authMode="signin";authErr="";ST.signOut();return;
     case"claim":ST.claimPerson(a.dataset.k);return;
     default:return;
   }
