@@ -50,7 +50,7 @@ const hidden = (name, value) => `<input type="hidden" name="${esc(name)}" value=
 export function signInPage({ req, clientLabel, email = "", error = "" }) {
   return page("Connect Claude to Happy Home", `
 <h1>Connect Claude to Happy Home</h1>
-<div class="who">${esc(clientLabel)} wants to use your family's Happy Home.</div>
+<div class="who">${esc(clientLabel)} wants to use your family's Happy Home. Only carry on if you just tapped <b>Connect</b> in Claude yourself. If someone sent you this link, close it.</div>
 <div class="card">
 <form method="post" action="/authorize" autocomplete="on">
 ${hidden("req", req)}${hidden("step", "password")}
@@ -68,7 +68,7 @@ ${error ? `<p class="err" role="alert">${esc(error)}</p>` : ""}
 <ul><li>See and add tasks, calendar, homework, shopping, spending, notes, bills, dinners and birthdays.</li>
 <li>Tick things off, change them, and delete them when you ask.</li>
 <li>It acts as you, so it can only reach your own family. It doesn't use wallet cards, moods or locations.</li>
-<li>Your password goes straight to Happy Home's sign-in and is never stored. To stop it, remove the connector in Claude or change your password.</li></ul>
+<li>Your password goes straight to Happy Home's sign-in and is never stored. Removing the connector in Claude stops Claude. To cut off every connection at once, change your Happy Home password.</li></ul>
 </div>`);
 }
 
@@ -96,7 +96,8 @@ export function homePage({ base, ready, appUrl, nonce }) {
   const mcp = `${base}/mcp`;
   const status = ready
     ? `<p class="ok">✓ Ready to connect</p>`
-    : `<p class="err">Setup isn't finished: this server needs its secret key. In Vercel open this project, Settings, Environment Variables, add <b>HH_SECRET</b> with the long random text from your setup guide, then Deployments, ⋯, Redeploy.</p>`;
+    : `<p class="err">Setup isn't finished: this server needs its own secret key. In Vercel open this project, then <b>Settings</b>, <b>Environment Variables</b>. Add the name <b>HH_SECRET</b> with the value below (made just now on your phone, so only you have it). Then <b>Deployments</b>, <b>⋯</b>, <b>Redeploy</b>.</p>
+<div class="addr"><code id="key">…</code><button class="primary" type="button" id="copykey">Copy</button></div>`;
   return page("Happy Home for Claude", `
 <h1>Use Happy Home from Claude</h1>
 <p>Ask Claude by typing, talking or sending a photo, and it adds to your family's Happy Home: “add milk and eggs to shopping”, “what's on this week?”, or a photo of a receipt or school newsletter.</p>
@@ -113,6 +114,6 @@ export function homePage({ base, ready, appUrl, nonce }) {
 </div>
 <p class="foot"><a href="${esc(appUrl)}" style="color:inherit">Open Happy Home</a></p>`, {
     nonce,
-    script: `document.getElementById("copy").onclick=async e=>{try{await navigator.clipboard.writeText(document.getElementById("addr").textContent);e.target.textContent="Copied"}catch(_){const r=document.createRange();r.selectNodeContents(document.getElementById("addr"));const s=getSelection();s.removeAllRanges();s.addRange(r)}}`,
+    script: `const copy=(b,id)=>{const el=document.getElementById(b);if(el)el.onclick=async e=>{const t=document.getElementById(id);try{await navigator.clipboard.writeText(t.textContent);e.target.textContent="Copied"}catch(_){const r=document.createRange();r.selectNodeContents(t);const s=getSelection();s.removeAllRanges();s.addRange(r)}}};copy("copy","addr");copy("copykey","key");const k=document.getElementById("key");if(k){const a="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";let o="";while(o.length<40)for(const x of crypto.getRandomValues(new Uint8Array(64)))if(x<224&&o.length<40)o+=a[x%56];k.textContent=o}`,
   });
 }

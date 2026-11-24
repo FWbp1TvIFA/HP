@@ -11,9 +11,29 @@ const CODE_TTL = 300, REQ_TTL = 1800, MFA_TTL = 600, CLIENT_TTL = 10 * 365 * 24 
 export const SCOPE = "family";
 const SCOPES = [SCOPE, "offline_access"];
 // Claude's published client identity (Client ID Metadata Document). Its only return
-// address is https://claude.ai/api/mcp/auth_callback (and loopback for Claude Code),
-// which redirectAllowed() already enforces.
+// address is Claude's own callback, so that is the only one allowed with this id.
 const CLAUDE_CIMD = /^https:\/\/claude\.ai\/oauth\/[A-Za-z0-9_\-\/]{1,120}$/;
+const isClaudeCallback = uri => { try { const u = new URL(uri); return u.protocol === "https:" && !u.port && !u.search && !u.hash && (u.hostname === "claude.ai" || u.hostname === "claude.com") && u.pathname === "/api/mcp/auth_callback"; } catch { return false; } };
+const isLoopback = uri => /^http:/i.test(uri);
+
+/** The addresses this server answers MCP on. A token is only issued for one of these (RFC 8707),
+ *  so another MCP server can't point Claude at this sign-in and collect Happy Home tokens. */
+export function resourceAllowed(resource, base) {
+  if (resource === undefined || resource === null || resource === "") return true;   // older clients don't send it
+  const r = String(resource).replace(/\/+$/, "");
+  return r === base || r === base + "/mcp" || r === base + "/sse";
+}
+
+// Best-effort single use of sign-in codes on a warm server (codes also expire after 5 minutes).
+const usedCodes = new Map();
+function firstUse(code) {
+  const now = Date.now();
+  for (const [k, exp] of usedCodes) if (exp < now) usedCodes.delete(k);
+  if (usedCodes.has(code)) return false;
+  if (usedCodes.size > 5000) usedCodes.clear();
+  usedCodes.set(code, now + CODE_TTL * 1000);
+  return true;
+}
 
 /** Where Claude may send people back to after sign-in. Anything else is refused. */
 export function redirectAllowed(uri, env = {}) {
@@ -31,7 +51,7 @@ function clientLabel(uri) {
   try {
     const u = new URL(uri);
     if (u.hostname === "claude.ai" || u.hostname === "claude.com") return `Claude (${u.hostname})`;
-    if (u.protocol === "http:") return "An app on this computer (such as Claude Code)";
+    if (u.protocol === "http:") return "An app on this device (such as Claude Code on a computer)";
     return u.hostname;
   } catch { return "An app"; }
 }
@@ -50,6 +70,7 @@ export function authorizationServerMetadata(base) {
     response_modes_supported: ["query"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
+    authorization_response_iss_parameter_supported: true,
     token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
     client_id_metadata_document_supported: true,
     scopes_supported: SCOPES,
@@ -93,7 +114,7 @@ export async function register(request, env) {
 
 async function clientRedirects(env, clientId) {
   if (clientId.startsWith("hhc_")) { const c = await unseal(env.HH_SECRET, "client", clientId); return c ? { known: true, uris: c.r } : null; }
-  if (CLAUDE_CIMD.test(clientId)) return { known: false, uris: null }; // Claude's published identity: rely on the return-address list
+  if (CLAUDE_CIMD.test(clientId)) return { known: true, uris: null, claude: true }; // Claude's published identity: Claude's callback only
   return null;
 }
 
@@ -103,7 +124,7 @@ const back = (uri, params) => { const u = new URL(uri); for (const [k, v] of Obj
 const startAgain = "Go back to Claude and tap Connect again.";
 
 /* ---------------- /authorize ---------------- */
-export async function authorize(request, env, cfg) {
+export async function authorize(request, env, cfg, base) {
   if (request.method === "GET" || request.method === "HEAD") {
     const p = new URL(request.url).searchParams;
     const clientId = p.get("client_id") || "", redirectUri = p.get("redirect_uri") || "", state = p.get("state") || "";
@@ -111,11 +132,16 @@ export async function authorize(request, env, cfg) {
     if (!redirectAllowed(redirectUri, env)) return html(messagePage("Not allowed", `This Happy Home connector only signs in for Claude, so it won't send your sign-in to ${redirectUri.slice(0, 120)}.`), 400);
     const client = await clientRedirects(env, clientId);
     if (!client) return html(messagePage("Please reconnect", `Claude's registration with Happy Home isn't valid. In Claude, remove the Happy Home connector and add it again, leaving the sign-in options as they are (don't enter your own OAuth client).`), 400);
-    if (client.known && !client.uris.includes(redirectUri)) return html(messagePage("Not allowed", "That return address wasn't registered by this app."), 400);
-    if (state.length > 1000) return back(redirectUri, { error: "invalid_request", error_description: "state too long" });
-    if (p.get("response_type") !== "code") return back(redirectUri, { error: "unsupported_response_type", state });
+    if (client.claude ? !isClaudeCallback(redirectUri) : !client.uris.includes(redirectUri)) return html(messagePage("Not allowed", "That return address wasn't registered by this app."), 400);
+    // Problems found before sign-in go back to Claude; for an app on this computer, show them here instead
+    // of sending the browser to a local address someone else chose.
+    const fail = params => isLoopback(redirectUri) ? html(messagePage("Can't connect", params.error_description || params.error), 400) : back(redirectUri, { ...params, iss: base });
+    if (state.length > 1000) return fail({ error: "invalid_request", error_description: "state too long" });
+    if (p.get("response_type") !== "code") return fail({ error: "unsupported_response_type", error_description: "Only response_type=code is supported.", state });
     const challenge = p.get("code_challenge") || "";
-    if (p.get("code_challenge_method") !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(challenge)) return back(redirectUri, { error: "invalid_request", error_description: "PKCE with S256 is required", state });
+    if (p.get("code_challenge_method") !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(challenge)) return fail({ error: "invalid_request", error_description: "PKCE with S256 is required", state });
+    const resource = p.getAll("resource");
+    if (resource.length > 1 || !resourceAllowed(resource[0], base)) return fail({ error: "invalid_target", error_description: `This sign-in only gives access to ${base}/mcp.`, state });
     const req = await seal(env.HH_SECRET, "req", { c: clientId, r: redirectUri, s: state, k: challenge }, REQ_TTL);
     return html(signInPage({ req, clientLabel: clientLabel(redirectUri) }));
   }
@@ -126,7 +152,7 @@ export async function authorize(request, env, cfg) {
   if (!q || !redirectAllowed(q.r, env)) return html(messagePage("This page has expired", `For your safety the sign-in page only lasts 30 minutes. ${startAgain}`), 400);
   const label = clientLabel(q.r);
 
-  if (form.step === "cancel") return back(q.r, { error: "access_denied", error_description: "The person cancelled", state: q.s });
+  if (form.step === "cancel") return back(q.r, { error: "access_denied", error_description: "The person cancelled", state: q.s, iss: base });
 
   let signed;
   if (form.step === "code") {
@@ -168,14 +194,15 @@ export async function authorize(request, env, cfg) {
     throw e;
   }
   const code = await seal(env.HH_SECRET, "code", { u: signed.uid, t: signed.refreshToken, k: q.k, r: q.r, c: q.c }, CODE_TTL);
-  return back(q.r, { code, state: q.s });
+  return back(q.r, { code, state: q.s, iss: base });
 }
 
 /* ---------------- /token ---------------- */
-export async function token(request, env, cfg) {
+export async function token(request, env, cfg, base) {
   if (request.method !== "POST") return oauthError("invalid_request", "Use POST.", 405);
   const p = await readParams(request);
   if (!p) return oauthError("invalid_request", "Couldn't read the request.");
+  if (Array.isArray(p.resource) || !resourceAllowed(p.resource, base)) return oauthError("invalid_target", `Tokens are only issued for ${base}/mcp.`);
   let uid, firebaseRefresh;
   if (p.grant_type === "authorization_code") {
     const c = await unseal(env.HH_SECRET, "code", p.code);
@@ -183,6 +210,7 @@ export async function token(request, env, cfg) {
     if (!(await pkceMatches(p.code_verifier, c.k))) return oauthError("invalid_grant", "PKCE check failed.");
     if (p.redirect_uri && p.redirect_uri !== c.r) return oauthError("invalid_grant", "redirect_uri doesn't match.");
     if (p.client_id && p.client_id !== c.c) return oauthError("invalid_grant", "client_id doesn't match.");
+    if (!firstUse(p.code)) return oauthError("invalid_grant", "This sign-in code has already been used.");
     uid = c.u; firebaseRefresh = c.t;
   } else if (p.grant_type === "refresh_token") {
     const r = await unseal(env.HH_SECRET, "refresh", p.refresh_token);
@@ -198,7 +226,7 @@ export async function token(request, env, cfg) {
     firebaseRefresh = fresh.refreshToken || firebaseRefresh;
   } catch (e) {
     if (e instanceof SignInExpiredError) return oauthError("invalid_grant", "The Happy Home sign-in has ended (for example the password was changed). Please connect again.");
-    if (e instanceof DataError) return oauthError("temporarily_unavailable", e.message, 503);
+    if (e instanceof DataError) { if (p.grant_type === "authorization_code") usedCodes.delete(p.code); return oauthError("temporarily_unavailable", e.message, 503); }
     throw e;
   }
   return jsonRes(200, {

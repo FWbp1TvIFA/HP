@@ -3,7 +3,7 @@
 import { UserError } from "./family.js";
 import { parseDate, parseTime, niceDate, niceTime, longDate, addDays, addOneMonthLikeApp, nextDue, countdownNext, daysBetween, isISODate, UserInputError } from "./dates.js";
 import { newId } from "./crypto.js";
-import { safeId } from "./firebase.js";
+import { safeId, MAX_WRITES } from "./firebase.js";
 
 /* ---------------- shared bits ---------------- */
 export const TYPE_COLLECTION = { tasks: "tasks", events: "events", homework: "homework", shopping: "shopping", money: "tx", notes: "notes", bills: "bills", meals: "meals", countdowns: "countdowns", board: "board" };
@@ -19,7 +19,7 @@ const wrap = fn => { try { return fn(); } catch (e) { if (e instanceof UserInput
 const text = (v, max, label) => {
   if (v === undefined || v === null) return "";
   if (typeof v !== "string" && typeof v !== "number") throw new UserError(`${label || "Text"} must be text.`);
-  const s = String(v).replace(/\s+$/g, "").replace(/^\s+/g, "");
+  const s = String(v).trim();
   if (s.length > max) throw new UserError(`${label || "Text"} is too long (${s.length} characters, the most is ${max}).`);
   return s;
 };
@@ -57,9 +57,9 @@ function weekdays(v) {
   const out = [];
   for (const raw of arr) {
     if (raw === "" || raw === null || raw === undefined) continue;
-    if (typeof raw === "number" && raw >= 0 && raw <= 6) { out.push(raw); continue; }
-    const k = String(raw).trim().toLowerCase().slice(0, 3);
-    if (!(k in DAY_INDEX)) throw new UserError(`"${raw}" isn't a day of the week. Use Mon, Tue, Wed, Thu, Fri, Sat or Sun.`);
+    if (Number.isInteger(raw) && raw >= 0 && raw <= 6) { out.push(raw); continue; }
+    const k = typeof raw === "number" ? "" : String(raw).trim().toLowerCase().slice(0, 3);
+    if (!(k in DAY_INDEX)) throw new UserError(`"${String(raw).slice(0, 40)}" isn't a day of the week. Use Mon, Tue, Wed, Thu, Fri, Sat or Sun.`);
     out.push(DAY_INDEX[k]);
   }
   return [...new Set(out)].sort();
@@ -209,7 +209,7 @@ async function findItems(f, args) {
   else if (type === "shopping") rows.sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || (a.createdAt || 0) - (b.createdAt || 0));
   else if (field) rows.sort((a, b) => String(a[field] || "9999").localeCompare(String(b[field] || "9999")) || (a.time || "99").localeCompare(b.time || "99"));
   const c = cap(rows, limit);
-  const full = type === "notes" && (rows.length <= 5 || !!search);
+  const full = type === "notes" && c.shown.length <= 5;   // whole notes only for a few; otherwise previews keep the reply small
   const what = { tasks: includeDone ? "tasks" : "open tasks", homework: includeDone ? "homework items" : "homework items still to do", shopping: includeDone ? "shopping items" : "items on the shopping list", notes: "notes", bills: "bills", meals: "planned dinners", countdowns: "countdowns" }[type];
   return rows.length ? `${rows.length} ${what}${search ? ` matching "${search}"` : ""}:\n${bullets(c.shown.map(x => show(f, type, x, { full })), c.more)}` : `No ${what}${search ? ` matching "${search}"` : ""}.`;
 }
@@ -345,7 +345,7 @@ async function addItems(f, args) {
     const date = dateArg(m.date, f, f.today);
     if (mealDates.has(date)) throw new UserError(`two dinners for ${date}; one per night.`);
     mealDates.add(date);
-    const ing = Array.isArray(m.ingredients) ? m.ingredients.map(x => text(x, 120, "Ingredient")).filter(Boolean).slice(0, 60) : (m.ingredients ? String(m.ingredients).split(/\s*[,\n]\s*/).map(x => x.trim()).filter(Boolean).slice(0, 60) : []);
+    const ing = (Array.isArray(m.ingredients) ? m.ingredients : String(m.ingredients || "").split(/\s*[,\n]\s*/)).slice(0, 200).map(x => text(x, 120, "Ingredient")).filter(Boolean).slice(0, 60);
     const rec = { title, ingredients: ing, cook: m.cook === undefined || m.cook === null || m.cook === "" ? 0 : f.who(m.cook, { allowFamily: true, fallback: 0 }), date, updated: now };
     writes.push(f.fs.set(f.doc("meals", date), rec)); done.push("Dinner: " + show(f, "meals", { ...rec, id: date }));
     if (args.add_meal_ingredients_to_shopping === true) for (const x of ing) addShop(x, "", "for " + title);
@@ -367,6 +367,7 @@ async function addItems(f, args) {
   });
 
   if (problems.length) throw new UserError(`Nothing was added, because:\n${bullets(problems)}\nFix these and try again.`);
+  if (writes.length > MAX_WRITES) throw new UserError(`That's too much to save in one go (${writes.length} changes, mostly from meal ingredients going on the shopping list). Nothing was added. Please add it in two or three smaller calls.`);
   await f.fs.commit(writes);
   return `Added to Happy Home (it shows in the app straight away):\n${bullets(done)}`;
 }
@@ -486,6 +487,7 @@ async function markDone(f, args) {
   docs.forEach(x => {
     const path = f.doc(TYPE_COLLECTION[type], x.id);
     if (type === "bills") {
+      if (x.lastPaid === f.today) { out.push(`${x.name} was already marked paid today, so nothing was added. Next one due ${niceDate(x.next, f.today)}.`); return; }
       const due = x.next || f.today, every = EVERY.includes(x.every) ? x.every : "month";
       writes.push(f.fs.set(f.doc("tx", `bill-${x.id}-${due}`), { type: "out", amount: +x.amount || 0, cat: x.cat || "Bills", who: x.who || f.meId, date: f.today, note: x.name, createdAt: now, by: f.meId }));
       let n = nextDue(due, every); while (n <= f.today) n = nextDue(n, every);
@@ -642,7 +644,7 @@ export function toolDefinitions(f) {
       inputSchema: { type: "object", required: ["type", "ids"], additionalProperties: false, properties: {
         type: type(["tasks", "homework", "shopping", "bills"]), ids: { type: "array", items: { type: "string" } },
         done: { type: "boolean", description: "true to tick off (default), false to untick." } } },
-      annotations: { title: "Tick off", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, run: markDone,
+      annotations: { title: "Tick off", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, run: markDone,
     },
     {
       name: "delete_items", title: "Delete items",

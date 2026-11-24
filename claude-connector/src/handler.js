@@ -1,6 +1,6 @@
 // One entry point for every request: route by path.
 import { firebaseSettings, SignInExpiredError, forgetIdToken } from "./firebase.js";
-import { MIN_SECRET_LENGTH } from "./crypto.js";
+import { secretOk } from "./crypto.js";
 import { protectedResourceMetadata, authorizationServerMetadata, register, authorize, token, bearerSession } from "./oauth.js";
 import { handleMcp, SERVER_VERSION } from "./mcp.js";
 import { homePage, messagePage } from "./pages.js";
@@ -36,7 +36,7 @@ async function route(request, env) {
   if (forwarded !== null && (path === "/api" || path.startsWith("/api/index"))) path = "/" + forwarded.replace(/^\/+/, "");
   path = path.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
   const base = publicBase(request, env);
-  const ready = typeof env.HH_SECRET === "string" && env.HH_SECRET.length >= MIN_SECRET_LENGTH;
+  const ready = secretOk(env.HH_SECRET);
   const cfg = firebaseSettings(env);
   const method = request.method;
 
@@ -65,9 +65,9 @@ async function route(request, env) {
   if (path === "/register") { if (!ready) return withCors(notReady()); return withCors(method === "POST" ? await register(request, env) : json(405, { error: "invalid_request" }, { Allow: "POST" })); }
   if (path === "/authorize") {
     if (!ready) return new Response(messagePage("Almost ready", "The Happy Home connector isn't set up yet. Add the HH_SECRET setting in Vercel, redeploy, then try again."), { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } });
-    return authorize(request, env, cfg);
+    return authorize(request, env, cfg, base);
   }
-  if (path === "/token") { if (!ready) return withCors(notReady()); return withCors(await token(request, env, cfg)); }
+  if (path === "/token") { if (!ready) return withCors(notReady()); return withCors(await token(request, env, cfg, base)); }
 
   if (path === "/mcp" || path === "/sse" || (path === "/" && method === "POST")) {
     const resourcePath = path === "/" ? "" : path;

@@ -52,7 +52,7 @@ The Firebase project and its public web key are built in. They match the app's `
 node --test test/unit.test.js                 # fast, no network
 firebase emulators:start --only auth,firestore # uses the app's firestore.rules
 cd test && npm install && node --test e2e.test.mjs
-HH_SECRET=dev-secret-dev-secret-dev-secret-00 HH_EMULATOR_HOST=127.0.0.1 node dev-server.js
+HH_SECRET=$(openssl rand -base64 32) HH_EMULATOR_HOST=127.0.0.1 node dev-server.js
 ```
 
 The end-to-end test uses the official MCP client to sign in through the real sign-in page and run every tool against the emulators. It then checks that the stored documents match the app's own shapes.
