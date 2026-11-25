@@ -26,6 +26,12 @@ Happy Home uses these open source pieces. Thank you to their authors.
 
 3. Fredoka and Nunito fonts (fonts): SIL Open Font License 1.1. See fonts/LICENSE.txt.
 
+4. Cello notes by flcellogrl on Freesound ("Real cello notes"), from tonejs-instruments by Nicholaus Brosowsky
+   (sounds/cello): the cello sound on the piano page.
+   Creative Commons Attribution 3.0, https://creativecommons.org/licenses/by/3.0/
+   https://github.com/nbrosowsky/tonejs-instruments
+   Shortened, made mono and saved as smaller files. See sounds/cello/LICENSE.txt.
+
 Ideas, not code: the falling notes follow the style of open source piano trainers such as MIDIano
 (https://github.com/Bewelge/MIDIano), and the way of hearing a note from the microphone is the McLeod
 pitch method, as also used by PitchDetect (https://github.com/cwilso/PitchDetect).
