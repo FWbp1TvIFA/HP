@@ -1,5 +1,5 @@
 /* Happy Home service worker: makes the app open instantly and work offline. */
-const CACHE = "happyhome-v29";
+const CACHE = "happyhome-v30";
 const KEEP = "hh-keep-sounds-1"; // the piano recordings: they never change, so they stay across app updates
 const FILES = ["./", "index.html", "app.css", "theme.css", "piano.css", "piano.js", "confetti.js", "push.js", "fonts/fredoka-latin.woff2", "fonts/nunito-latin.woff2", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
