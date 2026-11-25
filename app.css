@@ -545,3 +545,21 @@ button,.tab,.chip,.dot,.label,.pill{-webkit-user-select:none;user-select:none;-w
 /* the simple piano: pressing and holding a key must never select text or open the iPhone's Copy bubble */
 .piano,.piano *,.songline,.songline *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .piano .wk span{pointer-events:none}
+/* piano players sheet: the table of songs played (one row for each play; the name can be changed, the bin deletes) */
+.ptable{display:flex;flex-direction:column;border:2px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface)}
+.ptr{display:grid;grid-template-columns:64px minmax(0,1fr) 92px 36px;gap:6px;align-items:center;padding:7px 6px 7px 10px;border-top:1px solid var(--line)}
+.ptable .ptr:first-child{border-top:0}
+.pth{padding-block:6px;background:var(--sunk);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.pwhen,.psong{min-width:0;display:flex;flex-direction:column;gap:1px}
+.pwhen b{font-size:.8rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.psong b{font-size:.92rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pwhen span,.psong span{font-size:.72rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pst{font-style:normal;color:#E39A00;letter-spacing:1px}
+.pwho{width:100%;min-width:0;min-height:40px;border:2px solid var(--line);border-radius:12px;background:var(--sunk);color:var(--fg);font-weight:700;font-size:.86rem;padding:6px 4px 6px 8px}
+.pdel{width:36px;height:40px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;padding:0}
+.pdel svg{width:20px;height:20px}
+.pdel:active{color:var(--bad);background:var(--sunk)}
+.pgap{padding:7px 10px;border-top:1px solid var(--line);background:var(--sunk);font-size:.72rem;font-weight:700;color:var(--muted)}
+.ptable>.ghost{margin:8px 10px}
+/* on the piano a little message must never block the keys under it (a message with an Undo button still takes its own taps) */
+html[data-page="piano"] .toast:not(:has(.tact)){pointer-events:none}

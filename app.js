@@ -1051,7 +1051,7 @@ function feedItems(){
     const what=c==="tx"?(r.note||r.cat)+" "+money(r.type==="in"?r.amount:-r.amount,true):c==="shopping"?r.name:c==="homework"?r.subject+": "+r.title:c==="stars"?"★ "+r.pts+" · "+(r.title||""):c==="meals"?r.title:c==="board"?r.text:c==="alarms"?(r.title||"Alarm")+(r.time?" · "+tm(r.time):""):(r.title||r.name||"");
     out.push({at,who:+who,c,txt:verb[c],what,em:em[c]})}));
   ["tasks","homework"].forEach(c=>S()[c].forEach(r=>{if(r.done&&r.doneAt)out.push({at:r.doneAt,who:+r.who,c:"done",txt:c==="tasks"?"finished a task":"finished homework",what:r.title||"",em:"🎉"})}));
-  S().learn.forEach(l=>{if(l.updated)out.push({at:l.updated,who:+l.who,c:"learn",txt:"practised Chinese",what:"🔥 "+(l.streak||1)+" day streak",em:"学"});if(l.pianoAt)out.push({at:l.pianoAt,who:+l.who,c:"piano",txt:"practised piano",what:Object.keys(l.piano||{}).length+" song"+(Object.keys(l.piano||{}).length===1?"":"s")+" played so far",em:"🎹"})});
+  S().learn.forEach(l=>{if(l.updated)out.push({at:l.updated,who:+l.who,c:"learn",txt:"practised Chinese",what:"🔥 "+(l.streak||1)+" day streak",em:"学"});if(l.pianoAt)out.push({at:l.pianoAt,who:+l.who,c:"piano",txt:"practised piano",what:Object.values(l.piano||{}).filter(Boolean).length+" song"+(Object.values(l.piano||{}).filter(Boolean).length===1?"":"s")+" played so far",em:"🎹"})});
   return out.sort((a,b)=>b.at-a.at);
 }
 function feedRow(f){return `<div class="item feedrow ${Date.now()-f.at<90e3?"fresh":""}">${dot(f.who)}<div class="grow"><div class="t"><b>${esc(pname(f.who).split(" ")[0])}</b> ${esc(f.txt)}</div><div class="m">${f.em} ${esc(String(f.what).slice(0,80))}</div></div><span class="sub fago">${ago(f.at)}</span></div>`}
@@ -1095,6 +1095,7 @@ function setView(id){
   id=+id;if(!peopleRaw().some(p=>p.id===id))return;
   if(ST.mode==="local")ST.setMe(id);else ST._localPref("view",String(id));
   ST._localPref("learner",String(id===kidId()?id:(+ST._localPref("learner")||kidId())));
+  if(id===kidId())ST._localPref("pianoWho",String(id));
   listWho="mine";liveSel=null;liveOpen={};
 }
 function profileSheet(){
@@ -1347,14 +1348,181 @@ function setActive(){const slot=slotInfo().r;let active=parentTab[tab]||tab;if(t
 /* piano: the new piano page builds itself once inside #pianoHost and is never rebuilt while someone is playing */
 let pianoOn=false,pianoFail=false;
 function pianoOff(){if(!pianoOn)return;pianoOn=false;try{window.HHPiano&&HHPiano.unmount()}catch(e){console.error(e)}}
-function learnStar(n,title){ // stars from piano practice: at most 10 a day so the scoreboard stays fair
-  n=Math.max(0,Math.min(3,Math.round(+n||0)));if(!n)return 0;
-  const id=learnerId(),t=TODAY(),sid="piano-"+id+"-"+t,prev=S().stars.find(x=>x.id===sid),had=+(prev&&prev.pts)||0,give=Math.min(n,Math.max(0,10-had));
-  if(!give)return 0;ST.put("stars",sid,{who:id,pts:had+give,date:t,title:"Piano: "+String(title||"practice").slice(0,40)});return give;
+/* ---------- piano players: who is playing, and the list of songs played ----------
+   Every song played to the end is kept as one row in the family's "plays" (one record per month, so the list stays cheap to load).
+   A row can be given to another person or deleted; the song's stars and the scoreboard stars follow it. */
+const PLAYS_MAX=3000;      // rows in one month's record; after that a play still counts, it just gets no row of its own
+const pianoWho=()=>{const v=+ST._localPref("pianoWho");return people().some(p=>p.id===v)?v:learnerId()};
+function setPianoWho(id){id=+id;if(!people().some(p=>p.id===id))return false;ST._localPref("pianoWho",String(id));try{if(pianoOn&&window.HHPiano)HHPiano.refresh()}catch(e){console.error(e)}return true}
+const pkey=key=>String(key||"song").replace(/[^\w-]+/g,"_").slice(0,60)||"song";      // the name a song's stars are kept under
+function playRows(){ // every play in the list, newest first
+  const out=[];
+  (S().plays||[]).forEach(d=>{const p=d&&d.p;if(!p||typeof p!=="object")return;Object.keys(p).forEach(id=>{const r=p[id];if(r&&typeof r==="object"&&r.who!=null)out.push({...r,id,m:d.id})})});
+  return out.sort((a,b)=>(+b.at||0)-(+a.at||0));
 }
-function savePiano(key,obj){
-  const id=learnerId(),{id:_i,...d}=learnDoc(id),k=String(key||"song").replace(/[^\w-]+/g,"_").slice(0,60)||"song",o=obj||{};
-  ST.put("learn",String(id),{...d,piano:{...(d.piano||{}),[k]:{stars:+o.stars||0,best:+o.best||0,plays:+o.plays||0,last:String(o.last||TODAY()).slice(0,10)}},pianoAt:Date.now(),who:id});
+/* scoreboard stars from the piano: one record per person per day, at most 10 a day so the scoreboard stays fair */
+const pianoPts=(who,date)=>+((S().stars.find(x=>x.id==="piano-"+who+"-"+date)||{}).pts)||0;
+function pianoStars(who,date,delta,title){ // add to (or take from) one person's piano stars for one day; says how many really changed
+  delta=Math.round(+delta||0);if(!delta||!date)return 0;
+  const sid="piano-"+who+"-"+date,prev=S().stars.find(x=>x.id===sid),had=+(prev&&prev.pts)||0,now=Math.max(0,Math.min(10,had+delta));
+  if(now===had)return 0;
+  if(!now)ST.del("stars",sid);else ST.put("stars",sid,{who:+who,pts:now,date,title:title?"Piano: "+String(title).slice(0,40):(prev&&prev.title)||"Piano"});
+  return now-had;
+}
+function learnStar(n,title,who){ // stars from piano practice, for the person who is playing
+  n=Math.max(0,Math.min(3,Math.round(+n||0)));if(!n)return 0;
+  return pianoStars(who||pianoWho(),TODAY(),n,title||"practice");
+}
+/* one song's record for one person = the part from before the list was kept ("e") joined with that person's rows in the list */
+const pianoOf=who=>learnDoc(who).piano||{};
+const pianoClean=who=>{const pm=pianoOf(who),o={};Object.keys(pm).forEach(k=>{if(pm[k]&&typeof pm[k]==="object")o[k]=pm[k]});return o};      // without the empty places
+const rowsOf=(all,who,k)=>all.filter(r=>+r.who===+who&&pkey(r.song)===k);
+const E0=()=>({s:0,b:0,n:0,l:""});
+function earlierOf(who,k,rows){
+  const en=pianoOf(who)[k];if(!en||typeof en!=="object")return E0();
+  if(en.e&&typeof en.e==="object"){const n=Math.max(0,Math.round(+en.e.n||0));return n?{s:+en.e.s||0,b:+en.e.b||0,n,l:String(en.e.l||"")}:E0()}
+  const n=Math.max(0,(+en.plays||((+en.stars||+en.best)?1:0))-rows.length);
+  return n?{s:+en.stars||0,b:+en.best||0,n,l:String(en.last||"")}:E0();
+}
+function pianoEntry(e,rows){ // null when nothing is left of the song
+  const n=e.n+rows.length;if(!n)return null;
+  return {stars:Math.max(e.s,...rows.map(r=>+r.stars||0)),best:Math.max(e.b,...rows.map(r=>+r.pct||0)),plays:n,last:[e.l,...rows.map(r=>String(r.date||""))].sort().pop()||TODAY(),e:{s:e.s,b:e.b,n:e.n,l:e.l}};
+}
+/* Saving touches only the songs that changed (and the "last practised" time), never the rest of the person's record, so
+   lesson progress is safe even if this phone has not loaded it yet. A song that is taken away is kept as an empty place (null). */
+function pianoSave(who,ch,o){ // ch: {song name: its new record, or null to take it away}. o.rows: the list after the change; o.add / o.drop: the time of a play that came or went
+  o=o||{};const d=learnDoc(who),pm={...(d.piano||{})},set={},mine=(o.rows||playRows()).filter(r=>+r.who===+who);
+  Object.keys(ch).forEach(k=>{set[k]=ch[k]||null;pm[k]=set[k]});
+  let at=+d.pianoAt||0;
+  if(o.drop&&at===+o.drop)at=Math.max(0,...mine.map(r=>+r.at||0));
+  if(o.add)at=Math.max(at,+o.add);
+  if(!mine.length&&!Object.keys(pm).some(k=>pm[k]))at=0;
+  ST.merge("learn",String(who),{piano:set,pianoAt:at,who:+who});
+}
+function savePiano(key,obj){ // the older way to save a song (an older piano page): there is no row for it, so it counts as a play from before the list
+  const id=pianoWho(),k=pkey(key),o=obj||{},all=playRows(),mine=rowsOf(all,id,k),e=earlierOf(id,k,mine);
+  pianoSave(id,{[k]:pianoEntry({s:Math.max(e.s,+o.stars||0),b:Math.max(e.b,+o.best||0),n:e.n+1,l:String(o.last||TODAY()).slice(0,10)},mine)},{rows:all,add:Date.now()});
+}
+/* how many of a play's stars may still go on the scoreboard: a song gives a person at most 3 a day, and the piano at most 10 a day */
+function starsDue(all,who,k,date,stars,skip){
+  const had=all.filter(r=>+r.who===+who&&r.date===date&&pkey(r.song)===k&&r.id!==skip).reduce((n,r)=>n+(+r.gave||0),0);
+  return Math.max(0,Math.min(3,(+stars||0)-had,10-pianoPts(who,date)));
+}
+function pianoPlayed(o){ // the piano calls this when a song is played to the end; it answers {id, who, gave}
+  o=o||{};const who=pianoWho(),at=Date.now(),date=TODAY(),k=pkey(o.key),stars=Math.max(1,Math.min(3,Math.round(+o.stars||1))),pct=Math.max(0,Math.min(100,Math.round(+o.pct||0)));
+  const all=playRows(),mine=rowsOf(all,who,k),e=earlierOf(who,k,mine),gave=starsDue(all,who,k,date,stars);
+  const m=date.slice(0,7),doc=(S().plays||[]).find(d=>d.id===m),full=!!(doc&&doc.p&&Object.keys(doc.p).length>=PLAYS_MAX);
+  const row={who,song:String(o.key||"song").slice(0,80),title:String(o.title||"Song").slice(0,60),mode:o.mode==="time"?"time":"learn",stars,pct,at,date,gave,by:meId()};
+  let id=null;
+  if(full)pianoSave(who,{[k]:pianoEntry({s:Math.max(e.s,stars),b:Math.max(e.b,pct),n:e.n+1,l:date},mine)},{rows:all,add:at});
+  else{
+    id=at.toString(36)+Math.random().toString(36).slice(2,6).padEnd(4,"0");
+    ST.merge("plays",m,{m,p:{[id]:row}});
+    pianoSave(who,{[k]:pianoEntry(e,mine.concat(row))},{rows:all.concat({...row,id,m}),add:at});
+  }
+  if(gave)pianoStars(who,date,gave,row.title);
+  return {id,who,gave};
+}
+function playOut(all,r){ // a play leaves its person: what changes for them. Another play of the same song that day may now be owed the stars.
+  const who=+r.who,k=pkey(r.song),rest=all.filter(x=>x.id!==r.id),mine=rowsOf(all,who,k),e=earlierOf(who,k,mine),left=mine.filter(x=>x.id!==r.id);
+  const same=left.filter(x=>x.date===r.date),fix={};let delta=-(+r.gave||0);
+  if(same.length&&+r.gave){
+    const top=same.reduce((a,b)=>(+b.stars||0)>(+a.stars||0)?b:a),due=Math.min(+r.gave,Math.max(0,(+top.stars||0)-same.reduce((n,x)=>n+(+x.gave||0),0)));
+    if(due){top.gave=(+top.gave||0)+due;fix[top.id]={gave:top.gave};delta+=due}
+  }
+  return {who,k,rest,fix,delta,entry:pianoEntry(e,left)};
+}
+function pianoMove(id,to){ // give a play to another person: the song's stars and the scoreboard stars go with it
+  to=+to;const all=playRows(),r=all.find(x=>x.id===id);
+  if(!r||+r.who===to||!people().some(p=>p.id===to))return null;
+  const out=playOut(all,r),k=out.k,theirs=rowsOf(out.rest,to,k),e=earlierOf(to,k,theirs),gave=starsDue(out.rest,to,k,r.date,r.stars),moved={...r,who:to,gave},after=out.rest.concat(moved);
+  ST.merge("plays",r.m,{p:{...out.fix,[id]:{who:to,gave}}});
+  pianoSave(out.who,{[k]:out.entry},{rows:after,drop:r.at});
+  pianoSave(to,{[k]:pianoEntry(e,theirs.concat(moved))},{rows:after,add:r.at});
+  pianoStars(out.who,r.date,out.delta);
+  pianoStars(to,r.date,gave,r.title);
+  return {id,from:out.who,who:to,gave};
+}
+function pianoDrop(id){ // delete one play, with Undo
+  const all=playRows(),r=all.find(x=>x.id===id);if(!r)return false;
+  const out=playOut(all,r);
+  ST.merge("plays",r.m,{p:{...out.fix,[id]:null}});
+  pianoSave(out.who,{[out.k]:out.entry},{rows:out.rest,drop:r.at});
+  pianoStars(out.who,r.date,out.delta);
+  toast("Play deleted","Undo",()=>{playBack(r);toast("Restored")});
+  return true;
+}
+function playBack(r){ // put a deleted play back where it was
+  const all=playRows();if(all.some(x=>x.id===r.id))return;
+  const who=+r.who,k=pkey(r.song),mine=rowsOf(all,who,k),e=earlierOf(who,k,mine),gave=starsDue(all,who,k,r.date,r.stars),{id,m,...row}=r;
+  row.gave=gave;
+  ST.merge("plays",m,{m,p:{[id]:row}});
+  pianoSave(who,{[k]:pianoEntry(e,mine.concat({...row,id,m}))},{rows:all.concat({...row,id,m}),add:r.at});
+  pianoStars(who,r.date,gave,r.title);
+}
+/* the older part of a song's record (from before the list): it can go to another person, or be deleted. The stars of its last day follow as well as can be known. */
+function earlierMove(who,k,to){
+  who=+who;to=+to;if(who===to||!people().some(p=>p.id===to))return null;
+  const all=playRows(),ra=rowsOf(all,who,k),rb=rowsOf(all,to,k),a=earlierOf(who,k,ra),b=earlierOf(to,k,rb);if(!a.n)return null;
+  pianoSave(who,{[k]:pianoEntry(E0(),ra)},{rows:all});
+  pianoSave(to,{[k]:pianoEntry({s:Math.max(a.s,b.s),b:Math.max(a.b,b.b),n:a.n+b.n,l:a.l>b.l?a.l:b.l},rb)},{rows:all});
+  const took=-pianoStars(who,a.l,-Math.min(3,a.s))||0,got=took?pianoStars(to,a.l,took):0;
+  return {who,k,to,a,b,date:a.l,took,got};
+}
+function earlierDrop(who,k){
+  who=+who;const all=playRows(),ra=rowsOf(all,who,k),a=earlierOf(who,k,ra);if(!a.n)return false;
+  const u={who,k,to:null,a,b:null,date:a.l,took:0,got:0};
+  pianoSave(who,{[k]:pianoEntry(E0(),ra)},{rows:all});
+  u.took=-pianoStars(who,a.l,-Math.min(3,a.s))||0;
+  toast("Deleted","Undo",()=>{earlierBack(u);toast("Restored")});
+  return true;
+}
+function earlierBack(u){ // undo for the two above
+  const all=playRows();
+  pianoSave(u.who,{[u.k]:pianoEntry(u.a,rowsOf(all,u.who,u.k))},{rows:all});
+  if(u.to!=null)pianoSave(u.to,{[u.k]:pianoEntry(u.b,rowsOf(all,u.to,u.k))},{rows:all});
+  if(u.got)pianoStars(u.to,u.date,-u.got);
+  if(u.took)pianoStars(u.who,u.date,u.took);
+}
+/* the sheet: pick who is playing, then the table of songs played */
+let playsShown=40;
+const BIN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
+const pstars=n=>{n=Math.max(0,Math.min(3,Math.round(+n||0)));return "★★★".slice(0,n)+"☆☆☆".slice(0,3-n)};
+function songTitles(){
+  const t={};
+  try{((window.HHPiano&&HHPiano.SONGS)||[]).forEach(s=>{t[pkey("b:"+s.id)]=s.title})}catch(e){}
+  (S().songs||[]).forEach(d=>{if(d&&d.id!=null)t[pkey("c:"+d.id)]=d.title||"Our song"});
+  return t;
+}
+function pianoSheetBody(){
+  const who=pianoWho(),ps=people(),all=playRows(),titles=songTitles();
+  const sel=(attr,cur)=>`<select class="pwho" ${attr} aria-label="Who played">${ps.map(p=>`<option value="${p.id}"${p.id===+cur?" selected":""}>${esc(p.name)}</option>`).join("")}${ps.some(p=>p.id===+cur)?"":`<option value="${esc(cur)}" selected>Someone</option>`}</select>`;
+  const time=at=>{try{return new Date(+at).toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"})}catch(e){return ""}};
+  const day=d=>/^\d{4}-\d\d-\d\d$/.test(d)?nice(d):"Earlier";
+  const pick=ps.length>1?`<div class="label">Who is playing?</div>
+   <div class="profpick">${ps.map(q=>`<button type="button" class="pp ${q.id===who?"on":""}" data-act="pianoWho" data-k="${q.id}">${dot(q.id)}<span>${esc(q.name)}</span></button>`).join("")}</div>
+   <div class="sub">Stars from the piano go to the person who is playing.</div>`:"";
+  const rows=all.slice(0,playsShown).map(r=>`<div class="ptr" data-row="${esc(r.id)}"><div class="pwhen"><b>${esc(day(r.date))}</b><span>${esc(time(r.at))}</span></div>
+    <div class="psong"><b>${esc(r.title||titles[pkey(r.song)]||"Song")}</b><span><i class="pst" aria-label="${+r.stars||0} of 3 stars">${pstars(r.stars)}</i> ${r.mode==="time"?"In time":"Learn"} · ${+r.pct||0}%</span></div>
+    ${sel(`data-play="${esc(r.id)}"`,r.who)}<button type="button" class="pdel" data-act="playDel" data-id="${esc(r.id)}" aria-label="Delete this play">${BIN}</button></div>`).join("");
+  const old=[];
+  ps.forEach(p=>{const pm=pianoOf(p.id);Object.keys(pm).forEach(k=>{const e=earlierOf(p.id,k,rowsOf(all,p.id,k));if(e.n)old.push({who:p.id,k,e})})});
+  old.sort((a,b)=>a.e.l<b.e.l?1:a.e.l>b.e.l?-1:(titles[a.k]||a.k).localeCompare(titles[b.k]||b.k));
+  const olds=old.map(x=>`<div class="ptr pold" data-oldrow="${x.who}|${esc(x.k)}"><div class="pwhen"><b>${esc(day(x.e.l))}</b><span>${x.e.n} play${x.e.n===1?"":"s"}</span></div>
+    <div class="psong"><b>${esc(titles[x.k]||x.k.replace(/^[bc]_/,"").replace(/[-_]+/g," "))}</b><span><i class="pst" aria-label="${x.e.s} of 3 stars">${pstars(x.e.s)}</i>${x.e.b?" Best "+Math.round(x.e.b)+"%":""}</span></div>
+    ${sel(`data-old="${x.who}|${esc(x.k)}"`,x.who)}<button type="button" class="pdel" data-act="oldDel" data-k="${x.who}|${esc(x.k)}" aria-label="Delete this record">${BIN}</button></div>`).join("");
+  const head=`<div class="ptr pth" aria-hidden="true"><span>When</span><span>Song</span><span>Who played</span><span></span></div>`;
+  const table=all.length||old.length?`<div class="label" style="margin-top:6px">Songs played</div>
+   <div class="ptable">${head}${rows}${all.length>playsShown?`<button type="button" class="ghost" data-act="playsMore">Show more</button>`:""}${olds?`${all.length?`<div class="pgap">Older, one row for each song</div>`:""}${olds}`:""}</div>
+   <div class="sub">Change the name on a row to give that play and its stars to someone else. The bin deletes one row.</div>`
+   :`<div class="label" style="margin-top:6px">Songs played</div><div class="sub">Nothing here yet. Play a song to the end in Learn or Play in time and it shows up here.</div>`;
+  return pick+table;
+}
+function pianoSheet(){playsShown=40;const h=pianoSheetBody();openSheet(`${sheetHead("Piano players")}<div id="pp_body">${h}</div>`,()=>{const b=$("#pp_body");if(b)b._h=h})}
+function pianoSheetPaint(){ // the table follows the family's data while it is open (but never under an open name list)
+  const b=$("#pp_body");if(!b)return;
+  const f=document.activeElement;if(f&&f.matches&&f.matches("select.pwho")&&b.contains(f))return;
+  const h=pianoSheetBody();if(h!==b._h){b._h=h;b.innerHTML=h}
 }
 /* one-time tidy-up the family asked for: the grown-ups show as Dad and Mum. The old names are kept as "aka" so Quick add still understands them. */
 let roleBusy=false;
@@ -1693,6 +1861,11 @@ document.addEventListener("click",e=>{
     case"liveMore":liveOpen[a.dataset.k]=!liveOpen[a.dataset.k];break;
     case"addFor":return addSheet("task",{who:+a.dataset.k});
     case"profile":return profileSheet();
+    case"pianoSheet":return pianoSheet();
+    case"pianoWho":{const ok=setPianoWho(a.dataset.k);closeSheet();if(ok)toast(pname(pianoWho())+" is playing now");break}
+    case"playDel":pianoDrop(id);return;
+    case"oldDel":{const v=String(a.dataset.k||""),i=v.indexOf("|");earlierDrop(+v.slice(0,i),v.slice(i+1));return}
+    case"playsMore":playsShown+=40;pianoSheetPaint();return;
     case"viewAs":setView(a.dataset.k);closeSheet();toast("Showing "+pname(viewId())+"'s things first");break;
     case"slot":return slotSheet();
     case"slotPick":{const r=a.dataset.k;ST._localPref("slot",r?JSON.stringify({r,wk:weekKey()}):"");closeSheet();slotSig="";toast(r?NAV[r][0]+" is this week's shortcut":"The app will pick a shortcut each week");break}
@@ -1764,6 +1937,12 @@ addEventListener("hashchange",()=>{const h=routeOf(location.hash.slice(1));if(ro
 document.addEventListener("change",e=>{const el=e.target.closest&&e.target.closest("[data-pref]");if(!el)return;const k=el.dataset.pref;
   if(k==="mute"){ST._localPref("alarmMute",el.checked?"0":"1");return}
   const val=k==="kids"?el.checked:k==="ev"?+el.value:el.value;if((k==="morning"||k==="bills")&&val&&!TIME_OK.test(val))return;setPrefs({[k]:val})});
+/* the table of songs played: a new name on a row gives that play to that person */
+document.addEventListener("change",e=>{const el=e.target.closest&&e.target.closest("select.pwho");if(!el)return;el.blur();const to=+el.value;
+  if(el.dataset.play){const r=pianoMove(el.dataset.play,to);if(r)toast(pname(r.who)+" played it"+(r.gave?": +"+r.gave+" ★":""),"Undo",()=>{pianoMove(r.id,r.from);toast("Changed back")})}
+  else if(el.dataset.old){const v=el.dataset.old,i=v.indexOf("|"),u=earlierMove(+v.slice(0,i),v.slice(i+1),to);if(u)toast("Given to "+pname(to),"Undo",()=>{earlierBack(u);toast("Changed back")})}
+  pianoSheetPaint()});
+document.addEventListener("focusout",e=>{if(e.target&&e.target.matches&&e.target.matches("select.pwho"))setTimeout(pianoSheetPaint,0)});
 /* hold the shortcut button in the bottom bar to choose what it opens */
 (function(){let t=null,held=false;const off=()=>clearTimeout(t);
   document.addEventListener("pointerdown",e=>{if(!e.target.closest||!e.target.closest("#tabSlot"))return;held=false;off();t=setTimeout(()=>{held=true;slotSheet()},550)},{passive:true});
@@ -1792,13 +1971,14 @@ ST.onChange(()=>{
   prevPhase=ST.phase;
   if(hadPending&&!ST.pending&&navigator.onLine&&wasOffline){wasOffline=false;setTimeout(()=>toast("All changes uploaded ✓"),300)}hadPending=ST.pending;
   agendaDirty=true;roleNames();syncAgenda();
-  moodTick();render();
+  moodTick();render();pianoSheetPaint();
 });
 setInterval(()=>{if(tab==="mood"&&activeSession())render();moodTick()},1000);
 setInterval(()=>{if((tab==="home"||tab==="today")&&!document.hidden&&!$("#sheetHost").innerHTML&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||""))render()},20000);
 setInterval(()=>{try{alarmTick()}catch(e){console.error(e)}},15000);
 /* what the piano page may use from the app */
-window.HH={S,ST,esc,toast,openSheet,closeSheet,sheetHead,pname,learnerId,pref:(k,v)=>v===undefined?ST._localPref(k):ST._localPref(k,String(v)),star:learnStar,pianoProgress:()=>learnDoc(learnerId()).piano||{},savePianoProgress:savePiano,delUndo,go:t=>go(t)};
+window.HH={S,ST,esc,toast,openSheet,closeSheet,sheetHead,pname,learnerId,pref:(k,v)=>v===undefined?ST._localPref(k):ST._localPref(k,String(v)),star:(n,title)=>learnStar(n,title),pianoProgress:()=>pianoClean(pianoWho()),savePianoProgress:savePiano,delUndo,go:t=>go(t),dot,
+  ...(typeof ST.merge==="function"?{people:()=>people().map(p=>({id:p.id,name:p.name})),playerId:pianoWho,setPlayer:setPianoWho,pianoPlayed,pianoMove,pianoSheet}:{})};
 let autoPayDay=null;setInterval(()=>{if(ST.phase==="ready"&&autoPayDay!==TODAY()&&Date.now()-bootAt>6000){autoPayDay=TODAY();try{autoPayBills()}catch(e){}}},3000);
 const bootAt=Date.now();
 ST.init();

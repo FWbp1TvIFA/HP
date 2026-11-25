@@ -6,7 +6,7 @@
 (function () {
   "use strict";
   const LOCAL_KEY = "happyhome.v2";
-  const FAMILY_COLS = ["tasks", "events", "tx", "shopping", "homework", "notes", "wallet", "moods", "locations", "moodSessions", "bills", "meals", "countdowns", "shopFreq", "stars", "learn", "board", "alarms", "profiles", "songs", "notify", "pushSubs"];
+  const FAMILY_COLS = ["tasks", "events", "tx", "shopping", "homework", "notes", "wallet", "moods", "locations", "moodSessions", "bills", "meals", "countdowns", "shopFreq", "stars", "learn", "board", "alarms", "profiles", "songs", "notify", "pushSubs", "plays"];
   const PRIVATE_COLS = ["myWallet", "myMoodResults"]; // stored under users/{uid}/
   const PRIVATE_PATH = { myWallet: "wallet", myMoodResults: "moodResults" };
   const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -67,6 +67,16 @@
     patch(col, id, fields) {
       if (this.mode === "local") { const r = this.state[col].find(x => x.id === id); if (r) Object.assign(r, fields); this._saveLocal(); this._emit(); return; }
       FB.updateDoc(this._doc(col, id), fields).catch(e => this._fail(e));
+    },
+    merge(col, id, fields) { // change some fields of one record and keep the rest (fields inside fields too); the record is made if it is not there yet
+      if (this.mode === "local") {
+        let r = this.state[col].find(x => x.id === id);
+        if (!r) { r = { id }; this.state[col].push(r); }
+        const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
+        const mix = (a, b) => Object.keys(b).forEach(k => { if (plain(b[k])) { if (!plain(a[k])) a[k] = {}; mix(a[k], b[k]); } else a[k] = b[k]; });
+        mix(r, fields); this._saveLocal(); this._emit(); return;
+      }
+      FB.setDoc(this._doc(col, id), fields, { merge: true }).catch(e => this._fail(e));
     },
     del(col, id) {
       if (this.mode === "local") { this.state[col] = this.state[col].filter(x => x.id !== id); this._saveLocal(); this._emit(); return; }
