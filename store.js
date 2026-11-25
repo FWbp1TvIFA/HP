@@ -51,9 +51,15 @@
     _localPref(k, v) { try { if (v === undefined) return localStorage.getItem("hh." + k); localStorage.setItem("hh." + k, v); } catch (e) { return null; } },
 
     /* ---------- generic data ops (same API in both modes) ---------- */
+    /* the profile in use on this phone: the person who is signed in, unless another one was picked at the top right (family accounts) */
+    actId() {
+      if (this.mode === "cloud") { const v = +this._localPref("view"); if (v && ((this.state.settings || {}).people || []).some(p => p.id === v)) return v; }
+      return this.me.personId;
+    },
     add(col, obj) {
-      const id = obj.id || uid();
-      const rec = Object.assign({}, obj, { id, createdAt: Date.now(), by: this.me.personId });
+      const id = obj.id || uid(), act = this.actId();
+      const rec = Object.assign({}, obj, { id, createdAt: Date.now(), by: act });
+      if (act !== this.me.personId) rec.via = this.me.personId; // made on someone else's profile: keep whose phone it came from
       if (this.mode === "local") { this.state[col].push(rec); this._saveLocal(); this._emit(); return id; }
       const { id: _drop, ...data } = rec;
       FB.setDoc(this._doc(col, id), data).catch(e => this._fail(e));

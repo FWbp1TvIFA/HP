@@ -24,6 +24,10 @@ const pname=id=>id==0?"Family":(person(id)?.name||"Someone");
 const meId=()=>ST.me.personId||1;
 /* whose things come first on this phone: the person signed in, or the profile picked at the top right */
 const viewId=()=>{if(ST.mode==="cloud"){const v=+ST._localPref("view");if(v&&peopleRaw().some(p=>p.id===v))return v}return meId()};
+/* Another person's profile is in use on this phone (family accounts only). The family's shared things then go under that profile.
+   Private things, and anything that needs a person's own agreement (a mood check, sharing location), stay with the person who is signed in. */
+const switched=()=>viewId()!==meId();
+const fromPhone=r=>r&&r.via!=null&&+r.via!==+(r.who??r.person??r.by)&&person(r.via)?" · from "+esc(pname(r.via))+"'s phone":"";
 const colorIdx=id=>id==0?0:((peopleRaw().findIndex(p=>p.id===+id)%3)+1)||0;
 const dot=id=>{const ph=id!=0&&photoOf(id);return `<span class="dot who-${colorIdx(id)}${ph?" ph ph-"+(+id):""}" aria-hidden="true">${id==0?"All":esc(pname(id).slice(0,1).toUpperCase())}</span>`};
 function money(n,sign){const v=Math.abs(n).toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2});return (sign&&n<0?"−":sign&&n>0?"+":"")+(SET().currency||"$")+v}
@@ -142,8 +146,8 @@ function viewToday(){
 function boardCard(){
   const cut=Date.now()-5*864e5,msgs=[...S().board].filter(m=>(m.at||m.createdAt||0)>cut).sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,4);
   return `<section class="card board"><div class="row between"><h2>Family board</h2><span class="sub">Notes for each other</span></div>
-   ${msgs.length?`<div class="list" style="margin-top:4px">${msgs.map(m=>{const ack=Object.keys(m.ack||{}).filter(k=>(m.ack||{})[k]).map(Number).filter(i=>i!==+m.who);const mine=+m.who===meId(),iAck=(m.ack||{})[meId()];
-     return row("board",m.id,`${dot(m.who)}<div class="grow"><div class="t bt">${esc(m.text)}</div><div class="m">${esc(pname(m.who))} · ${ago(m.at||m.createdAt)}${ack.length?" · 👍 "+ack.map(i=>esc(pname(i))).join(", "):""}</div></div>${mine?"":`<button class="mini ${iAck?"ghostmini":""}" data-act="boardAck" data-id="${m.id}">${iAck?"👍":"Got it"}</button>`}`)}).join("")}</div>`:""}
+   ${msgs.length?`<div class="list" style="margin-top:4px">${msgs.map(m=>{const ack=Object.keys(m.ack||{}).filter(k=>(m.ack||{})[k]).map(Number).filter(i=>i!==+m.who);const mine=+m.who===viewId(),iAck=(m.ack||{})[viewId()];
+     return row("board",m.id,`${dot(m.who)}<div class="grow"><div class="t bt">${esc(m.text)}</div><div class="m">${esc(pname(m.who))} · ${ago(m.at||m.createdAt)}${fromPhone(m)}${ack.length?" · 👍 "+ack.map(i=>esc(pname(i))).join(", "):""}</div></div>${mine?"":`<button class="mini ${iAck?"ghostmini":""}" data-act="boardAck" data-id="${m.id}">${iAck?"👍":"Got it"}</button>`}`)}).join("")}</div>`:""}
    <form id="boardForm" class="quick" style="margin-top:8px" autocomplete="off"><input id="boardIn" placeholder="${msgs.length?"Reply or post a note…":"e.g. Home late tonight, dinner in the fridge"}" maxlength="200" enterkeyhint="send"><button type="submit">Post</button></form></section>`;
 }
 function syncNote(){return ""}
@@ -258,7 +262,7 @@ const backBar=()=>`<button class="back" data-go="${backTo()}">${ICON.back}${{hom
 const tabBack=r=>slotInfo().r===r?"":backBar(); // pages that can sit in the bottom bar need no back button while they are there
 function viewMore(){
   const tile=(go,icon,title,sub)=>`<button class="tile" data-go="${go}">${icon}<b>${title}</b><span>${sub}</span></button>`;
-  const cards=S().wallet.length+S().myWallet.length,t0=TODAY(),wk=evRange(t0,addDays(t0,6)).length,ms=monthStats(thisMonth()),sl=slotInfo(),na=(S().alarms||[]).filter(a=>a.on!==false).length;
+  const cards=allCards().length,t0=TODAY(),wk=evRange(t0,addDays(t0,6)).length,ms=monthStats(thisMonth()),sl=slotInfo(),na=(S().alarms||[]).filter(a=>a.on!==false).length;
   return `<div class="tiles">
    ${tile("calendar",ICON.cal,"Calendar",wk?wk+" plan"+(wk===1?"":"s")+" this week":"Plans, classes and events")}
    ${tile("money",ICON.money,"Money",(ms.inc-ms.out<0?"−":"")+money(ms.inc-ms.out)+" left this month")}
@@ -318,11 +322,11 @@ function viewLocation(){
   const locs=S().locations;
   const sharing=mySharing();
   const others=people().map(p=>{const l=locs.find(x=>x.id===String(p.id));
-    return `<div class="item">${dot(p.id)}<div class="grow"><div class="t">${esc(p.name)}${p.id===meId()?" (you)":""}</div><div class="m">${l?`Updated ${ago(l.at)} · within ${Math.round(l.acc||0)} m`:"Not sharing"}</div></div>${l?`<a class="mapl" href="https://www.google.com/maps?q=${l.lat},${l.lng}" target="_blank" rel="noopener">Map</a>`:""}</div>`}).join("");
+    return `<div class="item">${dot(p.id)}<div class="grow"><div class="t">${esc(p.name)}${p.id===meId()?(switched()?" (this phone)":" (you)"):""}</div><div class="m">${l?`Updated ${ago(l.at)} · within ${Math.round(l.acc||0)} m`:"Not sharing"}</div></div>${l?`<a class="mapl" href="https://www.google.com/maps?q=${l.lat},${l.lng}" target="_blank" rel="noopener">Map</a>`:""}</div>`}).join("");
   return `${backBar()}
-  <section class="card stack" style="gap:12px"><div class="row between"><div class="grow"><h2>Share my location</h2><div class="sub">With ${ST.mode==="cloud"?"your family":"this device only, until family sharing is set up"}</div></div>
+  <section class="card stack" style="gap:12px"><div class="row between"><div class="grow"><h2>${switched()?"Share this phone's location":"Share my location"}</h2><div class="sub">${switched()?"It shows as "+esc(pname(meId()))+"'s, because "+esc(pname(meId()))+" is signed in on this phone":"With "+(ST.mode==="cloud"?"your family":"this device only, until family sharing is set up")}</div></div>
    <button class="toggle ${sharing?"on":""}" data-act="toggleLoc" role="switch" aria-checked="${sharing}" aria-label="Share my location"></button></div>
-   <div class="sub">Your location updates while Happy Home is open on your phone. Turn this off any time and your location is removed straight away.</div></section>
+   <div class="sub">Your location updates while Happy Home is open on your phone. Turn this off any time and your location is removed straight away.${switched()&&!sharing?" Only "+esc(pname(meId()))+" can turn it on, from "+esc(pname(meId()))+"'s own profile.":""}</div></section>
   <section class="card"><h2>Family</h2><div class="list" style="margin-top:6px">${others}</div></section>`;
 }
 function startGeo(){
@@ -338,16 +342,16 @@ function stopGeo(remove){if(geoWatch!==null){navigator.geolocation.clearWatch(ge
 
 /* ---------- Wallet ---------- */
 const CARD_COLORS=["#E0662F","#1E7F5C","#22325A","#7A4FB5","#2B2B2B","#1C8FB3","#C2457A","#B08A12"];
-function allCards(){return [...S().wallet.map(c=>({...c,shared:true})),...S().myWallet.map(c=>({...c,shared:false}))]}
+function allCards(){return [...S().wallet.map(c=>({...c,shared:true})),...(switched()?[]:S().myWallet.map(c=>({...c,shared:false})))]}
 function walletCard(w,full){
   return `<button class="wcard ${full?"full":""}" data-act="openCard" data-id="${w.id}" style="background:${esc(w.bg||"#22325A")};color:#fff">
   <div class="row between"><span class="wk">${esc(w.kind||"Card")}${w.shared?"":" · Private"}</span><span class="wh">${dot(w.holder??meId())}</span></div>
   <div class="wn">${esc(w.name)}</div>${full?`${w.num?`<div class="wnum">${esc(w.num)}</div>`:""}${w.extra?`<div class="wx">${esc(w.extra)}</div>`:""}`:""}</button>`;
 }
 function viewWallet(){
-  const cards=allCards();
-  return `${backBar()}${cards.length?`<div class="wstack">${cards.map(w=>walletCard(w,false)).join("")}</div>`:`<section class="card empty">No cards yet. Add loyalty cards, memberships, tickets or a boarding pass.</section>`}
-  <section class="card stack" style="gap:8px"><h2>Add to Wallet</h2><div class="sub">Type in the card number to make a scannable barcode or QR code, and add a photo of the card if you like. Shared cards show for the whole family; private ones only for you.</div>
+  const cards=allCards(),hid=switched()?S().myWallet.length:0;
+  return `${backBar()}${hid?`<div class="sub" id="w_hid">${esc(pname(meId()))}'s ${hid} private card${hid===1?" is":"s are"} put away while ${esc(pname(viewId()))}'s profile is in use.</div>`:""}${cards.length?`<div class="wstack">${cards.map(w=>walletCard(w,false)).join("")}</div>`:`<section class="card empty">No cards yet. Add loyalty cards, memberships, tickets or a boarding pass.</section>`}
+  <section class="card stack" style="gap:8px"><h2>Add to Wallet</h2><div class="sub">Type in the card number to make a scannable barcode or QR code, and add a photo of the card if you like. ${switched()?"Cards added on "+esc(pname(viewId()))+"'s profile here are shared with the whole family.":"Shared cards show for the whole family; private ones only for you."}</div>
   <button class="primary" data-act="addCard">Add a card or pass</button></section>`;
 }
 function cardSheet(id){
@@ -362,7 +366,7 @@ function cardSheet(id){
   });
 }
 function cardForm(id){
-  const w=id?allCards().find(x=>x.id===id):{kind:"Loyalty card",name:"",num:"",extra:"",code:"bar",bg:CARD_COLORS[0],holder:meId(),shared:true};
+  const w=id?allCards().find(x=>x.id===id):{kind:"Loyalty card",name:"",num:"",extra:"",code:"bar",bg:CARD_COLORS[0],holder:viewId(),shared:true};
   let bg=w.bg, photo=w.photo||"";
   openSheet(`${sheetHead(id?"Edit card":"Add a card")}<form id="f" class="stack" style="gap:12px">
    <div class="two"><div class="field"><label for="w_kind">Type</label><select id="w_kind">${["Loyalty card","Membership","Health card","Tickets","Boarding pass","Gift card","ID","Other"].map(k=>`<option ${k===w.kind?"selected":""}>${k}</option>`).join("")}</select></div>
@@ -373,13 +377,13 @@ function cardForm(id){
    <div class="field"><label for="w_extra">Extra details (optional)</label><input id="w_extra" value="${esc(w.extra||"")}" placeholder="e.g. Valid to 03/2029, seat 34A"></div>
    <div class="field"><label>Colour</label><div class="colors">${CARD_COLORS.map(c=>`<button type="button" data-c="${c}" class="${c===bg?"on":""}" style="background:${c}" aria-label="Colour ${c}"></button>`).join("")}</div></div>
    <div class="field"><label for="w_photo">Photo of the card (optional)</label><input id="w_photo" type="file" accept="image/*"></div>
-   <label class="checkrow" for="w_shared"><input type="checkbox" id="w_shared" ${w.shared?"checked":""}> Share with the family</label>
+   ${switched()?`<div class="sub">On ${esc(pname(viewId()))}'s profile here, a card is shared with the whole family. A private card needs ${esc(pname(viewId()))}'s own sign-in.</div>`:`<label class="checkrow" for="w_shared"><input type="checkbox" id="w_shared" ${w.shared?"checked":""}> Share with the family</label>`}
    <button class="primary" type="submit">Save card</button></form>`,sh=>{
     sh.querySelectorAll(".colors button").forEach(b=>b.onclick=()=>{bg=b.dataset.c;sh.querySelectorAll(".colors button").forEach(x=>x.classList.toggle("on",x===b))});
     sh.querySelector("#w_photo").onchange=async e=>{const f=e.target.files[0];if(!f)return;photo=await shrinkImage(f,900,.72);toast("Photo added")};
     sh.querySelector("#f").onsubmit=e=>{e.preventDefault();const v=k=>sh.querySelector("#"+k).value.trim();
       const rec={kind:v("w_kind"),holder:+v("w_holder"),name:v("w_name"),num:v("w_num"),code:v("w_code"),extra:v("w_extra"),bg,photo};
-      const shared=sh.querySelector("#w_shared").checked;
+      const shared=switched()||sh.querySelector("#w_shared").checked;
       if(id){const old=allCards().find(x=>x.id===id);if(old.shared!==shared){ST.del(old.shared?"wallet":"myWallet",id);ST.add(shared?"wallet":"myWallet",rec)}else ST.patch(shared?"wallet":"myWallet",id,rec)}
       else ST.add(shared?"wallet":"myWallet",rec);
       closeSheet();toast("Card saved")};
@@ -399,6 +403,8 @@ function lastResultForMe(){const mine=S().moodSessions.filter(s=>s.state==="done
 function moodRequestBanner(){
   const s=activeSession();
   if(!s||s.state!=="asking"||!(s.people||[]).includes(meId())||(s.agreed||{})[meId()])return "";
+  if(switched())return `<div class="reqbar"><b>${esc(pname(s.starter))} asks ${esc(pname(meId()))} to join a 5-minute family mood check</b><span class="sub">Only ${esc(pname(meId()))} can say yes, from ${esc(pname(meId()))}'s own profile. This phone is on ${esc(pname(viewId()))}'s profile now.</span>
+  <div class="two"><button class="ghost" data-act="moodDecline" data-id="${s.id}">No thanks</button><button class="primary" data-act="viewAs" data-k="${meId()}">Switch to ${esc(pname(meId()))}</button></div></div>`;
   return `<div class="reqbar"><b>${esc(pname(s.starter))} wants to do a 5-minute family mood check</b><span class="sub">${esc(pname(s.starter))}'s phone will listen to the room. Nothing is recorded or saved. The result goes to everyone who takes part.</span>
   <div class="two"><button class="ghost" data-act="moodDecline" data-id="${s.id}">No thanks</button><button class="primary" data-act="moodAgree" data-id="${s.id}">I agree</button></div></div>`;
 }
@@ -410,10 +416,10 @@ function viewMood(){
     <div class="sub">If anyone says no, or doesn't answer within 2 minutes, it won't start.</div>
     <button class="ghost" data-act="moodCancel" data-id="${s.id}">Cancel</button></section>`;
   if(s&&s.state==="ready"){
-    const mine=s.starter===meId();
+    const mine=s.starter===meId()&&!switched();
     return `${backBar()}<section class="card stack" style="gap:14px;text-align:center;align-items:center"><h2>Everyone agreed</h2>
      <div class="row" style="justify-content:center;gap:14px;flex-wrap:wrap">${(s.people||[]).map(i=>`<span class="row" style="gap:6px">${dot(i)}<span class="sub">${esc(pname(i))}</span></span>`).join("")}</div>
-     ${mine?`<p class="sub" style="margin:0">Your phone will listen for 5 minutes. Keep Happy Home open and the phone in the middle of the room.</p><button class="primary" style="width:100%" data-act="moodListen" data-id="${s.id}">Start listening</button>`:`<p class="sub" style="margin:0">Waiting for ${esc(pname(s.starter))} to start it.</p>`}
+     ${mine?`<p class="sub" style="margin:0">Your phone will listen for 5 minutes. Keep Happy Home open and the phone in the middle of the room.</p><button class="primary" style="width:100%" data-act="moodListen" data-id="${s.id}">Start listening</button>`:`<p class="sub" style="margin:0">Waiting for ${esc(pname(s.starter))} to start it${s.starter===meId()?" from "+esc(pname(meId()))+"'s own profile":""}.</p>${s.starter===meId()?`<button class="ghost" style="width:100%" data-act="viewAs" data-k="${meId()}">Switch to ${esc(pname(meId()))}'s profile</button>`:""}`}
      <button class="ghost" style="width:100%" data-act="moodCancel" data-id="${s.id}">Cancel</button></section>`;
   }
   if(s&&s.state==="listening"){
@@ -425,20 +431,20 @@ function viewMood(){
      <button class="stopbtn" data-act="moodStop" data-id="${s.id}">Stop now</button>
      <p class="sub" style="margin:0;text-align:center">Anyone taking part can stop it from their own phone. ${here?"Sound is measured on this phone and never recorded or saved.":"Nothing is recorded or saved."}</p></section>`;
   }
-  const res=lastResultForMe();
+  const res=switched()?null:lastResultForMe();
   const t=TODAY();
   const todays=people().map(p=>{const c=S().moods.filter(m=>m.person===p.id&&m.date===t).sort((a,b)=>b.at-a.at)[0];
-    return `<div class="item">${dot(p.id)}<div class="grow"><div class="t">${esc(p.name)}${p.id===meId()?" (you)":""}</div><div class="m">${c?`Checked in ${new Date(c.at).toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"})}${c.note?` · "${esc(c.note)}"`:""}`:"Hasn't shared today"}</div></div>${c?moodBadge(c.mood):`<span class="pill">Private</span>`}</div>`}).join("");
+    return `<div class="item">${dot(p.id)}<div class="grow"><div class="t">${esc(p.name)}${p.id===viewId()?" (you)":""}</div><div class="m">${c?`Checked in ${new Date(c.at).toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"})}${c.note?` · "${esc(c.note)}"`:""}${fromPhone(c)}`:"Hasn't shared today"}</div></div>${c?moodBadge(c.mood):`<span class="pill">Private</span>`}</div>`}).join("");
   const week=[...Array(7)].map((_,i)=>addDays(t,i-6));
   return `${backBar()}${res?resultCard(res):""}
   <section class="card stack" style="gap:10px"><div class="row between"><h2>How's everyone today?</h2><span class="sub">${nice(t)}</span></div><div class="list">${todays}</div><div class="sub">You only see what each person chooses to share.</div></section>
-  <section class="card stack" style="gap:10px"><h2>How are you feeling?</h2>
+  <section class="card stack" style="gap:10px"><h2>${switched()?"How is "+esc(pname(viewId()))+" feeling?":"How are you feeling?"}</h2>
    <div class="moodpick">${MOODS.map(([k,n,c])=>`<button class="${k===pickMood?"on":""}" style="--m:${c}" data-act="pickMood" data-k="${k}"><i></i>${n}</button>`).join("")}</div>
    <input class="noteinput" id="moodNote" placeholder="Add a few words (optional)" aria-label="Mood note" maxlength="80">
-   <div class="two"><button class="ghost" data-act="moodPrivate">Keep private</button><button class="primary" data-act="moodShare">Share with family</button></div></section>
+   ${switched()?`<button class="primary" data-act="moodShare">Share with family as ${esc(pname(viewId()))}</button>`:`<div class="two"><button class="ghost" data-act="moodPrivate">Keep private</button><button class="primary" data-act="moodShare">Share with family</button></div>`}</section>
   <section class="card stack" style="gap:8px"><h2>5-minute family mood check</h2>
    <div class="sub">Your phone listens to the room for 5 minutes and gives a rough read of how calm or loud it was. Everyone in the room agrees on their own phone first, anyone can stop it, and nothing is recorded or saved.</div>
-   <button class="primary" data-act="moodStart">Start a mood check</button></section>
+   ${switched()?`<div class="sub">Only ${esc(pname(meId()))}, who is signed in on this phone, can start one, from ${esc(pname(meId()))}'s own profile.</div><button class="ghost" data-act="viewAs" data-k="${meId()}">Switch to ${esc(pname(meId()))}'s profile</button>`:`<button class="primary" data-act="moodStart">Start a mood check</button>`}</section>
   <section class="card"><div class="row between"><h2>This week</h2><span class="sub">Shared check-ins</span></div>
    <div class="week">${week.map(d=>`<div><span class="sub">${new Date(d+"T12:00:00").toLocaleDateString("en-AU",{weekday:"narrow"})}</span>${people().map(p=>{const c=S().moods.filter(m=>m.person===p.id&&m.date===d).sort((a,b)=>b.at-a.at)[0];return `<i style="background:${c?moodOf(c.mood)[2]:"var(--sunk)"}" title="${esc(p.name)}"></i>`}).join("")}</div>`).join("")}</div>
    <div class="row" style="gap:12px;margin-top:8px;flex-wrap:wrap">${people().map((p,i)=>`<span class="sub">Row ${i+1}: ${esc(p.name)}</span>`).join("")}</div></section>`;
@@ -667,7 +673,7 @@ function addShopItem(raw){
   name=name.charAt(0).toUpperCase()+name.slice(1);
   const dupe=S().shopping.find(s=>!s.done&&normName(s.name)===normName(name));
   if(dupe){if(qty&&qty!==dupe.qty)ST.patch("shopping",dupe.id,{qty});return}
-  ST.add("shopping",{name,qty,done:false,who:meId(),aisle:aisleOf(name)});
+  ST.add("shopping",{name,qty,done:false,who:viewId(),aisle:aisleOf(name)});
   const key=normName(name).replace(/[^a-z0-9]+/g,"-").slice(0,60)||"item",f=S().shopFreq.find(x=>x.id===key);
   ST.put("shopFreq",key,{name,count:(f?.count||0)+1,last:Date.now()});
 }
@@ -703,7 +709,7 @@ function billSheet(id){
     <div class="field"><label for="b_every">How often</label><select id="b_every">${Object.entries(EVERY).map(([k,[n]])=>`<option value="${k}" ${(b?.every||"month")===k?"selected":""}>${n}</option>`).join("")}</select></div></div>
    <div class="two"><div class="field"><label for="b_next">Next due</label><input id="b_next" type="date" required value="${b?.next||TODAY()}"></div>
     <div class="field"><label for="b_cat">Category</label><select id="b_cat">${cats.map(c=>`<option ${(b?.cat||"Bills")===c?"selected":""}>${esc(c)}</option>`).join("")}</select></div></div>
-   <div class="field"><label for="b_who">Who pays</label><select id="b_who">${whoOptions(b?.who||meId())}</select></div>
+   <div class="field"><label for="b_who">Who pays</label><select id="b_who">${whoOptions(b?.who||viewId())}</select></div>
    <label class="checkrow" for="b_auto"><input type="checkbox" id="b_auto" ${b?.auto?"checked":""}> Paid automatically (direct debit). Record it on the due date by itself.</label>
    <button class="primary" type="submit">Save</button>${b?`<button type="button" class="link" id="b_del" style="color:var(--bad);align-self:center">Delete</button>`:""}</form>`,sh=>{
     const v=i=>sh.querySelector("#"+i).value;
@@ -1049,12 +1055,12 @@ function feedItems(){
   const em={tasks:"✅",events:"📅",tx:"💳",shopping:"🛒",homework:"📝",notes:"🗒️",bills:"🧾",countdowns:"🎉",board:"💬",meals:"🍽️",stars:"⭐",alarms:"⏰",songs:"🎵"};
   const out=[];Object.keys(verb).forEach(c=>(S()[c]||[]).forEach(r=>{const at=r.createdAt||r.at||r.updated;const who=c==="stars"?r.who:(r.by??r.who);if(!at||who==null)return;
     const what=c==="tx"?(r.note||r.cat)+" "+money(r.type==="in"?r.amount:-r.amount,true):c==="shopping"?r.name:c==="homework"?r.subject+": "+r.title:c==="stars"?"★ "+r.pts+" · "+(r.title||""):c==="meals"?r.title:c==="board"?r.text:c==="alarms"?(r.title||"Alarm")+(r.time?" · "+tm(r.time):""):(r.title||r.name||"");
-    out.push({at,who:+who,c,txt:verb[c],what,em:em[c]})}));
+    out.push({at,who:+who,c,txt:verb[c],what,em:em[c],via:r.via})}));
   ["tasks","homework"].forEach(c=>S()[c].forEach(r=>{if(r.done&&r.doneAt)out.push({at:r.doneAt,who:+r.who,c:"done",txt:c==="tasks"?"finished a task":"finished homework",what:r.title||"",em:"🎉"})}));
   S().learn.forEach(l=>{if(l.updated)out.push({at:l.updated,who:+l.who,c:"learn",txt:"practised Chinese",what:"🔥 "+(l.streak||1)+" day streak",em:"学"});if(l.pianoAt)out.push({at:l.pianoAt,who:+l.who,c:"piano",txt:"practised piano",what:Object.values(l.piano||{}).filter(Boolean).length+" song"+(Object.values(l.piano||{}).filter(Boolean).length===1?"":"s")+" played so far",em:"🎹"})});
   return out.sort((a,b)=>b.at-a.at);
 }
-function feedRow(f){return `<div class="item feedrow ${Date.now()-f.at<90e3?"fresh":""}">${dot(f.who)}<div class="grow"><div class="t"><b>${esc(pname(f.who).split(" ")[0])}</b> ${esc(f.txt)}</div><div class="m">${f.em} ${esc(String(f.what).slice(0,80))}</div></div><span class="sub fago">${ago(f.at)}</span></div>`}
+function feedRow(f){return `<div class="item feedrow ${Date.now()-f.at<90e3?"fresh":""}">${dot(f.who)}<div class="grow"><div class="t"><b>${esc(pname(f.who).split(" ")[0])}</b> ${esc(f.txt)}</div><div class="m">${f.em} ${esc(String(f.what).slice(0,80))}${fromPhone(f)}</div></div><span class="sub fago">${ago(f.at)}</span></div>`}
 function liveFeedMini(){const f=feedItems().slice(0,4);return f.length?`<section class="card"><div class="row between"><h2>Just now</h2><button class="link" data-act="liveTab" data-k="feed">All activity</button></div><div class="list" style="margin-top:4px">${f.map(feedRow).join("")}</div></section>`:""}
 function liveFeed(){
   const f=feedItems().slice(0,60);let last="";
@@ -1101,16 +1107,17 @@ function setView(id){
 function profileSheet(){
   const v=viewId(),p=person(v)||{name:"Me"},cloud=ST.mode==="cloud",ph=photoOf(v),t=TODAY();
   const evs=evRange(t,addDays(t,6)).filter(e=>+e.who===v).length,todo=S().tasks.filter(x=>!x.done&&+x.who===v).length,hw=S().homework.filter(x=>!x.done&&+x.who===v).length,stars=starsThisWeek()[v]||0;
-  const whose=v===meId()?(cloud?"Signed in as "+esc(ST.me.email||""):"Using this phone"):"Showing "+esc(p.name)+"'s things on "+esc(pname(meId()))+"'s phone";
+  const whose=v===meId()?(cloud?"Signed in as "+esc(ST.me.email||""):"Using this phone"):"Using "+esc(p.name)+"'s profile on "+esc(pname(meId()))+"'s phone";
   openSheet(`${sheetHead("Profile")}
    <div class="profhead"><button type="button" class="dot avatar who-${colorIdx(v)}${ph?" ph ph-"+v:""}" id="pf_pic" aria-label="Change photo">${esc(p.name.slice(0,1).toUpperCase())}</button>
     <div class="grow"><h2>${esc(p.name)}</h2><div class="sub">${whose}</div></div></div>
    <input type="file" id="pf_file" accept="image/*" hidden>
    ${ph?`<div class="two"><button class="primary" type="button" id="pf_change">Change photo</button><button class="ghost" type="button" id="pf_remove">Remove photo</button></div>`:`<button class="primary" type="button" id="pf_change">📷 Add a photo</button>`}
    <div class="trio"><div><div class="label">This week</div><div class="v num">${evs} plan${evs===1?"":"s"}</div></div><div><div class="label">To do</div><div class="v num">${todo+hw}</div></div><div><div class="label">Stars</div><div class="v num">★ ${stars}</div></div></div>
-   ${peopleRaw().length>1?`<div class="label" style="margin-top:4px">Whose things come first?</div>
-   <div class="profpick">${people().map(q=>`<button type="button" class="pp ${q.id===v?"on":""}" data-act="viewAs" data-k="${q.id}">${dot(q.id)}<span>${esc(q.name)}</span></button>`).join("")}</div>
-   <div class="sub">Tap a person to see their tasks, plans and stars first, and to add things for them. Everything stays shared with the whole family${cloud&&v!==meId()?". Mood checks, location and private cards always stay with the person who is signed in":""}.</div>`:""}
+   ${peopleRaw().length>1?`<div class="label" style="margin-top:4px">Switch profile</div>
+   <div class="profpick">${people().map(q=>`<button type="button" class="pp ${q.id===v?"on":""}" data-act="viewAs" data-k="${q.id}">${dot(q.id)}<span>${esc(q.name)}</span>${cloud&&q.id===meId()?`<small>signed in</small>`:""}</button>`).join("")}</div>
+   <div class="sub">Tap a person to use the app as them on this phone. Their tasks, plans and stars come first, and notes, shopping and check-ins go under their name. Everything stays shared with the whole family.${cloud?" Private cards, the microphone mood check and location sharing stay with "+esc(pname(meId()))+", who is signed in here.":""}</div>
+   ${cloud&&v!==meId()?`<button class="ghost" type="button" data-act="viewAs" data-k="${meId()}">Back to ${esc(pname(meId()))}'s profile</button>`:""}`:""}
    <div class="two"><button class="ghost" type="button" data-go="alarms">Alarms & reminders</button><button class="ghost" type="button" data-act="settings">Settings</button></div>`,sh=>{
     const file=sh.querySelector("#pf_file"),pick=()=>file.click();
     sh.querySelector("#pf_pic").onclick=pick;sh.querySelector("#pf_change").onclick=pick;
@@ -1559,7 +1566,7 @@ function render(){
     nav.hidden=false;head.hidden=false;
     if(!TITLES[tab])tab="home";paintPage(tab);
     syncPhotos();renderTabs();
-    {const pv=viewId(),pb=$("#btnProfile");if(pb){const ph=photoOf(pv),cls="avatarbtn dot who-"+colorIdx(pv)+(ph?" ph ph-"+pv:""),ini=(pname(pv)||"?").slice(0,1).toUpperCase();if(pb.className!==cls)pb.className=cls;if(pb.textContent!==ini)pb.textContent=ini;pb.setAttribute("aria-label","Profile: "+pname(pv))}}
+    {const pv=viewId(),pb=$("#btnProfile");if(pb){const ph=photoOf(pv),cls="avatarbtn dot who-"+colorIdx(pv)+(ph?" ph ph-"+pv:"")+(switched()?" sw":""),ini=(pname(pv)||"?").slice(0,1).toUpperCase();if(pb.className!==cls)pb.className=cls;if(pb.textContent!==ini)pb.textContent=ini;pb.setAttribute("aria-label","Profile: "+pname(pv)+(switched()?", on "+pname(meId())+"'s phone":""))}}
     if(tab==="piano"&&window.HHPiano&&!pianoFail){
       $("#title").textContent=TITLES.piano;$("#subtitle").textContent="";
       if(!pianoOn||!$("#pianoHost")){$("#view").innerHTML=`<div id="pianoTop"></div><div id="pianoHost"></div>`;pianoOn=true;try{HHPiano.mount($("#pianoHost"))}catch(e){console.error(e);pianoOn=false;pianoFail=true}}
@@ -1582,7 +1589,7 @@ function render(){
 function bindForms(){
   const sf=$("#shopForm");if(sf)sf.onsubmit=e=>{e.preventDefault();const v=$("#shopInput").value.trim();if(!v)return;
     $("#shopInput").value="";v.split(/\s*,\s*/).filter(Boolean).forEach(addShopItem);$("#shopInput").focus()};
-  const bf=$("#boardForm");if(bf)bf.onsubmit=e=>{e.preventDefault();const v=$("#boardIn").value.trim();if(!v)return;ST.add("board",{text:v,who:meId(),at:Date.now(),ack:{}});$("#boardIn").value="";$("#boardIn").blur();toast("Posted for the family")};
+  const bf=$("#boardForm");if(bf)bf.onsubmit=e=>{e.preventDefault();const v=$("#boardIn").value.trim();if(!v)return;ST.add("board",{text:v,who:viewId(),at:Date.now(),ack:{}});$("#boardIn").value="";$("#boardIn").blur();toast("Posted for the family")};
   const qf=$("#qaForm");if(qf){const q=$("#qa");q.oninput=showQuick;qf.onsubmit=e=>{e.preventDefault();const v=q.value.trim();if(!v){q.focus();return}
     saveQuick(parseQuick(v));try{ST._localPref("qaUses",String(+(ST._localPref("qaUses")||0)+1))}catch(_){}q.value="";showQuick();q.blur()}}
   const af=$("#authForm");if(af)af.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";const em=$("#a_email").value.trim(),pw=$("#a_pw").value;
@@ -1671,7 +1678,7 @@ function addSheet(kind,preset,edit){
         if(!edit||!wk){calDay=d0;calMonth=monthKey(d0)}}
       if(kind==="shop"){if(!v("f_title").trim())return;addShopItem(v("f_title").trim()+(v("f_qty").trim()?" "+v("f_qty").trim():""));toast("Added to shopping")}
       if(kind==="homework"){if(!v("f_title").trim())return;const rec={subject:v("f_subj").trim()||"Homework",title:v("f_title").trim(),who:+v("f_who"),due:v("f_due"),time:v("f_time"),remind:rem()};if(edit){ST.patch("homework",edit.id,rec);toast("Homework updated")}else{ST.add("homework",{...rec,done:false});toast("Homework added")}}
-      if(kind==="note"){if(!v("f_title").trim()&&!v("f_body").trim())return;ST.add("notes",{title:v("f_title").trim(),body:v("f_body"),who:meId(),updated:Date.now(),pinned:false});toast("Note saved")}
+      if(kind==="note"){if(!v("f_title").trim()&&!v("f_body").trim())return;ST.add("notes",{title:v("f_title").trim(),body:v("f_body"),who:viewId(),updated:Date.now(),pinned:false});toast("Note saved")}
       closeSheet();
       if(edit){render();return}
       const dest={task:["lists","tasks"],shop:["lists","shopping"],homework:["lists","homework"],note:["notes"],money:["money"],event:["calendar"]}[kind];
@@ -1856,7 +1863,7 @@ document.addEventListener("click",e=>{
     case"shareShop":{const open=S().shopping.filter(x=>!x.done),order=[...AISLES.map(a=>a[0]),"Other"],g={};open.forEach(x=>{const k=x.aisle||aisleOf(x.name);(g[k]=g[k]||[]).push(x)});
       const txt="Shopping list\n"+order.filter(k=>g[k]).map(k=>"\n"+k+"\n"+g[k].map(x=>"• "+x.name+(x.qty?" ("+x.qty+")":"")).join("\n")).join("\n");
       if(navigator.share)navigator.share({title:"Shopping list",text:txt}).catch(()=>{});else{try{navigator.clipboard.writeText(txt).then(()=>toast("List copied"))}catch(_){toast("Couldn't share")}}return}
-    case"boardAck":{const m=S().board.find(x=>x.id===id);if(m)setMapKey("board",id,"ack",meId(),!(m.ack||{})[meId()]);return}
+    case"boardAck":{const m=S().board.find(x=>x.id===id);if(m)setMapKey("board",id,"ack",viewId(),!(m.ack||{})[viewId()]);return}
     case"liveTab":liveTab=a.dataset.k;break;
     case"liveMore":liveOpen[a.dataset.k]=!liveOpen[a.dataset.k];break;
     case"addFor":return addSheet("task",{who:+a.dataset.k});
@@ -1866,7 +1873,7 @@ document.addEventListener("click",e=>{
     case"playDel":pianoDrop(id);return;
     case"oldDel":{const v=String(a.dataset.k||""),i=v.indexOf("|");earlierDrop(+v.slice(0,i),v.slice(i+1));return}
     case"playsMore":playsShown+=40;pianoSheetPaint();return;
-    case"viewAs":setView(a.dataset.k);closeSheet();toast("Showing "+pname(viewId())+"'s things first");break;
+    case"viewAs":setView(a.dataset.k);closeSheet();toast("Now using "+pname(viewId())+"'s profile");break;
     case"slot":return slotSheet();
     case"slotPick":{const r=a.dataset.k;ST._localPref("slot",r?JSON.stringify({r,wk:weekKey()}):"");closeSheet();slotSig="";toast(r?NAV[r][0]+" is this week's shortcut":"The app will pick a shortcut each week");break}
     case"alarmOk":ringing=ringing.filter(i=>i.id!==id);break;
@@ -1906,24 +1913,25 @@ document.addEventListener("click",e=>{
     case"editCard":closeSheet();return cardForm(id);
     case"key":return calcKey(a.dataset.k);
     case"calcSpend":{const v=calcPreview();return addSheet("money",{amount:v&&v>0?Math.round(v*100)/100:""})}
-    case"toggleLoc":if(mySharing()||geoWatch!==null){ST._localPref("shareLoc","0");stopGeo(true);toast("Stopped sharing your location")}else{ST._localPref("shareLoc","1");startGeo();toast("Sharing your location")}break;
+    case"toggleLoc":if(mySharing()||geoWatch!==null){ST._localPref("shareLoc","0");stopGeo(true);toast("Stopped sharing your location")}else if(switched())toast("Switch to "+pname(meId())+"'s profile to share this phone's location");else{ST._localPref("shareLoc","1");startGeo();toast("Sharing your location")}break;
     case"pickMood":pickMood=a.dataset.k;break;
     case"moodShare":case"moodPrivate":{const note=($("#moodNote")?.value||"").trim();
-      if(act==="moodShare")ST.add("moods",{person:meId(),mood:pickMood,note,date:TODAY(),at:Date.now()});
+      if(act==="moodShare")ST.add("moods",{person:viewId(),mood:pickMood,note,date:TODAY(),at:Date.now()});
+      else if(switched())return;
       else ST.add("myMoodResults",{kind:"checkin",mood:pickMood,note,date:TODAY(),at:Date.now()});
       if($("#moodNote"))$("#moodNote").value="";toast(act==="moodShare"?"Shared with the family":"Saved just for you");return}
-    case"moodStart":return moodStartSheet();
-    case"moodAgree":setMapKey("moodSessions",id,"agreed",meId(),true);go("mood");return;
+    case"moodStart":if(switched()){toast("Switch to "+pname(meId())+"'s profile to start a mood check");return}return moodStartSheet();
+    case"moodAgree":if(switched())return;setMapKey("moodSessions",id,"agreed",meId(),true);go("mood");return;
     case"moodDecline":setMapKey("moodSessions",id,"declined",meId(),true);toast("You said no. It won't start.");return;
-    case"moodListen":{const s=S().moodSessions.find(x=>x.id===id);if(s)startListening(s);return}
+    case"moodListen":{const s=S().moodSessions.find(x=>x.id===id);if(s&&!switched())startListening(s);return}
     case"moodCancel":ST.patch("moodSessions",id,{state:"cancelled",reason:"cancelled"});return;
     case"moodStop":ST.patch("moodSessions",id,{state:"stopped",stoppedBy:meId()});if(listener.sid===id)finishListening();toast("Stopped");return;
     case"moodSeen":setMapKey("moodSessions",id,"seen",meId(),true);return;
-    case"moodShareResult":{const s=S().moodSessions.find(x=>x.id===id);if(!s)return;const m=s.result.level===1?"good":s.result.level===2?"okay":"stressed";
+    case"moodShareResult":{const s=S().moodSessions.find(x=>x.id===id);if(!s||switched())return;const m=s.result.level===1?"good":s.result.level===2?"okay":"stressed";
       ST.add("moods",{person:meId(),mood:m,note:"Family check: "+s.result.label,date:TODAY(),at:Date.now()});setMapKey("moodSessions",id,"seen",meId(),true);toast("Shared");return}
     case"authMode":authMode=a.dataset.k;authErr="";break;
     case"forgot":{const em=$("#a_email")?.value.trim();if(!em){authErr="Type your email above first, then tap Forgot password.";break}ST.resetPassword(em).then(()=>toast("Check your email for a reset link"),err=>{authErr=authErrorText(err);render()});return}
-    case"signOut":closeSheet();stopGeo(false);authMode="signin";authErr="";ST.signOut();return;
+    case"signOut":closeSheet();stopGeo(false);authMode="signin";authErr="";ST._localPref("view","0");ST.signOut();return;
     case"claim":ST.claimPerson(a.dataset.k);return;
     default:return;
   }

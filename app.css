@@ -563,3 +563,8 @@ button,.tab,.chip,.dot,.label,.pill{-webkit-user-select:none;user-select:none;-w
 .ptable>.ghost{margin:8px 10px}
 /* on the piano a little message must never block the keys under it (a message with an Undo button still takes its own taps) */
 html[data-page="piano"] .toast:not(:has(.tact)){pointer-events:none}
+/* profile switch: the person who is signed in says so on their button, and the picture at the top right gets a second ring while someone else's profile is in use */
+.profpick .pp>span:nth-of-type(2){max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profpick .pp small{font-size:.66rem;font-weight:700;color:var(--muted);margin-top:-5px;white-space:nowrap}
+.avatarbtn.sw{box-shadow:0 0 0 3px var(--bar-chip,var(--bg)),0 0 0 6px var(--bar-ink,var(--fg)),0 3px 0 6px var(--edge,transparent)}
+#w_hid{text-align:center}
