@@ -1078,7 +1078,11 @@ function viewPiano(){
   ${g?`<button class="link" data-act="pgame" data-k="">Stop the game</button>`:""}
   <p class="sub" style="text-align:center">A first step before real lessons: learn where the notes are and play a simple tune.</p>`;
 }
-function viewPianoPage(){return viewPiano()}
+function viewPianoPage(){
+  const st=pianoLd.state;
+  if(st===""||st==="loading")return `<section class="card stack" style="gap:8px;text-align:center;padding:28px 16px"><div style="font-size:2.4rem" aria-hidden="true">🎹</div><div class="sub">Getting the piano ready…</div></section>`;
+  const note=st==="none"?(ST.mode==="cloud"?"The big piano opens once its home is set in Settings.":"The big piano opens after you sign in to your family."):st==="fail"?"The big piano could not load just now. Here is the little one until it does.":"";
+  return (note?`<section class="card stack" style="gap:8px"><div class="sub">${note}</div>${st==="fail"?`<button class="ghost" data-act="pianoRetry">Try again</button>`:""}</section>`:"")+viewPiano()}
 function pianoKey(n){
   const f=NOTES.find(x=>x[0]===n);if(f)tone(f[1],.9);const g=pianoGame;if(!g)return;
   if(g.kind==="find"){if(n===g.target){g.score++;ding();g.msg="Yes! That's "+nlabel(n);const opts=NOTES.filter(x=>!x[0].includes("#")&&x[0]!==n&&x[0]!=="C2").map(x=>x[0]);g.target=opts[Math.floor(Math.random()*opts.length)];if(g.score%5===0)learnPianoStar()}else{g.msg="That's "+(n.includes("#")?"a black key":nlabel(n))+". Try again"}render();return}
@@ -1477,6 +1481,33 @@ function setActive(){const slot=slotInfo().r;let active=parentTab[tab]||tab;if(t
 /* piano: the new piano page builds itself once inside #pianoHost and is never rebuilt while someone is playing */
 let pianoOn=false,pianoFail=false;
 function pianoOff(){if(!pianoOn)return;pianoOn=false;try{window.HHPiano&&HHPiano.unmount()}catch(e){console.error(e)}}
+/* Where the piano comes from. Its address is not written anywhere in this app: it is kept in the family's own settings
+   (pianoHome), which only signed-in family members can read, so the app learns it only after sign-in.
+   Until it is set, the piano that comes with the app is used. */
+const PIANO_HOME_RE=/^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)\/piano\/$/;
+const PIANO_HERE="";               // the piano kept next to the app ("" = this folder); null once it lives only in its own home
+let pianoLd={state:""};           // want: the address picked; base: the one in use; state: "loading", "ok", "fail" or "none" (no address known yet)
+function pianoHomeClean(v){ // what was pasted, as a piano address; "" for nothing, null if it is not one
+  v=String(v||"").trim().toLowerCase().replace(/[?#].*$/,"");if(!v)return "";
+  v="https://"+v.replace(/^[a-z]+:\/*/,"").replace(/\/+$/,"");if(!/\/piano$/.test(v))v+="/piano";v+="/";
+  return PIANO_HOME_RE.test(v)?v:null}
+function pianoHome(){const h=ST.mode==="cloud"&&ST.phase==="ready"?(S().settings||{}).pianoHome:"";return typeof h==="string"&&PIANO_HOME_RE.test(h)?h:""}
+function pianoLoad(){ // on every render once the family is in: start loading the piano if it is not here yet
+  const want=pianoHome()||PIANO_HERE;
+  if(pianoLd.state==="loading"||pianoLd.state==="ok"||(pianoLd.state&&pianoLd.want===want))return;
+  if(want===null){pianoLd={want,state:"none"};return}
+  pianoGet(want,want)}
+function pianoGet(base,want){
+  pianoLd={want,base,state:"loading"};
+  const one=(tag,attrs)=>new Promise((ok,no)=>{const el=document.createElement(tag);el.crossOrigin="anonymous";Object.assign(el,attrs);el.onload=()=>ok(el);el.onerror=()=>{el.remove();no(new Error(attrs.href||attrs.src))};document.head.appendChild(el)});
+  one("link",{rel:"stylesheet",href:base+"piano.css"}).then(()=>one("script",{src:base+"piano.js"})).then(()=>{
+    if(!window.HHPiano)throw new Error("no piano in "+base);
+    pianoLd={want,base,state:"ok"};
+    if(base&&base!==PIANO_HERE)try{const sw=navigator.serviceWorker&&navigator.serviceWorker.controller;if(sw)sw.postMessage({type:"hh-piano",base})}catch(e){}
+    render()
+  }).catch(e=>{console.warn("piano:",e&&e.message);
+    if(!window.HHPiano&&base!==PIANO_HERE&&PIANO_HERE!==null){pianoGet(PIANO_HERE,want);return}   // its home did not answer: use the one with the app
+    pianoLd={want,base,state:window.HHPiano?"ok":"fail"};render()})}
 /* ---------- piano players: who is playing, and the list of songs played ----------
    Every song played to the end is kept as one row in the family's "plays" (one record per month, so the list stays cheap to load).
    A row can be given to another person or deleted; the song's stars and the scoreboard stars follow it. */
@@ -1685,7 +1716,7 @@ function render(){
       $("#view").innerHTML=ST.phase==="loading"?`<div class="auth"><div class="logo">H</div><p class="sub">Loading your family…</p></div>`:ST.phase==="signedOut"?viewAuth():ST.phase==="needsFamily"?viewFamilySetup():viewClaim();
       bindForms();return;
     }
-    nav.hidden=false;head.hidden=false;
+    nav.hidden=false;head.hidden=false;pianoLoad();
     if(!TITLES[tab])tab="home";paintPage(tab);
     if(ST.mode==="cloud")suAsk();
     syncPhotos();renderTabs();
@@ -1853,6 +1884,8 @@ function settingsSheet(){
     <button class="ghost" type="button" id="s_copy">Copy code</button>
     <div class="label" style="margin-top:6px">Two-step sign-in</div><div class="sub">${ST.twoStepOn()?"On. You'll need a code from your authenticator app when you sign in.":"Off. Turn it on to need a code from an authenticator app as well as your password."}</div>
     <button class="ghost" type="button" data-act="twoStep">${ST.twoStepOn()?"Turn off two-step sign-in":"Turn on two-step sign-in"}</button>
+    ${(S().settings||{}).owner===ST.me.uid?`<div class="label" style="margin-top:6px">Piano home</div><div class="sub">${pianoHome()?"The piano opens from its own private home. Only your family can see this address.":"The piano opens from the app itself. Paste the piano's private address here once it has one."}</div>
+    <div class="row" style="gap:8px"><input id="s_ph" class="grow" value="${esc((S().settings||{}).pianoHome||"")}" placeholder="Piano address" aria-label="Piano address" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url" style="min-width:0;border:0;background:var(--sunk);border-radius:10px;padding:9px 12px"><button class="ghost" type="button" id="s_phs">Save</button></div>`:""}
     <div class="sub">Signed in as ${esc(ST.me.email)}</div><button class="ghost" type="button" data-act="signOut">Sign out</button>`
    :`<div class="label" style="margin-top:6px">This phone only</div><p class="sub" style="margin:0">Family sharing isn't set up yet, so everything stays on this phone. Copy a backup code to keep it safe, or paste one to restore.</p>
     <div class="two"><button class="ghost" type="button" id="s_copy">Copy backup</button><button class="ghost" type="button" id="s_restore">Restore</button></div>
@@ -1865,6 +1898,14 @@ function settingsSheet(){
       if(!cloud)ST.setMe(sh.querySelector("#s_me").value);
       closeSheet();toast("Settings saved")};
     const copy=(txt,okMsg,box)=>{try{navigator.clipboard.writeText(txt).then(()=>toast(okMsg),()=>{if(box){box.hidden=false;box.value=txt;box.select()}})}catch(_){if(box){box.hidden=false;box.value=txt;box.select()}}};
+    const phs=sh.querySelector("#s_phs");if(phs)phs.onclick=async()=>{
+      const v=pianoHomeClean(sh.querySelector("#s_ph").value);
+      if(v===null){toast("That isn't a piano address. It looks like https://…web.app/piano/");return}
+      if(v){phs.disabled=true;let ok=false;try{const r=await fetch(v+"piano.js",{mode:"cors",cache:"no-store"});ok=r.ok&&/HHPiano/.test(await r.text())}catch(e){}phs.disabled=false;
+        if(!ok){toast("No piano answered at that address. Check it and try again.");return}}
+      if(v===((S().settings||{}).pianoHome||"")){closeSheet();return}
+      ST.setSettings({pianoHome:v});closeSheet();toast(v?"Piano home saved. Opening the piano from there…":"Piano home cleared");
+      setTimeout(()=>location.reload(),1500)};
     if(cloud){sh.querySelector("#s_copy").onclick=()=>copy(ST.familyId,"Family code copied")}
     else{
       const box=sh.querySelector("#s_box");
@@ -2057,6 +2098,7 @@ document.addEventListener("click",e=>{
       ST.add("moods",{person:meId(),mood:m,note:"Family check: "+s.result.label,date:TODAY(),at:Date.now()});setMapKey("moodSessions",id,"seen",meId(),true);toast("Shared");return}
     case"authMode":authMode=a.dataset.k;authErr="";break;
     case"forgot":{const em=$("#a_email")?.value.trim();if(!em){authErr="Type your email above first, then tap Forgot password.";break}ST.resetPassword(em).then(()=>toast("Check your email for a reset link"),err=>{authErr=authErrorText(err);render()});return}
+    case"pianoRetry":pianoLd={state:""};render();return;
     case"signOut":closeSheet();stopGeo(false);authMode="signin";authErr="";ST._localPref("view","0");ST.signOut();return;
     case"claim":ST.claimPerson(a.dataset.k);return;
     default:return;
@@ -2111,7 +2153,7 @@ setInterval(()=>{if(tab==="mood"&&activeSession())render();moodTick()},1000);
 setInterval(()=>{if((tab==="home"||tab==="today")&&!document.hidden&&!$("#sheetHost").innerHTML&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||""))render()},20000);
 setInterval(()=>{try{alarmTick()}catch(e){console.error(e)}},15000);
 /* what the piano page may use from the app */
-window.HH={S,ST,esc,toast,openSheet,closeSheet,sheetHead,pname,learnerId,pref:(k,v)=>v===undefined?ST._localPref(k):ST._localPref(k,String(v)),star:(n,title)=>learnStar(n,title),pianoProgress:()=>pianoClean(pianoWho()),savePianoProgress:savePiano,delUndo,go:t=>go(t),dot,
+window.HH={S,ST,pianoFrom:()=>Object.assign({},pianoLd),esc,toast,openSheet,closeSheet,sheetHead,pname,learnerId,pref:(k,v)=>v===undefined?ST._localPref(k):ST._localPref(k,String(v)),star:(n,title)=>learnStar(n,title),pianoProgress:()=>pianoClean(pianoWho()),savePianoProgress:savePiano,delUndo,go:t=>go(t),dot,
   ...(typeof ST.merge==="function"?{people:()=>people().map(p=>({id:p.id,name:p.name})),playerId:pianoWho,setPlayer:setPianoWho,pianoPlayed,pianoMove,pianoSheet}:{})};
 let autoPayDay=null;setInterval(()=>{if(ST.phase==="ready"&&autoPayDay!==TODAY()&&Date.now()-bootAt>6000){autoPayDay=TODAY();try{autoPayBills()}catch(e){}}},3000);
 const bootAt=Date.now();

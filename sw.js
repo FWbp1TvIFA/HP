@@ -1,23 +1,32 @@
 /* Happy Home service worker: makes the app open instantly and work offline. */
-const CACHE = "happyhome-v31";
+const CACHE = "happyhome-v32";
 const KEEP = "hh-keep-sounds-1"; // the piano recordings: they never change, so they stay across app updates
+const PCODE = "hh-piano-code-1"; // the piano's code when it comes from its own home: kept across app updates, refreshed whenever online
+// The piano's own home: the app learns its address only after sign-in, so here it is known only by its shape.
+const pianoUrl = u => /^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/.test(u.origin) && u.pathname.indexOf("/piano/") === 0;
 const FILES = ["./", "index.html", "app.css", "theme.css", "piano.css", "piano.js", "confetti.js", "push.js", "fonts/fredoka-latin.woff2", "fonts/nunito-latin.woff2", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
-const PIANO = ["C4", "Ds4", "Fs4", "A4", "C5", "Ds5", "Fs5", "A5", "C6", "A3", "Fs3"].map(n => "sounds/piano/" + n + ".mp3");
+const PIANO = ["C4", "Ds4", "Fs4", "A4", "C5", "Ds5", "Fs5", "A5", "C6", "A3", "Fs3"];
 // After an update: clear old copies, then quietly fetch the piano recordings most songs use, so the piano sounds real even before it is first opened.
-const getSounds = () => caches.open(KEEP).then(c => Promise.all(PIANO.map(u => c.match(u).then(hit => hit || fetch(u).then(r => { if (r && r.ok) return c.put(u, r); })).catch(() => {}))));
-self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== KEEP).map(k => caches.delete(k)))).then(() => self.clients.claim()).then(getSounds).catch(() => {})); });
+const getSounds = base => caches.open(KEEP).then(c => Promise.all(PIANO.map(n => (base || "") + "sounds/piano/" + n + ".mp3").map(u => c.match(u).then(hit => hit || fetch(u, { mode: "cors" }).then(r => { if (r && r.ok) return c.put(u, r); })).catch(() => {}))));
+self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== KEEP && k !== PCODE).map(k => caches.delete(k)))).then(() => self.clients.claim()).then(() => getSounds("")).catch(() => {})); });
+// Once the piano has loaded from its home, the app says where that is, and its usual recordings are saved for offline use.
+self.addEventListener("message", e => {
+  const d = e.data; if (!d || d.type !== "hh-piano" || typeof d.base !== "string") return;
+  try { const u = new URL(d.base); if (pianoUrl(u) && u.pathname === "/piano/" && !u.search && !u.hash) e.waitUntil(getSounds(u.href)); } catch (err) { /* not a piano address */ }
+});
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.origin !== location.origin) return; // Firebase traffic goes straight to the network
+  const piano = pianoUrl(url);
+  if (e.request.method !== "GET" || (url.origin !== location.origin && !piano)) return; // Firebase traffic (except the piano) goes straight to the network
   if (url.pathname.indexOf("/sounds/") >= 0) { // piano recordings: saved copy first (they never change), else fetch once and keep
     e.respondWith(caches.open(KEEP).then(c => c.match(e.request).then(hit => hit || fetch(e.request).then(r => { if (r && r.ok) c.put(e.request, r.clone()); return r; }))));
     return;
   }
   // Network first so updates show up, cache as fallback for offline.
   // If the network is down or very slow (over 4 seconds), open from the saved copy straight away.
-  const fromCache = () => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match("index.html"));
-  const net = fetch(e.request).then(r => { if (r && r.ok) { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); } return r; });
+  const fromCache = () => caches.match(e.request, { ignoreSearch: true }).then(r => r || (piano ? null : caches.match("index.html")));
+  const net = fetch(e.request).then(r => { if (r && r.ok) { const copy = r.clone(); caches.open(piano ? PCODE : CACHE).then(c => c.put(e.request, copy)); } return r; });
   e.respondWith(new Promise(resolve => {
     let done = false; const finish = r => { if (!done && r) { done = true; resolve(r); } };
     const t = setTimeout(() => fromCache().then(r => r ? finish(r) : null), 4000);
