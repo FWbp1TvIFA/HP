@@ -56,6 +56,8 @@ html[data-page="learn"],html[data-page="alarms"],.tile[data-go="learn"],.tab[dat
 .tile[data-act="settings"]{--pop:var(--purple);--tone:var(--purple-t)}
 .tile[data-act="addCountdown"]{--pop:var(--pink);--tone:var(--pink-t)}
 html[data-page="home"]{--emoji:"🏡"}html[data-page="today"]{--emoji:"☀️"}html[data-page="calendar"]{--emoji:"📅"}html[data-page="lists"]{--emoji:"✅"}html[data-page="money"]{--emoji:"💰"}html[data-page="more"]{--emoji:"🧩"}html[data-page="notes"]{--emoji:"📝"}html[data-page="calc"]{--emoji:"🧮"}html[data-page="location"]{--emoji:"📍"}html[data-page="wallet"]{--emoji:"💳"}html[data-page="mood"]{--emoji:"😊"}html[data-page="bills"]{--emoji:"🧾"}html[data-page="meals"]{--emoji:"🍽️"}html[data-page="dates"]{--emoji:"🎉"}html[data-page="activities"]{--emoji:"🏊"}html[data-page="learn"]{--emoji:"🐼"}html[data-page="piano"]{--emoji:"🎹"}html[data-page="alarms"]{--emoji:"⏰"}
+html[data-page="signups"],.tile[data-go="signups"]{--pop:var(--green);--tone:var(--green-t)}
+html[data-page="signups"]{--emoji:"📈"}
 html[data-page="auth"]{--bar:var(--authbar)}
 /* colours worked out from the area colour; repeated on anything that carries its own colour */
 :root:root,.tile,.tab,.slotgrid button,[data-c]{

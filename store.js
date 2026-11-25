@@ -119,11 +119,50 @@
       if (PRIVATE_PATH[col]) return FB.doc(this.db, "users", this.me.uid, PRIVATE_PATH[col], id);
       return FB.doc(this.db, "families", this.familyId, col, id);
     },
+    /* Sign-ups: every account notes once that it exists, with only the time it was made (signups/{uid} = {joined, at}).
+       No name and no email. Only the family that runs the app can read the list (see the rules on the Sign-ups page).
+       Until those rules are published the write is refused; the phone then tries again ten minutes later or more. */
+    async _signupPing(user) {
+      if (!user) return;
+      this._user = user;
+      const k = "su:" + user.uid, v = this._localPref(k) || "";
+      if (v === "ok" || (v && Date.now() - (+v) < 600e3)) return;
+      try {
+        const ref = FB.doc(this.db, "signups", user.uid);
+        let have = false;
+        try { const g = await FB.getDoc(ref); have = g.exists(); } catch (e) { }
+        if (!have) {
+          const made = Math.floor(Date.parse(user.metadata && user.metadata.creationTime) || Date.now());
+          await FB.setDoc(ref, { joined: made, at: FB.serverTimestamp() });
+        }
+        this._localPref(k, "ok");
+      } catch (e) { this._localPref(k, String(Date.now())); }
+    },
+    signupNow() { const u = this._user; if (!u || u.uid !== this.me.uid) return; this._localPref("su:" + u.uid, ""); return this._signupPing(u); },
+    /* The list of sign-ups, live. cb({ok:true, list:[{id, joined}]}) or cb({ok:false, code}). Returns a stop function. */
+    signupsWatch(cb) {
+      if (this.mode !== "cloud" || !this.me.uid) { cb({ ok: false, code: "local" }); return () => { }; }
+      return FB.onSnapshot(FB.collection(this.db, "signups"), { includeMetadataChanges: true }, snap => {
+        if (snap.metadata.fromCache) return;                          // only what the server says (the phone's own copy may hold just its own sign-up)
+        cb({ ok: true, list: snap.docs.map(d => ({ id: d.id, joined: +(d.data().joined) || 0 })) });
+      }, e => cb({ ok: false, code: e && e.code || "error" }));
+    },
+    /* Can this account read the sign-ups? One small question to the server (it asks for none of them). cb(true|false|null). */
+    signupsProbe(cb) {
+      if (this.mode !== "cloud" || !this.me.uid) { cb(false); return; }
+      let un = null, done = false;
+      const fin = v => { if (done) return; done = true; try { un && un(); } catch (e) { } cb(v); };
+      un = FB.onSnapshot(FB.query(FB.collection(this.db, "signups"), FB.where("joined", ">", 4e12)), { includeMetadataChanges: true },
+        snap => { if (!snap.metadata.fromCache) fin(true); },
+        e => fin(e && e.code === "permission-denied" ? false : null));
+      setTimeout(() => fin(null), 15000);
+    },
     async _onUser(user) {
       this._unsubs.forEach(u => u()); this._unsubs = [];
       this.state = emptyState();
       if (!user) { this.phase = "signedOut"; this.me = { uid: null, personId: 1, email: null }; this.familyId = null; this._emit(); return; }
       this.me = { uid: user.uid, personId: 1, email: user.email };
+      this._signupPing(user);
       this.phase = "loading"; this._emit();
       const unsubUser = FB.onSnapshot(FB.doc(this.db, "users", user.uid), snap => {
         const d = snap.data();

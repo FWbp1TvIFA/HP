@@ -60,7 +60,7 @@ const ICON={
 
 /* ---------- view state ---------- */
 let tab="home", listTab="tasks", listWho="mine", moneyMonth=thisMonth(), calDay=TODAY(), calMonth=thisMonth(), cameFrom="more";
-const routes=["home","today","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities","learn","piano","alarms"];
+const routes=["home","today","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities","learn","piano","alarms","signups"];
 const routeOf=h=>h==="live"?"home":h; // the live view is the home page now
 const parentTab={today:"home",calendar:"more",money:"more",notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"more",meals:"more",dates:"more",activities:"more",learn:"more",alarms:"more"};
 if(routes.includes(routeOf(location.hash.slice(1))))tab=routeOf(location.hash.slice(1));
@@ -280,7 +280,129 @@ function viewMore(){
    ${tile("location",ICON.pin,"Family location","See where everyone is")}
    <button class="tile" data-act="slot"><span class="tilechar">🎲</span><b>Bottom shortcut</b><span>This week: ${esc(NAV[sl.r][0])}. Tap to change</span></button>
    <button class="tile" data-act="settings">${ICON.gear}<b>Settings</b><span>Names, currency, ${ST.mode==="cloud"?"family code":"backup"}</span></button>
+   ${suShow()?tile("signups",'<span class="tilechar">📈</span>',"Sign-ups",SU.can&&SU.res&&SU.res.ok?SU.res.list.length+(SU.res.list.length===1?" person has":" people have")+" signed up":SU.can?"How many people have signed up":"Turn on the sign-up count"):""}
   </div>`;
+}
+
+/* ---------- Sign-ups ---------- */
+/* How many people have signed up to Happy Home. Each account notes only when it was made (store.js _signupPing).
+   The list can be read only by the accounts of the family that runs the app: the Firestore rules name that family.
+   Until those rules are published, the person who made this family (and only a family made before 1 Dec 2026, so no
+   later family is shown this) sees one step to publish them, with this family's own code already filled in. */
+const SU={uid:null,can:null,res:null,un:null,asking:false};
+const SU_SINCE=Date.UTC(2026,10,30,14);            // 1 Dec 2026, Brisbane
+function suSync(){                                 // a different account signed in on this phone: start again for it
+  const u=ST.mode==="cloud"&&ST.me.uid||"";if(SU.uid===u)return;
+  try{SU.un&&SU.un()}catch(_){}
+  Object.assign(SU,{uid:u,can:null,res:null,un:null,asking:false,pinged:false});
+  const c=u&&ST._localPref("suCan:"+u);if(c)SU.can=c==="1";
+}
+function suIsSetter(){const st=S().settings||{};return ST.mode==="cloud"&&!!ST.me.uid&&st.owner===ST.me.uid&&!(st.createdAt>=SU_SINCE)}
+function suShow(){suSync();return !!SU.uid&&(SU.can===true||suIsSetter())}
+function suAsk(force){
+  suSync();if(!SU.uid||SU.asking)return;
+  const at=+(ST._localPref("suAt:"+SU.uid)||0);if(!force&&Date.now()-at<(SU.can===null?120e3:3600e3))return;
+  SU.asking=true;ST._localPref("suAt:"+SU.uid,String(Date.now()));const u=SU.uid;
+  ST.signupsProbe(v=>{if(SU.uid!==u)return;SU.asking=false;if(v===null)return;const was=SU.can;SU.can=v;ST._localPref("suCan:"+u,v?"1":"0");if(was!==v)render()});
+}
+function suWatch(){
+  suSync();if(SU.un||!SU.uid||(SU.res&&!SU.res.ok))return;const u=SU.uid;   // after a refusal it waits for Check again
+  SU.un=ST.signupsWatch(r=>{if(SU.uid!==u)return;SU.res=r;if(r.ok&&SU.can!==true){SU.can=true;ST._localPref("suCan:"+u,"1")}
+    if(!r.ok){if(r.code==="permission-denied"){SU.can=false;ST._localPref("suCan:"+u,"0")}try{SU.un&&SU.un()}catch(_){}SU.un=null}render()});
+}
+function suRules(fid){
+  return `rules_version = '2';
+// Happy Home security rules: only members of a family can see or change that family's data.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isMember(fid) {
+      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/families/$(fid)).data.members;
+    }
+
+    // Each person's own record (which family they belong to) and private things
+    // (private wallet cards, their own mood-check results). Nobody else can read these.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+      match /{sub=**} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // Sign-ups: each account notes only when it was made (no name, no email).
+    // Only the accounts of the family that runs Happy Home can see the list.
+    match /signups/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['joined', 'at'])
+        && request.resource.data.joined is int
+        && request.resource.data.at == request.time;
+      allow read: if isMember('${fid}');
+    }
+
+    match /families/{fid} {
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      allow create: if signedIn()
+        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.owner == request.auth.uid;
+      // Members can change family settings (names, budgets, ...).
+      allow update: if signedIn() && request.auth.uid in resource.data.members
+        && request.resource.data.owner == resource.data.owner;
+      // Someone with the family code can add only themself to the member list.
+      allow update: if signedIn()
+        && !(request.auth.uid in resource.data.members)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+        && request.resource.data.members.hasAll(resource.data.members)
+        && request.resource.data.members.size() == resource.data.members.size() + 1
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.members.size() <= 8;
+      allow delete: if signedIn() && request.auth.uid == resource.data.owner;
+
+      // Tasks, calendar, money, shopping, homework, notes, shared wallet cards,
+      // shared mood check-ins, locations people chose to share, mood-check requests.
+      match /{col}/{docId} {
+        allow read, write: if isMember(fid);
+      }
+    }
+  }
+}
+`;
+}
+function suFamily(){
+  const ps=people(),have=ps.filter(p=>p.uid).length;
+  return `<section class="card"><div class="row between"><h2>Our family</h2><span class="sub">${have} of ${ps.length} have an account</span></div>
+   <div class="list su-fam">${ps.map(p=>`<div class="su-row"><span class="dot who-${colorIdx(p.id)}${photoOf(p.id)?" ph ph-"+p.id:""}">${photoOf(p.id)?"":esc((pname(p.id)||"?").slice(0,1).toUpperCase())}</span><b>${esc(pname(p.id))}</b><span class="${p.uid?"su-yes":"su-no"}">${p.uid?(p.uid===ST.me.uid?"Has an account · you":"Has an account"):"Not yet"}</span></div>`).join("")}</div>
+   ${have<ps.length?`<p class="sub" style="margin-top:8px">Not yet: they make their own account in the app, then enter the family code from Settings.</p><button class="ghost" data-act="settings" style="width:100%;margin-top:6px">Family code in Settings</button>`:""}</section>`;
+}
+function viewSignups(){
+  const back=backBar();
+  if(!suShow())return back+`<section class="card"><p class="sub">This page is for the family that runs Happy Home.</p></section>`;
+  suWatch();
+  const r=SU.res;
+  if(!r)return back+`<section class="card"><h2>Sign-ups</h2><p class="sub">Counting…</p></section>`+suFamily();
+  if(!r.ok){
+    if(r.code==="permission-denied"&&suIsSetter())return back+`<section class="card su-setup"><h2>Turn on the sign-up count</h2>
+     <p class="sub">One time, about two minutes. It lets your family's accounts see how many people have signed up to Happy Home. Nobody's name or email is kept, only the time each account was made.</p>
+     <ol class="su-steps"><li>Tap <b>Copy the new rules</b>. Your family code is already in them.</li><li>Tap <b>Open Firebase rules</b> and sign in with the Google account that owns Happy Home.</li><li>Select all the text there, paste, then tap <b>Publish</b>.</li><li>Come back and tap <b>Check again</b>.</li></ol>
+     <div class="two"><button class="primary" data-act="suCopy">Copy the new rules</button><button class="ghost" data-act="suOpen">Open Firebase rules</button></div>
+     <textarea id="suRules" class="su-rules" readonly hidden aria-label="The new rules"></textarea>
+     <button class="ghost" data-act="suCheck" style="width:100%;margin-top:8px">Check again</button></section>`+suFamily();
+    return back+`<section class="card"><h2>Sign-ups</h2><p class="sub">${r.code==="unavailable"?"No internet just now. The count comes back when the phone is online.":"The count can't be read right now."}</p><button class="ghost" data-act="suCheck" style="width:100%;margin-top:8px">Check again</button></section>`+suFamily();
+  }
+  if(!SU.pinged&&!r.list.some(x=>x.id===ST.me.uid)){SU.pinged=true;try{ST.signupNow()}catch(_){}}   // this account itself, at once
+  const list=r.list.slice().sort((x,y)=>y.joined-x.joined),n=list.length,now=Date.now(),day=864e5;
+  const week=list.filter(x=>now-x.joined<7*day).length,today=list.filter(x=>iso(new Date(x.joined))===TODAY()).length;
+  // the last 8 weeks, Monday to Sunday
+  const t=new Date();t.setHours(0,0,0,0);t.setDate(t.getDate()-((t.getDay()+6)%7));
+  const weeks=[];for(let i=7;i>=0;i--){const s=new Date(t);s.setDate(t.getDate()-7*i);const e=new Date(s);e.setDate(s.getDate()+7);weeks.push({s,n:list.filter(x=>x.joined>=s.getTime()&&x.joined<e.getTime()).length})}
+  const top=Math.max(1,...weeks.map(w=>w.n));
+  const mine={};(S().settings.people||[]).forEach(p=>{if(p.uid)mine[p.uid]=p.id});
+  const when=ts=>new Date(ts).toLocaleString("en-AU",{weekday:"short",day:"numeric",month:"short",year:new Date(ts).getFullYear()===new Date().getFullYear()?undefined:"numeric",hour:"numeric",minute:"2-digit"});
+  return back+`<section class="card su-top"><div class="su-big">${n}</div><div><b>${n===1?"person has":"people have"} signed up to Happy Home</b><div class="sub">${week} in the last 7 days · ${today} today</div></div></section>
+   <section class="card"><h2>Sign-ups each week</h2><div class="su-bars" role="img" aria-label="Sign-ups in each of the last 8 weeks: ${weeks.map(w=>w.n).join(", ")}">${weeks.map((w,i)=>`<div class="su-bar${i===7?" now":""}"><span class="su-n">${w.n||""}</span><i style="height:${Math.round(w.n/top*100)}%"></i><small>${w.s.getDate()} ${w.s.toLocaleDateString("en-AU",{month:"short"})}</small></div>`).join("")}</div><p class="sub" style="margin-top:6px">Each bar is one week, Monday to Sunday. The last one is this week.</p></section>
+   <section class="card"><h2>Newest</h2><div class="list su-new">${list.slice(0,20).map(x=>{const pid=mine[x.id];return `<div class="su-row"><span class="dot ${pid?"who-"+colorIdx(pid):"su-anon"}">${pid?esc((pname(pid)||"?").slice(0,1).toUpperCase()):"✨"}</span><b>${pid?esc(pname(pid))+(x.id===ST.me.uid?" (you)":""):"Someone new"}</b><span class="sub">${esc(when(x.joined))}</span></div>`}).join("")||`<p class="sub">Nobody yet.</p>`}</div>
+   <p class="sub" style="margin-top:8px">Only your family's accounts can see this. It keeps no names or emails: an account from another family shows as "Someone new". An account appears here the first time it opens this version of the app.</p></section>`+suFamily();
 }
 
 /* ---------- Notes ---------- */
@@ -1541,7 +1663,7 @@ function roleNames(){
 }
 
 /* ---------- render ---------- */
-const TITLES={home:"Happy Home",today:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities",learn:"Chinese",piano:"Piano",alarms:"Alarms"};
+const TITLES={signups:"Sign-ups",home:"Happy Home",today:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities",learn:"Chinese",piano:"Piano",alarms:"Alarms"};
 let rendering=false;
 /* the bright look: every page wears its own colour (theme.css reads html[data-page]) */
 function paintPage(pg,again){const de=document.documentElement;if(de.dataset.page===pg&&!again)return;de.dataset.page=pg;
@@ -1565,6 +1687,7 @@ function render(){
     }
     nav.hidden=false;head.hidden=false;
     if(!TITLES[tab])tab="home";paintPage(tab);
+    if(ST.mode==="cloud")suAsk();
     syncPhotos();renderTabs();
     {const pv=viewId(),pb=$("#btnProfile");if(pb){const ph=photoOf(pv),cls="avatarbtn dot who-"+colorIdx(pv)+(ph?" ph ph-"+pv:"")+(switched()?" sw":""),ini=(pname(pv)||"?").slice(0,1).toUpperCase();if(pb.className!==cls)pb.className=cls;if(pb.textContent!==ini)pb.textContent=ini;pb.setAttribute("aria-label","Profile: "+pname(pv)+(switched()?", on "+pname(meId())+"'s phone":""))}}
     if(tab==="piano"&&window.HHPiano&&!pianoFail){
@@ -1579,7 +1702,7 @@ function render(){
     if(!TITLES[tab])tab="home";
     $("#title").textContent=TITLES[tab];
     $("#subtitle").textContent=tab==="home"?hello():tab==="today"?new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"}):"";
-    $("#view").innerHTML=alarmBanner()+syncBar()+{home:viewHomeLive,today:viewToday,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn,piano:viewPianoPage,alarms:viewAlarms}[tab]();
+    $("#view").innerHTML=alarmBanner()+syncBar()+{home:viewHomeLive,today:viewToday,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,signups:viewSignups,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn,piano:viewPianoPage,alarms:viewAlarms}[tab]();
     setActive();
     if(shopVal&&$("#shopInput"))$("#shopInput").value=shopVal; if(shopFocus&&$("#shopInput"))$("#shopInput").focus();
     if(noteVal&&$("#moodNote"))$("#moodNote").value=noteVal;if(qVal&&$("#qa")){$("#qa").value=qVal;showQuick()}if(qFocus&&$("#qa"))$("#qa").focus();if(bVal&&$("#boardIn"))$("#boardIn").value=bVal;if(bFocus&&$("#boardIn"))$("#boardIn").focus();
@@ -1907,6 +2030,9 @@ document.addEventListener("click",e=>{
     case"addEventDay":return addSheet("event",{date:calDay});
     case"budgets":return budgetSheet();
     case"settings":return settingsSheet();
+    case"suCopy":{const txt=suRules(ST.familyId),box=$("#suRules");try{navigator.clipboard.writeText(txt).then(()=>toast("Rules copied. Now open Firebase rules"),()=>{if(box){box.hidden=false;box.value=txt;box.select();toast("Select all and copy")}})}catch(_){if(box){box.hidden=false;box.value=txt;box.select()}}return}
+    case"suOpen":window.open("https://console.firebase.google.com/project/"+encodeURIComponent((window.HH_FIREBASE_CONFIG||{}).projectId||"")+"/firestore/rules","_blank","noopener");return;
+    case"suCheck":{try{SU.un&&SU.un()}catch(_){}SU.un=null;SU.res=null;suAsk(true);render();return}
     case"openNote":closeSheet();return noteSheet(id);
     case"openCard":closeSheet();return cardSheet(id);
     case"addCard":return cardForm();
