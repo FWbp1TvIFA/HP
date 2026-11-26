@@ -90,15 +90,15 @@ before(async () => {
   await fetch(`http://${EMU}:8080/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: "DELETE" });
   await fetch(`http://${EMU}:9099/emulator/v1/projects/${PROJECT}/accounts`, { method: "DELETE" });
   users.old = await signUp("old@example.com");
-  users.akiyo = await signUp("akiyo@example.com");
+  users.aiko = await signUp("aiko@example.com");
   users.outsider = await signUp("outsider@example.com");
   users.lonely = await signUp("lonely@example.com");
   // Same shapes as the app's Store.createFamily / joinFamily / claimPerson.
-  await put(users.old, "families/FAMILY01", { people: [{ id: 1, name: "Old", uid: users.old.uid }, { id: 2, name: "Akiyo", uid: null }, { id: 3, name: "Jugo", uid: null }], currency: "$", categories: ["Groceries", "Bills", "Transport", "School", "Eating out", "Health", "Fun", "Other"], budgets: { Groceries: 800, "Eating out": 100 }, members: [users.old.uid], owner: users.old.uid, createdAt: Date.now() });
+  await put(users.old, "families/FAMILY01", { people: [{ id: 1, name: "Old", uid: users.old.uid }, { id: 2, name: "Aiko", uid: null }, { id: 3, name: "Joey", uid: null }], currency: "$", categories: ["Groceries", "Bills", "Transport", "School", "Eating out", "Health", "Fun", "Other"], budgets: { Groceries: 800, "Eating out": 100 }, members: [users.old.uid], owner: users.old.uid, createdAt: Date.now() });
   await put(users.old, `users/${users.old.uid}`, { familyId: "FAMILY01" });
-  await patchMask(users.akiyo, "families/FAMILY01", { members: [users.old.uid, users.akiyo.uid] });
-  await put(users.akiyo, `users/${users.akiyo.uid}`, { familyId: "FAMILY01" });
-  await patchMask(users.akiyo, "families/FAMILY01", { people: [{ id: 1, name: "Old", uid: users.old.uid }, { id: 2, name: "Akiyo", uid: users.akiyo.uid }, { id: 3, name: "Jugo", uid: null }] });
+  await patchMask(users.aiko, "families/FAMILY01", { members: [users.old.uid, users.aiko.uid] });
+  await put(users.aiko, `users/${users.aiko.uid}`, { familyId: "FAMILY01" });
+  await patchMask(users.aiko, "families/FAMILY01", { people: [{ id: 1, name: "Old", uid: users.old.uid }, { id: 2, name: "Aiko", uid: users.aiko.uid }, { id: 3, name: "Joey", uid: null }] });
   await put(users.outsider, "families/OTHERFAM", { people: [{ id: 1, name: "Stranger", uid: users.outsider.uid }], currency: "$", categories: ["Other"], budgets: {}, members: [users.outsider.uid], owner: users.outsider.uid, createdAt: Date.now() });
   await put(users.outsider, `users/${users.outsider.uid}`, { familyId: "OTHERFAM" });
   // Things already in the app
@@ -131,7 +131,7 @@ test("official MCP client signs in through the Happy Home page and lists tools",
   const { tools } = await old.client.listTools();
   assert.deepEqual(tools.map(t => t.name), ["get_overview", "find_items", "money_summary", "add_items", "update_items", "mark_done", "delete_items"]);
   const add = tools.find(t => t.name === "add_items");
-  assert.match(add.description, /Jugo, Akiyo, Old/);   // the family's own names, in the app's order
+  assert.match(add.description, /Joey, Aiko, Old/);   // the family's own names, in the app's order
   assert.equal(tools.find(t => t.name === "delete_items").annotations.destructiveHint, true);
   assert.equal(tools.find(t => t.name === "get_overview").annotations.readOnlyHint, true);
 });
@@ -150,16 +150,16 @@ test("overview shows existing things, never wallet cards", async () => {
 let added = {};
 test("add_items writes exactly what the app writes", async () => {
   const { text, isError } = await call(old.client, "add_items", {
-    tasks: [{ title: "Mow the lawn", who: "Jugo", due: addDays(TODAY, 2), time: "10am", repeat: "weekly", stars: 5 }],
-    events: [{ title: "Parent teacher night", date: addDays(TODAY, 3), time: "18:30", place: "School hall" }, { title: "Piano", who: "jugo", weekly_on_days: ["Mon"], time: "17:00" }],
+    tasks: [{ title: "Mow the lawn", who: "Joey", due: addDays(TODAY, 2), time: "10am", repeat: "weekly", stars: 5 }],
+    events: [{ title: "Parent teacher night", date: addDays(TODAY, 3), time: "18:30", place: "School hall" }, { title: "Piano", who: "joey", weekly_on_days: ["Mon"], time: "17:00" }],
     homework: [{ subject: "Maths", title: "Fractions sheet" }],
     shopping: [{ name: "Eggs", qty: "12" }, { name: "milk" }, { name: "Bread 2" }],
     money: [{ amount: 87.4, note: "Woolworths", date: TODAY }, { amount: 12, category: "eating out", note: "Sushi" }, { amount: 3000, type: "income" }],
     notes: [{ title: "Wifi", text: "Password is on the router" }],
     bills: [{ name: "Netflix", amount: 18.99, every: "month", next_due: addDays(TODAY, 5), paid_automatically: true }],
-    meals: [{ date: addDays(TODAY, 1), title: "Spaghetti bolognese", ingredients: ["Mince", "Pasta", "Tomatoes"], cook: "Akiyo" }],
+    meals: [{ date: addDays(TODAY, 1), title: "Spaghetti bolognese", ingredients: ["Mince", "Pasta", "Tomatoes"], cook: "Aiko" }],
     add_meal_ingredients_to_shopping: true,
-    countdowns: [{ title: "Jugo's birthday", date: "2015-03-03", kind: "birthday" }],
+    countdowns: [{ title: "Joey's birthday", date: "2016-07-14", kind: "birthday" }],
     board: [{ text: "Home late tonight, dinner in the fridge" }],
   });
   assert.equal(isError, false, text);
@@ -283,7 +283,7 @@ test("mark_done: stars, repeating task, shopping, homework and bill payment", as
 });
 
 test("update_items and delete_items (with skip one day of a weekly activity)", async () => {
-  let r = await call(old.client, "update_items", { updates: [{ type: "tasks", id: added.mow, changes: { who: "Akiyo", stars: 3 } }, { type: "events", id: added.piano, changes: { weekly_on_days: ["Mon", "Wed"], until: addDays(TODAY, 60) } }] });
+  let r = await call(old.client, "update_items", { updates: [{ type: "tasks", id: added.mow, changes: { who: "Aiko", stars: 3 } }, { type: "events", id: added.piano, changes: { weekly_on_days: ["Mon", "Wed"], until: addDays(TODAY, 60) } }] });
   assert.equal(r.isError, false, r.text);
   const mow = (await docs("families/FAMILY01/tasks")).find(t => t.id === added.mow);
   assert.equal(mow.who, 2); assert.equal(mow.points, 3); assert.equal(mow.title, "Mow the lawn");
@@ -311,15 +311,15 @@ test("update_items and delete_items (with skip one day of a weekly activity)", a
 
 test("Dad and Mum names, reminders, done times and alarms match the app", async () => {
   // The app's one-time switch on the owner's phone: grown-ups show as Dad and Mum, old names kept as aka.
-  await patchMask(users.old, "families/FAMILY01", { people: [{ id: 1, name: "Dad", aka: "Old", uid: users.old.uid }, { id: 2, name: "Mum", aka: "Akiyo", uid: users.akiyo.uid }, { id: 3, name: "Jugo", uid: null }], roleNames: 1 });
+  await patchMask(users.old, "families/FAMILY01", { people: [{ id: 1, name: "Dad", aka: "Old", uid: users.old.uid }, { id: 2, name: "Mum", aka: "Aiko", uid: users.aiko.uid }, { id: 3, name: "Joey", uid: null }], roleNames: 1 });
   const { tools } = await old.client.listTools();
-  assert.match(tools.find(t => t.name === "add_items").description, /Jugo, Mum \(also called Akiyo\), Dad \(also called Old\)/);
+  assert.match(tools.find(t => t.name === "add_items").description, /Joey, Mum \(also called Aiko\), Dad \(also called Old\)/);
   let r = await call(old.client, "get_overview", {});
-  assert.match(r.text, /Signed in as Dad/); assert.match(r.text, /Mum \(also called Akiyo\)/);
+  assert.match(r.text, /Signed in as Dad/); assert.match(r.text, /Mum \(also called Aiko\)/);
 
   // Old names and family words still find the right person.
   r = await call(old.client, "add_items", {
-    tasks: [{ title: "Call the dentist", who: "Akiyo", due: TODAY, time: "15:00", remind_minutes_before: 30 }, { title: "Water plants", who: "mummy" }, { title: "Wash car", who: "daddy" }],
+    tasks: [{ title: "Call the dentist", who: "Aiko", due: TODAY, time: "15:00", remind_minutes_before: 30 }, { title: "Water plants", who: "mummy" }, { title: "Wash car", who: "daddy" }],
     events: [{ title: "Parent night", date: addDays(TODAY, 3), time: "18:00", who: "my mum", remind_minutes_before: -1 }, { title: "Dentist", date: addDays(TODAY, 4), time: "09:00" }],
     homework: [{ title: "Reading log", due: addDays(TODAY, 1), time: "17:00", remind_minutes_before: 0 }],
   });
@@ -361,12 +361,12 @@ test("Dad and Mum names, reminders, done times and alarms match the app", async 
 
   // Alarms: weekly on set days (no date), or once on a date.
   r = await call(old.client, "add_items", { alarms: [
-    { title: "Leave for swimming", time: "15:30", weekly_on_days: ["Tue", "Thu"], who: "Jugo" },
+    { title: "Leave for swimming", time: "15:30", weekly_on_days: ["Tue", "Thu"], who: "Joey" },
     { time: "06:45", date: addDays(TODAY, 2) },
     { title: "Earlier today", time: "00:00" },
   ] });
   assert.equal(r.isError, false, r.text);
-  assert.match(r.text, /⏰ 3:30 ?pm Leave for swimming, every Tue, Thu \(Jugo\)/i);
+  assert.match(r.text, /⏰ 3:30 ?pm Leave for swimming, every Tue, Thu \(Joey\)/i);
   const alarms = await rawDocs("families/FAMILY01/alarms");
   const swim = alarms.find(a => plain(a).title === "Leave for swimming"), once = alarms.find(a => plain(a).time === "06:45"), late = alarms.find(a => plain(a).title === "Earlier today");
   assert.deepEqual({ ...plain(swim), id: 0, createdAt: 0 }, { id: 0, title: "Leave for swimming", time: "15:30", who: 3, days: [2, 4], date: "", on: true, createdAt: 0, by: 1 });
@@ -409,7 +409,7 @@ test("Dad and Mum names, reminders, done times and alarms match the app", async 
   assert.equal((await docs("families/FAMILY01/alarms")).length, 2);
   // The family's own settings were never written by the connector.
   const fam = (await docs("families")).find(x => x.id === "FAMILY01");
-  assert.equal(fam.roleNames, 1); assert.deepEqual(fam.people.map(x => [x.name, x.aka || ""]), [["Dad", "Old"], ["Mum", "Akiyo"], ["Jugo", ""]]);
+  assert.equal(fam.roleNames, 1); assert.deepEqual(fam.people.map(x => [x.name, x.aka || ""]), [["Dad", "Old"], ["Mum", "Aiko"], ["Joey", ""]]);
   for (const never of ["profiles", "notify", "pushSubs", "learn", "moods", "locations"]) assert.equal((await docs(`families/FAMILY01/${never}`)).length, 0, never);
 });
 
@@ -500,7 +500,7 @@ test("claude.ai flow by hand: registration, return address checks, PKCE, refresh
   const page = await pageRes.text();
   assert.match(page, /Claude \(claude\.ai\) wants to use your family/);
   assert.match(pageRes.headers.get("content-security-policy"), /frame-ancestors 'none'/);
-  const { res } = await signInAt(authUrl, users.akiyo.email);
+  const { res } = await signInAt(authUrl, users.aiko.email);
   assert.equal(res.status, 302);
   const loc = new URL(res.headers.get("location"));
   assert.equal(loc.origin + loc.pathname, cb); assert.equal(loc.searchParams.get("state"), "st-123"); assert.equal(loc.searchParams.get("iss"), base);
@@ -516,10 +516,10 @@ test("claude.ai flow by hand: registration, return address checks, PKCE, refresh
   assert.equal((await tok({ grant_type: "refresh_token", refresh_token: t.body.access_token })).body.error, "invalid_grant", "access token can't be used as refresh token");
   const r2 = await tok({ grant_type: "refresh_token", refresh_token: t.body.refresh_token });
   assert.equal(r2.status, 200); assert.ok(r2.body.access_token);
-  // Use the token directly: Akiyo is person 2.
-  const mcp = await j(`${base}/mcp`, { method: "POST", headers: { Authorization: `Bearer ${r2.body.access_token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "add_items", arguments: { notes: [{ text: "From Akiyo" }] } } }) });
+  // Use the token directly: Aiko is person 2.
+  const mcp = await j(`${base}/mcp`, { method: "POST", headers: { Authorization: `Bearer ${r2.body.access_token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "add_items", arguments: { notes: [{ text: "From Aiko" }] } } }) });
   assert.equal(mcp.status, 200); assert.equal(mcp.body.result.isError, undefined, JSON.stringify(mcp.body));
-  const n = (await docs("families/FAMILY01/notes")).find(x => x.body === "From Akiyo");
+  const n = (await docs("families/FAMILY01/notes")).find(x => x.body === "From Aiko");
   assert.equal(n.by, 2); assert.equal(n.who, 2);
   // Tampered token is refused with a fresh challenge.
   const forged = r2.body.access_token.slice(0, -3) + "abc";
@@ -535,10 +535,10 @@ test("claude.ai flow by hand: registration, return address checks, PKCE, refresh
 });
 
 test("when the Happy Home sign-in is ended (account disabled), Claude is asked to sign in again", async () => {
-  const fresh = await connectAs(users.akiyo);
+  const fresh = await connectAs(users.aiko);
   const ok = await call(fresh.client, "get_overview", {});
   assert.equal(ok.isError, false);
-  await j(`http://${EMU}:9099/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`, { method: "POST", headers: { Authorization: "Bearer owner", "Content-Type": "application/json" }, body: JSON.stringify({ localId: users.akiyo.uid, disableUser: true }) });
+  await j(`http://${EMU}:9099/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`, { method: "POST", headers: { Authorization: "Bearer owner", "Content-Type": "application/json" }, body: JSON.stringify({ localId: users.aiko.uid, disableUser: true }) });
   const t = await j(`${base}/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: fresh.provider.tokens().refresh_token }) });
   assert.equal(t.body.error, "invalid_grant");
 });
