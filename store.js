@@ -23,6 +23,9 @@
     return s;
   };
   const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  // Record ids go into the page (data-id="..."), so a record whose id could break out of that is skipped.
+  // Every id the app, the add-on and the Claude connector make is plain letters, numbers, "-" and "_".
+  const okId = id => typeof id === "string" && !/[<>"'`&\\\s]/.test(id);
   const makeCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
 
   const Store = {
@@ -186,13 +189,13 @@
         this._unsubs.push(FB.onSnapshot(FB.collection(this.db, "families", fid, col), { includeMetadataChanges: true }, snap => {
           const before = this.pendingCols.size; snap.metadata.hasPendingWrites ? this.pendingCols.add(col) : this.pendingCols.delete(col);
           if (!snap.docChanges().length && before === this.pendingCols.size && this.state[col].length === snap.size) { if (before !== this.pendingCols.size) this._emit(); return; }
-          this.state[col] = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+          this.state[col] = snap.docs.filter(d => okId(d.id)).map(d => Object.assign({ id: d.id }, d.data()));
           this._emit();
         }, e => this._fail(e)));
       });
       PRIVATE_COLS.forEach(col => {
         this._unsubs.push(FB.onSnapshot(FB.collection(this.db, "users", this.me.uid, PRIVATE_PATH[col]), snap => {
-          this.state[col] = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+          this.state[col] = snap.docs.filter(d => okId(d.id)).map(d => Object.assign({ id: d.id }, d.data()));
           this._emit();
         }, e => this._fail(e)));
       });

@@ -467,7 +467,7 @@ function stopGeo(remove){if(geoWatch!==null){navigator.geolocation.clearWatch(ge
 const CARD_COLORS=["#E0662F","#1E7F5C","#22325A","#7A4FB5","#2B2B2B","#1C8FB3","#C2457A","#B08A12"];
 function allCards(){return [...S().wallet.map(c=>({...c,shared:true})),...(switched()?[]:S().myWallet.map(c=>({...c,shared:false})))]}
 function walletCard(w,full){
-  return `<button class="wcard ${full?"full":""}" data-act="openCard" data-id="${w.id}" style="background:${esc(w.bg||"#22325A")};color:#fff">
+  return `<button class="wcard ${full?"full":""}" data-act="openCard" data-id="${w.id}" style="background:${/^#[0-9a-f]{3,8}$/i.test(w.bg||"")?w.bg:"#22325A"};color:#fff">
   <div class="row between"><span class="wk">${esc(w.kind||"Card")}${w.shared?"":" · Private"}</span><span class="wh">${dot(w.holder??meId())}</span></div>
   <div class="wn">${esc(w.name)}</div>${full?`${w.num?`<div class="wnum">${esc(w.num)}</div>`:""}${w.extra?`<div class="wx">${esc(w.extra)}</div>`:""}`:""}</button>`;
 }
@@ -482,7 +482,7 @@ function cardSheet(id){
   const code=w.code==="qr"?Codes.qrSVG(w.num):w.code==="bar"?Codes.barcodeSVG(w.num):"";
   openSheet(`${sheetHead(esc(w.kind||"Card"))}${walletCard(w,true)}
    ${code?`<div class="codebox">${code}<div class="num" style="text-align:center;margin-top:6px;color:#111;letter-spacing:.08em">${esc(w.num)}</div></div><div class="sub">Turn your screen brightness up if a scanner has trouble reading it.</div>`:""}
-   ${w.photo?`<img class="photo" src="${w.photo}" alt="Photo of ${esc(w.name)}">`:""}
+   ${PHOTO_OK.test(w.photo||"")?`<img class="photo" src="${w.photo}" alt="Photo of ${esc(w.name)}">`:""}
    <div class="sub">Belongs to ${esc(pname(w.holder??meId()))} · ${w.shared?"Shared with the family":"Only you can see this"}</div>
    <div class="two"><button class="ghost" data-act="editCard" data-id="${w.id}">Edit</button><button class="ghost" id="c_del">Delete</button></div>`,sh=>{
     const d=sh.querySelector("#c_del");d.onclick=()=>{if(d.dataset.arm){ST.del(w.shared?"wallet":"myWallet",w.id);closeSheet();toast("Card deleted")}else{d.dataset.arm=1;d.textContent="Tap again to delete";d.style.color="var(--bad)"}};
