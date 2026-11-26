@@ -65,6 +65,7 @@ const routeOf=h=>h==="live"?"home":h; // the live view is the home page now
 const parentTab={today:"home",calendar:"more",money:"more",notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"more",meals:"more",dates:"more",activities:"more",learn:"more",alarms:"more"};
 if(routes.includes(routeOf(location.hash.slice(1))))tab=routeOf(location.hash.slice(1));
 let authMode="signin", authErr="", busy=false;
+let cpCode="", cpMsg="", cpOk=false; // the coupon box on the sign-up page
 
 function monthStats(m){
   let inc=0,out=0;const byCat={};
@@ -664,7 +665,22 @@ function viewAuth(){
    <div class="field"><label for="a_pw">Password</label><input id="a_pw" type="password" autocomplete="${authMode==="signup"?"new-password":"current-password"}" minlength="6" required></div>
    ${authErr?`<div class="err">${esc(authErr)}</div>`:""}
    <button class="primary" type="submit" ${busy?"disabled":""}>${authMode==="signup"?"Create account":"Sign in"}</button></form>
-  ${authMode==="signin"?`<button class="link" data-act="forgot">Forgot password?</button>`:""}</div>`;
+  ${authMode==="signin"?`<button class="link" data-act="forgot">Forgot password?</button>`:couponBox()}</div>`;
+}
+/* ---------- coupon on the sign-up page ----------
+   "Use a coupon to get ads removed". There are no coupons yet, so every code gets an honest "That code isn't valid".
+   To make a code work later, add the SHA-256 (hex) of the code, in capitals with only letters and numbers, to COUPONS.
+   The code itself never goes in this public file. */
+const COUPONS=[];
+const cpNorm=v=>String(v||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+async function cpCheck(code){
+  const c=cpNorm(code);if(!c||!COUPONS.length)return false;
+  try{const h=[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(c)))].map(b=>b.toString(16).padStart(2,"0")).join("");return COUPONS.includes(h)}catch(_){return false}
+}
+function couponBox(){
+  return `<section class="card stack coupon" style="gap:10px"><b class="cpline">🎟️ Use a coupon to get ads removed</b>
+   <form id="cpForm" class="row" style="gap:8px;align-items:stretch" autocomplete="off" novalidate><div class="field grow"><input id="cp_code" value="${esc(cpCode)}" placeholder="Coupon code" aria-label="Coupon code" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="40" enterkeyhint="done" style="text-transform:uppercase;letter-spacing:.08em"></div><button class="ghost" type="submit" style="padding:0 18px">Apply</button></form>
+   ${cpMsg?`<div class="${cpOk?"sub":"err"}" id="cpMsg" role="status">${esc(cpMsg)}</div>`:""}</section>`;
 }
 function viewFamilySetup(){
   return `<div class="auth"><h1>Set up your family</h1>
@@ -1746,6 +1762,12 @@ function bindForms(){
   const bf=$("#boardForm");if(bf)bf.onsubmit=e=>{e.preventDefault();const v=$("#boardIn").value.trim();if(!v)return;ST.add("board",{text:v,who:viewId(),at:Date.now(),ack:{}});$("#boardIn").value="";$("#boardIn").blur();toast("Posted for the family")};
   const qf=$("#qaForm");if(qf){const q=$("#qa");q.oninput=showQuick;qf.onsubmit=e=>{e.preventDefault();const v=q.value.trim();if(!v){q.focus();return}
     saveQuick(parseQuick(v));try{ST._localPref("qaUses",String(+(ST._localPref("qaUses")||0)+1))}catch(_){}q.value="";showQuick();q.blur()}}
+  const cf=$("#cpForm");if(cf){const ci=$("#cp_code");ci.oninput=()=>{cpCode=ci.value;if(cpMsg){cpMsg="";cpOk=false;const m=$("#cpMsg");if(m)m.remove()}};
+    cf.onsubmit=async e=>{e.preventDefault();cpCode=ci.value.trim();ci.blur();
+      if(!cpNorm(cpCode)){cpOk=false;cpMsg="Type a coupon code first."}
+      else if(await cpCheck(cpCode)){cpOk=true;cpMsg="Coupon accepted.";ST._localPref("coupon",cpNorm(cpCode))}
+      else{cpOk=false;cpMsg="That code isn't valid."}
+      render()}}
   const af=$("#authForm");if(af)af.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";const em=$("#a_email").value.trim(),pw=$("#a_pw").value;
     try{authMode==="signup"?await ST.signUp(em,pw):await ST.signIn(em,pw)}catch(err){authErr=err&&err.code==="hh/mfa-needed"?"":authErrorText(err)}busy=false;render();const mc=$("#m_code");mc&&mc.focus()};
   const mf=$("#mfaForm");if(mf)mf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.finishMfaSignIn($("#m_code").value)}catch(err){authErr=authErrorText(err)}busy=false;render()};
