@@ -105,7 +105,11 @@
     _initCloud(cfg) {
       this.mode = "cloud";
       this.app = FB.initializeApp(cfg);
-      this.auth = FB.getAuth(this.app);
+      // Email and password only (no Google pop-ups), so skip the pop-up helper that getAuth() loads from apis.google.com on every start.
+      // Same saved sign-in as getAuth() (this phone's database first), so nobody is signed out by this.
+      this.auth = FB.initializeAuth
+        ? FB.initializeAuth(this.app, { persistence: [FB.indexedDBLocalPersistence, FB.browserLocalPersistence, FB.browserSessionPersistence].filter(Boolean) })
+        : FB.getAuth(this.app);
       let cache;
       try { cache = FB.persistentLocalCache({ tabManager: FB.persistentMultipleTabManager() }); } catch (e) { cache = FB.memoryLocalCache(); }
       this.db = FB.initializeFirestore(this.app, { localCache: cache });

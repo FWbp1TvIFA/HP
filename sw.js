@@ -1,5 +1,5 @@
 /* Happy Home service worker: makes the app open instantly and work offline. */
-const CACHE = "happyhome-v34";
+const CACHE = "happyhome-v35";
 const KEEP = "hh-keep-sounds-1"; // the piano recordings: they never change, so they stay across app updates
 const PCODE = "hh-piano-code-1"; // the piano's code when it comes from its own home: kept across app updates, refreshed whenever online
 // The piano's own home: the app learns its address only after sign-in, so here it is known only by its shape.
