@@ -1,15 +1,17 @@
 /* Happy Home service worker: makes the app open instantly and work offline. */
-const CACHE = "happyhome-v32";
+const CACHE = "happyhome-v33";
 const KEEP = "hh-keep-sounds-1"; // the piano recordings: they never change, so they stay across app updates
 const PCODE = "hh-piano-code-1"; // the piano's code when it comes from its own home: kept across app updates, refreshed whenever online
 // The piano's own home: the app learns its address only after sign-in, so here it is known only by its shape.
 const pianoUrl = u => /^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/.test(u.origin) && u.pathname.indexOf("/piano/") === 0;
-const FILES = ["./", "index.html", "app.css", "theme.css", "piano.css", "piano.js", "confetti.js", "push.js", "fonts/fredoka-latin.woff2", "fonts/nunito-latin.woff2", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
+const FILES = ["./", "index.html", "app.css", "theme.css", "confetti.js", "push.js", "fonts/fredoka-latin.woff2", "fonts/nunito-latin.woff2", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 const PIANO = ["C4", "Ds4", "Fs4", "A4", "C5", "Ds5", "Fs5", "A5", "C6", "A3", "Fs3"];
-// After an update: clear old copies, then quietly fetch the piano recordings most songs use, so the piano sounds real even before it is first opened.
+// The piano recordings most songs use, fetched from the piano's home once the app says where that is.
 const getSounds = base => caches.open(KEEP).then(c => Promise.all(PIANO.map(n => (base || "") + "sounds/piano/" + n + ".mp3").map(u => c.match(u).then(hit => hit || fetch(u, { mode: "cors" }).then(r => { if (r && r.ok) return c.put(u, r); })).catch(() => {}))));
-self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== KEEP && k !== PCODE).map(k => caches.delete(k)))).then(() => self.clients.claim()).then(() => getSounds("")).catch(() => {})); });
+// Recordings that used to come from the app's own address are not used any more: let them go.
+const dropOld = () => caches.open(KEEP).then(c => c.keys().then(ks => Promise.all(ks.filter(r => new URL(r.url).origin === location.origin).map(r => c.delete(r)))));
+self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== KEEP && k !== PCODE).map(k => caches.delete(k)))).then(() => self.clients.claim()).then(dropOld).catch(() => {})); });
 // Once the piano has loaded from its home, the app says where that is, and its usual recordings are saved for offline use.
 self.addEventListener("message", e => {
   const d = e.data; if (!d || d.type !== "hh-piano" || typeof d.base !== "string") return;

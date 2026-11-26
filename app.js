@@ -1483,9 +1483,9 @@ let pianoOn=false,pianoFail=false;
 function pianoOff(){if(!pianoOn)return;pianoOn=false;try{window.HHPiano&&HHPiano.unmount()}catch(e){console.error(e)}}
 /* Where the piano comes from. Its address is not written anywhere in this app: it is kept in the family's own settings
    (pianoHome), which only signed-in family members can read, so the app learns it only after sign-in.
-   Until it is set, the piano that comes with the app is used. */
+   Until it is set, only the little piano shows. */
 const PIANO_HOME_RE=/^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)\/piano\/$/;
-const PIANO_HERE="";               // the piano kept next to the app ("" = this folder); null once it lives only in its own home
+const PIANO_HERE=null;             // the piano is no longer kept next to the app: it lives only in its own home
 let pianoLd={state:""};           // want: the address picked; base: the one in use; state: "loading", "ok", "fail" or "none" (no address known yet)
 function pianoHomeClean(v){ // what was pasted, as a piano address; "" for nothing, null if it is not one
   v=String(v||"").trim().toLowerCase().replace(/[?#].*$/,"");if(!v)return "";
@@ -1884,7 +1884,7 @@ function settingsSheet(){
     <button class="ghost" type="button" id="s_copy">Copy code</button>
     <div class="label" style="margin-top:6px">Two-step sign-in</div><div class="sub">${ST.twoStepOn()?"On. You'll need a code from your authenticator app when you sign in.":"Off. Turn it on to need a code from an authenticator app as well as your password."}</div>
     <button class="ghost" type="button" data-act="twoStep">${ST.twoStepOn()?"Turn off two-step sign-in":"Turn on two-step sign-in"}</button>
-    ${(S().settings||{}).owner===ST.me.uid?`<div class="label" style="margin-top:6px">Piano home</div><div class="sub">${pianoHome()?"The piano opens from its own private home. Only your family can see this address.":"The piano opens from the app itself. Paste the piano's private address here once it has one."}</div>
+    ${(S().settings||{}).owner===ST.me.uid?`<div class="label" style="margin-top:6px">Piano home</div><div class="sub">${pianoHome()?"The piano opens from its own private home. Only your family can see this address.":"No piano address saved yet, so only the little piano shows. Paste the piano's private address here."}</div>
     <div class="row" style="gap:8px"><input id="s_ph" class="grow" value="${esc((S().settings||{}).pianoHome||"")}" placeholder="Piano address" aria-label="Piano address" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url" style="min-width:0;border:0;background:var(--sunk);border-radius:10px;padding:9px 12px"><button class="ghost" type="button" id="s_phs">Save</button></div>`:""}
     <div class="sub">Signed in as ${esc(ST.me.email)}</div><button class="ghost" type="button" data-act="signOut">Sign out</button>`
    :`<div class="label" style="margin-top:6px">This phone only</div><p class="sub" style="margin:0">Family sharing isn't set up yet, so everything stays on this phone. Copy a backup code to keep it safe, or paste one to restore.</p>
