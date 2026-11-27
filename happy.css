@@ -145,3 +145,7 @@ html[data-page="happy"]{--emoji:"💖"}
 @keyframes hpRedPulse{50%{background:color-mix(in srgb,#FF0000 75%,transparent)}}
 @keyframes hpShakeCard{0%,100%{transform:none}20%{transform:translateX(-10px) rotate(-2deg)}40%{transform:translateX(10px) rotate(2deg)}60%{transform:translateX(-7px)}80%{transform:translateX(7px)}}
 @media (prefers-reduced-motion: reduce){.hp-cele.grump,.hp-cele.grump .hp-cele-card{animation:none}}
+
+/* cute.js: the always-alive icons */
+svg.cute{overflow:visible}
+svg.cute .ce{transform-box:fill-box;transform-origin:center}
