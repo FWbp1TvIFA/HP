@@ -43,7 +43,7 @@ html[data-page="happy"]{--emoji:"💖"}
 .hp-art svg{display:block;width:100%;height:100%}
 .hp-card:active .hp-art{transform:translateY(2px);box-shadow:0 2px 0 color-mix(in srgb,var(--g2) 60%,#000)}
 .hp-card.done .hp-art{filter:saturate(.75)}
-.hp-tick{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:var(--ink);font-weight:900;box-shadow:0 2px 0 rgba(0,0,0,.25)}
+.hp-tick{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--good-fill);color:var(--ink);font-weight:900;box-shadow:0 2px 0 rgba(0,0,0,.25)}
 .hp-card.add .hp-art{background:var(--sunk,var(--sunk0));box-shadow:none;border:3px dashed color-mix(in srgb,var(--pop) 70%,transparent);color:var(--tone);display:grid;place-items:center}
 .hp-card.add .hp-art svg{width:46%;height:46%}
 .hp-card.idea .hp-art{opacity:.62;box-shadow:none;outline:3px dashed color-mix(in srgb,var(--g2) 80%,#fff);outline-offset:-3px}
