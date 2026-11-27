@@ -23,6 +23,9 @@
     return s;
   };
   const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  // Record ids go into the page (data-id="..."), so a record whose id could break out of that is skipped.
+  // Every id the app, the add-on and the Claude connector make is plain letters, numbers, "-" and "_".
+  const okId = id => typeof id === "string" && !/[<>"'`&\\\s]/.test(id);
   const makeCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
 
   const Store = {
@@ -102,7 +105,11 @@
     _initCloud(cfg) {
       this.mode = "cloud";
       this.app = FB.initializeApp(cfg);
-      this.auth = FB.getAuth(this.app);
+      // Email and password only (no Google pop-ups), so skip the pop-up helper that getAuth() loads from apis.google.com on every start.
+      // Same saved sign-in as getAuth() (this phone's database first), so nobody is signed out by this.
+      this.auth = FB.initializeAuth
+        ? FB.initializeAuth(this.app, { persistence: [FB.indexedDBLocalPersistence, FB.browserLocalPersistence, FB.browserSessionPersistence].filter(Boolean) })
+        : FB.getAuth(this.app);
       let cache;
       try { cache = FB.persistentLocalCache({ tabManager: FB.persistentMultipleTabManager() }); } catch (e) { cache = FB.memoryLocalCache(); }
       this.db = FB.initializeFirestore(this.app, { localCache: cache });
@@ -186,13 +193,13 @@
         this._unsubs.push(FB.onSnapshot(FB.collection(this.db, "families", fid, col), { includeMetadataChanges: true }, snap => {
           const before = this.pendingCols.size; snap.metadata.hasPendingWrites ? this.pendingCols.add(col) : this.pendingCols.delete(col);
           if (!snap.docChanges().length && before === this.pendingCols.size && this.state[col].length === snap.size) { if (before !== this.pendingCols.size) this._emit(); return; }
-          this.state[col] = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+          this.state[col] = snap.docs.filter(d => okId(d.id)).map(d => Object.assign({ id: d.id }, d.data()));
           this._emit();
         }, e => this._fail(e)));
       });
       PRIVATE_COLS.forEach(col => {
         this._unsubs.push(FB.onSnapshot(FB.collection(this.db, "users", this.me.uid, PRIVATE_PATH[col]), snap => {
-          this.state[col] = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+          this.state[col] = snap.docs.filter(d => okId(d.id)).map(d => Object.assign({ id: d.id }, d.data()));
           this._emit();
         }, e => this._fail(e)));
       });

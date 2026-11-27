@@ -69,12 +69,12 @@ export class Family {
   get kidId() { const r = this.peopleRaw; return (r[2] || r[r.length - 1])?.id || this.meId; }
   name(id) { if (+id === 0) return "Family"; return this.peopleRaw.find(p => p.id === +id)?.name || "Someone"; }
   get myName() { return this.myPersonId ? this.name(this.myPersonId) : null; }
-  /** "Jugo, Mum (also called Akiyo), Dad (you, also called Old)" */
+  /** "Joey, Mum (also called Aiko), Dad (you, also called Old)" */
   namesList({ you = true } = {}) {
     return this.people.map(p => { const extra = [you && p.id === this.myPersonId ? "you" : "", akaOf(p) ? `also called ${akaOf(p)}` : ""].filter(Boolean); return p.name + (extra.length ? ` (${extra.join(", ")})` : ""); }).join(", ");
   }
 
-  /** Turn "Akiyo", "me", "family", 2 ... into a person id. */
+  /** Turn "Aiko", "me", "family", 2 ... into a person id. */
   who(input, { allowFamily = false, fallback } = {}) {
     if (input === undefined || input === null || String(input).trim() === "") return fallback;
     const raw = String(input).trim();
@@ -106,7 +106,7 @@ export class Family {
     if (id !== null) return id;
     const t = s.replace(/^(?:my|our|the)\s+/, "");            // "my mum" -> "mum"
     if (t !== s && (id = whole(t)) !== null) return id;
-    // "Mum and Dad", "Akiyo & Jugo": Happy Home keeps one person on each item.
+    // "Mum and Dad", "Aiko & Joey": Happy Home keeps one person on each item.
     const parts = t.split(/\s*(?:,|&|\+|\band\b)\s*/).filter(Boolean);
     if (parts.length > 1) {
       const found = [...new Set(parts.map(x => { const y = x.replace(/^(?:my|our|the)\s+/, ""); return PRONOUNS.includes(y) ? this.meId : whole(y); }).filter(x => x !== null))];

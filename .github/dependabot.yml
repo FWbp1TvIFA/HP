@@ -1,0 +1,17 @@
+# Dependabot keeps the GitHub Actions used by the workflows up to date (once a month, grouped into one pull request).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /claude-connector/test
+    schedule:
+      interval: monthly
+    groups:
+      test-tools:
+        patterns: ["*"]

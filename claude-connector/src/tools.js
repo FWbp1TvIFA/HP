@@ -720,7 +720,7 @@ export function toolDefinitions(f) {
           board: { type: "array", description: "Short messages for the whole family on the Family board on the app's Today screen, e.g. 'Home late tonight, dinner in the fridge'. Posted as the signed-in person.", items: { type: "object", required: ["text"], additionalProperties: false, properties: {
             text: { type: "string", description: "The message (up to 500 characters)." } } } },
           countdowns: { type: "array", description: "Birthdays, anniversaries, trips and other days to count down to.", items: { type: "object", required: ["title", "date"], additionalProperties: false, properties: {
-            title: { type: "string", description: "e.g. Jugo's birthday" }, date: date("Date (for birthdays, the birth date if known)"),
+            title: { type: "string", description: "e.g. Joey's birthday" }, date: date("Date (for birthdays, the birth date if known)"),
             kind: { type: "string", enum: KINDS }, every_year: { type: "boolean", description: "Default true for birthdays and anniversaries." } } } },
         },
       },

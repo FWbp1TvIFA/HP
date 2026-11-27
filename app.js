@@ -71,7 +71,7 @@ if(routes.includes(routeOf(location.hash.slice(1))))tab=routeOf(location.hash.sl
 const OPENERS=["piano","happy"],pickOpener=()=>OPENERS[Math.floor(Math.random()*OPENERS.length)];
 {const h=location.hash.slice(1),nav=((performance.getEntriesByType&&performance.getEntriesByType("navigation")[0])||{}).type;
  if((h===""||h==="home")&&nav!=="reload"&&nav!=="back_forward"){tab=pickOpener();try{history.replaceState(null,"","#"+tab)}catch(e){}}}
-let authMode="signin", authErr="", busy=false;
+let authMode="signin", authErr="", busy=false, authEm="", authPw="", authCode="", authFocus="", mfaFor="";
 let cpCode="", cpMsg="", cpOk=false; // the coupon box on the sign-up page
 
 function monthStats(m){
@@ -475,7 +475,7 @@ function stopGeo(remove){if(geoWatch!==null){navigator.geolocation.clearWatch(ge
 const CARD_COLORS=["#E0662F","#1E7F5C","#22325A","#7A4FB5","#2B2B2B","#1C8FB3","#C2457A","#B08A12"];
 function allCards(){return [...S().wallet.map(c=>({...c,shared:true})),...(switched()?[]:S().myWallet.map(c=>({...c,shared:false})))]}
 function walletCard(w,full){
-  return `<button class="wcard ${full?"full":""}" data-act="openCard" data-id="${w.id}" style="background:${esc(w.bg||"#22325A")};color:#fff">
+  return `<button class="wcard ${full?"full":""}" data-act="openCard" data-id="${w.id}" style="background:${/^#[0-9a-f]{3,8}$/i.test(w.bg||"")?w.bg:"#22325A"};color:#fff">
   <div class="row between"><span class="wk">${esc(w.kind||"Card")}${w.shared?"":" · Private"}</span><span class="wh">${dot(w.holder??meId())}</span></div>
   <div class="wn">${esc(w.name)}</div>${full?`${w.num?`<div class="wnum">${esc(w.num)}</div>`:""}${w.extra?`<div class="wx">${esc(w.extra)}</div>`:""}`:""}</button>`;
 }
@@ -490,7 +490,7 @@ function cardSheet(id){
   const code=w.code==="qr"?Codes.qrSVG(w.num):w.code==="bar"?Codes.barcodeSVG(w.num):"";
   openSheet(`${sheetHead(esc(w.kind||"Card"))}${walletCard(w,true)}
    ${code?`<div class="codebox">${code}<div class="num" style="text-align:center;margin-top:6px;color:#111;letter-spacing:.08em">${esc(w.num)}</div></div><div class="sub">Turn your screen brightness up if a scanner has trouble reading it.</div>`:""}
-   ${w.photo?`<img class="photo" src="${w.photo}" alt="Photo of ${esc(w.name)}">`:""}
+   ${PHOTO_OK.test(w.photo||"")?`<img class="photo" src="${w.photo}" alt="Photo of ${esc(w.name)}">`:""}
    <div class="sub">Belongs to ${esc(pname(w.holder??meId()))} · ${w.shared?"Shared with the family":"Only you can see this"}</div>
    <div class="two"><button class="ghost" data-act="editCard" data-id="${w.id}">Edit</button><button class="ghost" id="c_del">Delete</button></div>`,sh=>{
     const d=sh.querySelector("#c_del");d.onclick=()=>{if(d.dataset.arm){ST.del(w.shared?"wallet":"myWallet",w.id);closeSheet();toast("Card deleted")}else{d.dataset.arm=1;d.textContent="Tap again to delete";d.style.color="var(--bad)"}};
@@ -662,15 +662,12 @@ function cleanupMoodSessions(){ // old requests go away after a day
 
 /* ---------- auth & family setup (cloud mode) ---------- */
 function viewAuth(){
-  if(ST.mfaResolver)return `<div class="auth"><div class="logo">H</div><h1>Enter your code</h1><p class="sub" style="margin:0">Open your authenticator app and type the 6-digit code for Happy Home.</p>
-  <form id="mfaForm" class="stack" style="gap:12px"><div class="field"><label for="m_code">Code</label><input id="m_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required style="font-size:24px;letter-spacing:.3em;text-align:center"></div>
-   ${authErr?`<div class="err">${esc(authErr)}</div>`:""}<button class="primary" type="submit" ${busy?"disabled":""}>Sign in</button></form>
-  <button class="link" data-act="mfaCancel">Back</button><p class="sub" style="text-align:center">Lost your phone? Ask whoever set up the family to switch off two-step sign-in for you.</p></div>`;
   return `<div class="auth"><div class="logo">H</div><h1>Happy Home</h1><p class="sub" style="margin:0">One place for your family's money, plans, lists and more.</p>
   <div class="seg"><button class="${authMode==="signin"?"on":""}" data-act="authMode" data-k="signin">Sign in</button><button class="${authMode==="signup"?"on":""}" data-act="authMode" data-k="signup">Create account</button></div>
   <form id="authForm" class="stack" style="gap:12px">
    <div class="field"><label for="a_email">Email</label><input id="a_email" type="email" autocomplete="email" required></div>
    <div class="field"><label for="a_pw">Password</label><input id="a_pw" type="password" autocomplete="${authMode==="signup"?"new-password":"current-password"}" minlength="6" required></div>
+   ${authMode==="signin"?`<div class="field"><label for="a_code">2FA code</label><input id="a_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7"></div>`:""}
    ${authErr?`<div class="err">${esc(authErr)}</div>`:""}
    <button class="primary" type="submit" ${busy?"disabled":""}>${authMode==="signup"?"Create account":"Sign in"}</button></form>
   ${authMode==="signin"?`<button class="link" data-act="forgot">Forgot password?</button>`:couponBox()}</div>`;
@@ -1801,9 +1798,24 @@ function bindForms(){
       else if(await cpCheck(cpCode)){cpOk=true;cpMsg="Coupon accepted.";ST._localPref("coupon",cpNorm(cpCode))}
       else{cpOk=false;cpMsg="That code isn't valid."}
       render()}}
-  const af=$("#authForm");if(af)af.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";const em=$("#a_email").value.trim(),pw=$("#a_pw").value;
-    try{authMode==="signup"?await ST.signUp(em,pw):await ST.signIn(em,pw)}catch(err){authErr=err&&err.code==="hh/mfa-needed"?"":authErrorText(err)}busy=false;render();const mc=$("#m_code");mc&&mc.focus()};
-  const mf=$("#mfaForm");if(mf)mf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.finishMfaSignIn($("#m_code").value)}catch(err){authErr=authErrorText(err)}busy=false;render()};
+  const af=$("#authForm");if(af){
+    {const ae=$("#a_email"),ap=$("#a_pw"),ac=$("#a_code");if(ae&&authEm)ae.value=authEm;if(ap&&authPw)ap.value=authPw;if(ac&&authCode)ac.value=authCode;
+     const fe=authFocus&&$("#"+authFocus);authFocus="";if(fe)fe.focus()}
+    af.onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;authErr="";
+      const em=$("#a_email").value.trim(),pw=$("#a_pw").value,ce=$("#a_code"),code=ce?ce.value.replace(/\D/g,""):"",key=em+"\n"+pw;
+      let ok=false,codeStep=false;authEm=em;authPw=pw;authCode=code;
+      const needCode=()=>{authErr="Type the 6-digit 2FA code.";authFocus="a_code"};
+      const finish=async()=>{try{await ST.finishMfaSignIn(code);ok=true}catch(err){const c=err&&err.code||"";
+        if(/expired/.test(c)){ST.cancelMfa();mfaFor="";authErr="That took too long. Tap Sign in again."}else authErr=authErrorText(err);authCode="";authFocus="a_code"}};
+      try{
+        if(authMode==="signup"){await ST.signUp(em,pw);ok=true}
+        else if(ST.mfaResolver&&mfaFor===key){codeStep=true;if(code)await finish();else needCode()}
+        else{ST.cancelMfa();mfaFor="";
+          try{await ST.signIn(em,pw);ok=true}
+          catch(err){if(!(err&&err.code==="hh/mfa-needed"))throw err;mfaFor=key;codeStep=true;if(code)await finish();else needCode()}}
+      }catch(err){authErr=authErrorText(err)}
+      if(ok){authEm="";authPw="";authCode="";mfaFor=""}else if(!codeStep){authPw="";authCode=""}
+      busy=false;render()}}
   const nf=$("#newFam");if(nf)nf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.createFamily({myName:$("#n_me").value.trim(),otherNames:[$("#n_2").value.trim(),$("#n_3").value.trim()],currency:$("#n_cur").value.trim()})}catch(err){authErr=authErrorText(err)}busy=false;render()};
   const jf=$("#joinFam");if(jf)jf.onsubmit=async e=>{e.preventDefault();busy=true;authErr="";try{await ST.joinFamily($("#j_code").value)}catch(err){authErr=authErrorText(err)}busy=false;render()};
 }
@@ -2152,7 +2164,7 @@ document.addEventListener("click",e=>{
     case"moodSeen":setMapKey("moodSessions",id,"seen",meId(),true);return;
     case"moodShareResult":{const s=S().moodSessions.find(x=>x.id===id);if(!s||switched())return;const m=s.result.level===1?"good":s.result.level===2?"okay":"stressed";
       ST.add("moods",{person:meId(),mood:m,note:"Family check: "+s.result.label,date:TODAY(),at:Date.now()});setMapKey("moodSessions",id,"seen",meId(),true);toast("Shared");return}
-    case"authMode":authMode=a.dataset.k;authErr="";break;
+    case"authMode":authMode=a.dataset.k;authErr="";ST.cancelMfa();mfaFor="";authPw="";authCode="";break;
     case"forgot":{const em=$("#a_email")?.value.trim();if(!em){authErr="Type your email above first, then tap Forgot password.";break}ST.resetPassword(em).then(()=>toast("Check your email for a reset link"),err=>{authErr=authErrorText(err);render()});return}
     case"pianoRetry":pianoLd={state:""};render();return;
     case"signOut":closeSheet();stopGeo(false);authMode="signin";authErr="";ST._localPref("view","0");ST.signOut();return;
