@@ -65,6 +65,11 @@ const routes=["home","today","calendar","lists","happy","money","more","notes","
 const routeOf=h=>h==="live"?"home":h; // the live view is the home page now
 const parentTab={lists:"more",today:"home",calendar:"more",money:"more",notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"more",meals:"more",dates:"more",activities:"more",learn:"more",alarms:"more"};
 if(routes.includes(routeOf(location.hash.slice(1))))tab=routeOf(location.hash.slice(1));
+/* "piano and happiness are home screen when first open, they switch between each opening like random" (27 Nov 2026):
+   opening the app (not a reload, not a link to one page) starts on the Piano or the Happy page, picked at random */
+const OPENERS=["piano","happy"],pickOpener=()=>OPENERS[Math.floor(Math.random()*OPENERS.length)];
+{const h=location.hash.slice(1),nav=((performance.getEntriesByType&&performance.getEntriesByType("navigation")[0])||{}).type;
+ if((h===""||h==="home")&&nav!=="reload"&&nav!=="back_forward"){tab=pickOpener();try{history.replaceState(null,"","#"+tab)}catch(e){}}}
 let authMode="signin", authErr="", busy=false, authEm="", authPw="", authCode="", authFocus="", mfaFor="";
 let cpCode="", cpMsg="", cpOk=false; // the coupon box on the sign-up page
 
@@ -1714,6 +1719,28 @@ let rendering=false;
 /* the bright look: every page wears its own colour (theme.css reads html[data-page]) */
 function paintPage(pg,again){const de=document.documentElement;if(de.dataset.page===pg&&!again)return;de.dataset.page=pg;
   try{const c=getComputedStyle(de).getPropertyValue("--bar").trim();if(/^#[0-9a-f]{3,8}$/i.test(c))document.querySelectorAll('meta[name="theme-color"]').forEach(m=>{m.content=c})}catch(_){}}
+/* "Can you make app change colour every time it opens" and "All ui are changing colours all the time" (27 Nov 2026):
+   the eight bright colours trade places at random each time the app opens, so every page wears a new colour, and they
+   glide to new places every 40 seconds while the app is open. Each colour takes its own contrast-checked text colour
+   with it, so words stay readable. They hold still on the piano (it has its own lights) and, when the phone asks for
+   less motion, change only when the app opens. */
+const HUES={orange:["#FF9A2E","#A64200","#FFB25E"],amber:["#FFCB2E","#8F5A00","#FFD75A"],green:["#3DD68C","#097240","#5FE3A1"],teal:["#2CCFD6","#066F78","#57DCE2"],
+  blue:["#56A8FF","#1257C9","#7DBBFF"],purple:["#A98BFF","#5B33D6","#BCA5FF"],pink:["#FF7EB8","#B8195F","#FF9CC8"],red:["#FF7272","#C3202F","#FF9494"]};
+const HK=Object.keys(HUES);let hueOrder=HK.slice();
+function hueCss(o){const one=(i,j)=>HK.map((k,n)=>`--${k}${j?"-t":""}:${HUES[o[n]][j||0]}`).join(";");
+  return `:root{${one(0,0)};${one(0,1)}}@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${one(0,2)}}}:root[data-theme="dark"]{${one(0,2)}}`}
+function shuffleHues(){
+  const o=HK.slice();for(let i=o.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[o[i],o[j]]=[o[j],o[i]]}
+  for(let i=0;i<o.length;i++)if(o[i]===hueOrder[i]){const j=(i+1)%o.length;[o[i],o[j]]=[o[j],o[i]]}      // nearly every page gets a new colour
+  hueOrder=o;let st=document.getElementById("hhHue");if(!st){st=document.createElement("style");st.id="hhHue";document.head.appendChild(st)}st.textContent=hueCss(o);
+  clearTimeout(shuffleHues._t);shuffleHues._t=setTimeout(()=>paintPage(document.documentElement.dataset.page||"home",true),2800)}
+try{shuffleHues();
+  const calm=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
+  setTimeout(()=>{if(calm())return;const g=document.createElement("style");g.id="hhHueGlide";
+    g.textContent=HK.map(k=>`@property --${k}{syntax:"<color>";inherits:true;initial-value:${HUES[k][0]}}`).join("")+`:root{transition:${HK.map(k=>`--${k} 2.6s ease-in-out`).join(",")}}`;
+    document.head.appendChild(g)},1500);
+  setInterval(()=>{if(document.hidden||calm()||tab==="piano"||document.documentElement.classList.contains("pn-focus"))return;shuffleHues()},40000);
+}catch(e){console.error(e)}
 /* a few stars fly out when something gets ticked off */
 try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>paintPage(document.documentElement.dataset.page||"home",true))}catch(_){}
 let lastTap=null;
