@@ -149,3 +149,23 @@ html[data-page="happy"]{--emoji:"💖"}
 /* cute.js: the always-alive icons */
 svg.cute{overflow:visible}
 svg.cute .ce{transform-box:fill-box;transform-origin:center}
+
+/* cuter: the happy buddy, floating hearts, faces on the pictures */
+.hp-hero{position:relative;overflow:hidden}
+.hp-hero>*:not(.hp-floaty){position:relative;z-index:1}
+.hp-titlerow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hp-buddy{flex:none;width:64px;height:64px;padding:0;border:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hp-buddy svg{width:100%;height:100%;display:block;overflow:visible;transform-origin:50% 90%;animation:hpBuddyBob 2.4s ease-in-out infinite}
+.hp-buddy.oh svg{animation-duration:4s}
+.hp-buddy .ce{transform-box:fill-box;transform-origin:center}
+@keyframes hpBuddyBob{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-4px) rotate(3deg)}}
+.hp-say{position:absolute;right:6px;top:64px;z-index:3;max-width:70%;background:var(--ink);color:#fff;font:700 .82rem/1.25 var(--body);padding:7px 11px;border-radius:14px;box-shadow:0 4px 12px rgba(0,0,0,.2);animation:hpSay .25s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes hpSay{from{opacity:0;transform:translateY(-6px) scale(.8)}}
+.hp-floaty{position:absolute;inset:0;pointer-events:none;z-index:0}
+.hp-floaty i{position:absolute;bottom:-24px;left:calc(8% + var(--i) * 16%);font-style:normal;font-size:18px;opacity:0;animation:hpFloaty 7s linear infinite;animation-delay:calc(var(--i) * -1.17s)}
+@keyframes hpFloaty{0%{transform:translateY(0) rotate(-10deg);opacity:0}12%{opacity:.55}80%{opacity:.4}100%{transform:translateY(-240px) rotate(14deg);opacity:0}}
+.hp-art .ce,.hp-face .ce{transform-box:fill-box;transform-origin:center}
+.hp-face .ce{animation:hpBlink 5.5s infinite}
+.hp-card:nth-child(3n) .hp-face .ce{animation-delay:-2.1s}.hp-card:nth-child(3n+1) .hp-face .ce{animation-delay:-3.7s}
+@keyframes hpBlink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+@media (prefers-reduced-motion: reduce){.hp-buddy svg,.hp-floaty i,.hp-face .ce{animation:none}.hp-floaty{display:none}}
