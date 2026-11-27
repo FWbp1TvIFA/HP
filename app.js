@@ -608,6 +608,8 @@ async function startListening(s){
   }catch(e){listener.sid=null;ST.patch("moodSessions",s.id,{state:"cancelled",reason:"mic"});toast("Microphone permission was turned down, so the check was cancelled");return}
   const AC=window.AudioContext||window.webkitAudioContext; listener.ctx=new AC(); try{await listener.ctx.resume()}catch(e){}
   try{listener.wake=await navigator.wakeLock?.request("screen")}catch(e){}
+  // if the phone takes the microphone away (a call, or it was switched off), the check ends there
+  try{listener.stream.getAudioTracks().forEach(t=>t.addEventListener("ended",()=>{if(listener.sid===s.id)finishListening(true)}))}catch(e){}
   const src=listener.ctx.createMediaStreamSource(listener.stream); const an=listener.ctx.createAnalyser(); an.fftSize=2048; src.connect(an);
   const buf=new Float32Array(an.fftSize); let acc=[];
   const endsAt=Date.now()+MOOD_SECONDS*1000;
@@ -631,7 +633,7 @@ function analyse(levels){
   const level=lf>.15?3:lf>.05||buckets.filter(b=>b>=2).length>buckets.length/2?2:1;
   return {label:level===1?"Mostly calm":level===2?"Some loud moments":"Lots of loud moments",level,buckets,seconds:levels.length};
 }
-function finishListening(){
+function finishListening(early){
   if(!listener.sid)return;
   const sid=listener.sid; clearInterval(listener.timer);
   try{listener.stream.getTracks().forEach(t=>t.stop())}catch(e){}
@@ -640,7 +642,7 @@ function finishListening(){
   const result=analyse(listener.levels);
   listener.sid=null;listener.stream=null;listener.ctx=null;listener.levels=[];
   const cur=S().moodSessions.find(x=>x.id===sid);
-  ST.patch("moodSessions",sid,{state:"done",result,stoppedEarly:!!(cur&&cur.state==="stopped")});
+  ST.patch("moodSessions",sid,{state:"done",result,stoppedEarly:!!early||!!(cur&&cur.state==="stopped")});
   render();
 }
 function moodTick(){
@@ -2195,6 +2197,9 @@ document.addEventListener("keydown",e=>{
     if(/^[\d.+\-×÷%()=⌫C]$/.test(k)){e.preventDefault();calcKey(k)}
   }
 });
+// Leaving the app ends a mood check straight away: the microphone is never on while the app is out of sight.
+let moodLeft=false;
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&listener.sid){moodLeft=true;finishListening(true)}else if(!document.hidden&&moodLeft){moodLeft=false;toast("The mood check stopped because you left the app")}});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&ST.phase==="ready"){agendaDirty=true;alarmTick();refreshPush();if(tab==="home"||tab==="today")render()}});
 if("serviceWorker" in navigator)navigator.serviceWorker.addEventListener("message",e=>{const d=e.data||{};if(d.type==="hh-open"&&d.url)go(String(d.url).replace(/^.*#/,""));if(d.type==="hh-push-changed")refreshPush()});
 

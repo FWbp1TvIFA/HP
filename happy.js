@@ -235,7 +235,7 @@
   function chime(up) {
     try {
       const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-      chimeCtx = chimeCtx || new AC(); const ac = chimeCtx; if (ac.state === "suspended") ac.resume();
+      if (!chimeCtx || chimeCtx.state === "closed") chimeCtx = new AC(); const ac = chimeCtx; if (ac.state !== "running" && ac.resume) ac.resume().catch(() => { }); // iPhone says "interrupted" after the app was away
       const t0 = ac.currentTime + 0.02, notes = up ? [523.25, 659.25, 783.99, 1046.5, 1318.5] : [659.25, 783.99, 1046.5];
       notes.forEach((f, i) => { const o = ac.createOscillator(), g = ac.createGain(), t = t0 + i * 0.11; o.type = "triangle"; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.55); });
     } catch (_) { }
@@ -270,7 +270,7 @@
   function grumble() {
     try {
       const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-      chimeCtx = chimeCtx || new AC(); const ac = chimeCtx; if (ac.state === "suspended") ac.resume();
+      if (!chimeCtx || chimeCtx.state === "closed") chimeCtx = new AC(); const ac = chimeCtx; if (ac.state !== "running" && ac.resume) ac.resume().catch(() => { }); // iPhone says "interrupted" after the app was away
       const t0 = ac.currentTime + 0.02;
       [[311.1, 0], [293.7, 0.22], [261.6, 0.44], [233.1, 0.66]].forEach(([f, d], i) => { const o = ac.createOscillator(), g = ac.createGain(), t = t0 + d, len = i === 3 ? 0.7 : 0.24; o.type = "sawtooth"; o.frequency.setValueAtTime(f, t); if (i === 3) o.frequency.linearRampToValueAtTime(f * 0.85, t + len); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + len); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + len + 0.05); });
     } catch (_) { }
