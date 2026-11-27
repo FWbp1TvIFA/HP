@@ -36,6 +36,7 @@ function ago(ts){const s=Math.round((Date.now()-ts)/1000);if(s<60)return"just no
 function toast(m,act,fn){const t=$("#toast");t.textContent=m;if(act){const b=document.createElement("button");b.className="tact";b.textContent=act;b.onclick=ev=>{ev.stopPropagation();t.hidden=true;fn()};t.append(b)}t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,act?5000:2000)}
 function delUndo(col,id,msg){const r=(S()[col]||[]).find(x=>x.id===id);ST.del(col,id);if(!r){toast(msg||"Deleted");return}const {id:_i,...rest}=r;toast(msg||"Deleted","Undo",()=>{ST.put(col,id,rest);toast("Restored")})}
 const ICON={
+ lists:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 7 2 2 4-4M4 17l2 2 4-4M14 7h7M14 17h7"/></svg>',
  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
  tick:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>',
  note:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>',
@@ -60,9 +61,9 @@ const ICON={
 
 /* ---------- view state ---------- */
 let tab="home", listTab="tasks", listWho="mine", moneyMonth=thisMonth(), calDay=TODAY(), calMonth=thisMonth(), cameFrom="more";
-const routes=["home","today","calendar","lists","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities","learn","piano","alarms","signups"];
+const routes=["home","today","calendar","lists","happy","money","more","notes","calc","location","wallet","mood","bills","meals","dates","activities","learn","piano","alarms","signups"];
 const routeOf=h=>h==="live"?"home":h; // the live view is the home page now
-const parentTab={today:"home",calendar:"more",money:"more",notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"more",meals:"more",dates:"more",activities:"more",learn:"more",alarms:"more"};
+const parentTab={lists:"more",today:"home",calendar:"more",money:"more",notes:"more",calc:"more",location:"more",wallet:"more",mood:"more",bills:"more",meals:"more",dates:"more",activities:"more",learn:"more",alarms:"more"};
 if(routes.includes(routeOf(location.hash.slice(1))))tab=routeOf(location.hash.slice(1));
 let authMode="signin", authErr="", busy=false, authEm="", authPw="", authCode="", authFocus="", mfaFor="";
 let cpCode="", cpMsg="", cpOk=false; // the coupon box on the sign-up page
@@ -222,7 +223,7 @@ function viewLists(){
     body=`${whoChips("homework")}<section class="card"><h2>Homework to do <span class="sub">(${open.length})</span></h2><div class="list" style="margin-top:6px">${open.length?open.map(hwItem).join(""):`<div class="empty">No homework due. Tap + to add some.</div>`}</div></section>
     ${done.length?`<section class="card"><div class="row between"><h2>Finished</h2><button class="link" data-act="clearHw">Clear finished</button></div><div class="list" style="margin-top:6px">${done.map(hwItem).join("")}</div></section>`:""}`;
   }
-  return seg+body;
+  return tabBack("lists")+seg+body;
 }
 
 /* ---------- Money ---------- */
@@ -265,6 +266,7 @@ function viewMore(){
   const tile=(go,icon,title,sub)=>`<button class="tile" data-go="${go}">${icon}<b>${title}</b><span>${sub}</span></button>`;
   const cards=allCards().length,t0=TODAY(),wk=evRange(t0,addDays(t0,6)).length,ms=monthStats(thisMonth()),sl=slotInfo(),na=(S().alarms||[]).filter(a=>a.on!==false).length;
   return `<div class="tiles">
+   ${tile("lists",ICON.lists,"Lists",(()=>{const n=S().tasks.filter(t=>!t.done).length,sh=S().shopping.filter(x=>!x.done).length;return n||sh?n+" to do · "+sh+" to buy":"Tasks, shopping and homework"})())}
    ${tile("calendar",ICON.cal,"Calendar",wk?wk+" plan"+(wk===1?"":"s")+" this week":"Plans, classes and events")}
    ${tile("money",ICON.money,"Money",(ms.inc-ms.out<0?"−":"")+money(ms.inc-ms.out)+" left this month")}
    ${tile("today",ICON.sun,"Today","Today's plan, to-dos and quick add")}
@@ -1269,7 +1271,7 @@ function profileSheet(){
 }
 
 /* ---------- bottom bar: the fourth button is a shortcut that lasts a week ---------- */
-const NAV={calendar:["Calendar",()=>ICON.cal],money:["Money",()=>ICON.money],today:["Today",()=>ICON.sun],meals:["Dinner",()=>ICON.meal],notes:["Notes",()=>ICON.note],bills:["Bills",()=>ICON.bill],learn:["Chinese",()=>'<span class="tabchar">学</span>'],activities:["Classes",()=>ICON.swim],dates:["Dates",()=>ICON.cake],alarms:["Alarms",()=>ICON.bell],wallet:["Wallet",()=>ICON.wallet],mood:["Mood",()=>ICON.mood],calc:["Sums",()=>ICON.calc],location:["Where",()=>ICON.pin]};
+const NAV={lists:["Lists",()=>ICON.lists],calendar:["Calendar",()=>ICON.cal],money:["Money",()=>ICON.money],today:["Today",()=>ICON.sun],meals:["Dinner",()=>ICON.meal],notes:["Notes",()=>ICON.note],bills:["Bills",()=>ICON.bill],learn:["Chinese",()=>'<span class="tabchar">学</span>'],activities:["Classes",()=>ICON.swim],dates:["Dates",()=>ICON.cake],alarms:["Alarms",()=>ICON.bell],wallet:["Wallet",()=>ICON.wallet],mood:["Mood",()=>ICON.mood],calc:["Sums",()=>ICON.calc],location:["Where",()=>ICON.pin]};
 const SLOT_POOL=["calendar","money","today","meals","notes","bills","learn","activities","dates","alarms"];
 function slotInfo(){
   let pick=null;try{pick=JSON.parse(ST._localPref("slot")||"null")}catch(e){}
@@ -1707,7 +1709,7 @@ function roleNames(){
 }
 
 /* ---------- render ---------- */
-const TITLES={signups:"Sign-ups",home:"Happy Home",today:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities",learn:"Chinese",piano:"Piano",alarms:"Alarms"};
+const TITLES={happy:"Happy",signups:"Sign-ups",home:"Happy Home",today:"Today",calendar:"Calendar",lists:"Lists",money:"Money",more:"More",notes:"Notes",calc:"Calculator",location:"Location",wallet:"Wallet",mood:"Mood",bills:"Bills",meals:"Dinner plan",dates:"Dates",activities:"Activities",learn:"Chinese",piano:"Piano",alarms:"Alarms"};
 let rendering=false;
 /* the bright look: every page wears its own colour (theme.css reads html[data-page]) */
 function paintPage(pg,again){const de=document.documentElement;if(de.dataset.page===pg&&!again)return;de.dataset.page=pg;
@@ -1740,13 +1742,16 @@ function render(){
       else{try{HHPiano.refresh()}catch(e){console.error(e)}}
       if(!pianoFail){const top=$("#pianoTop"),h=alarmBanner()+syncBar();if(top&&top._h!==h){top.innerHTML=h;top._h=h}setActive();return}
     }
-    pianoOff();
+    pianoOff();document.documentElement.classList.remove("pn-focus");      // the piano's full screen never stays on another page
     const keepShop=$("#shopInput"),shopVal=keepShop&&keepShop.value,shopFocus=keepShop&&document.activeElement===keepShop;
     const keepNote=$("#moodNote"),noteVal=keepNote&&keepNote.value;const keepQ=$("#qa"),qVal=keepQ&&keepQ.value,qFocus=keepQ&&document.activeElement===keepQ;const keepB=$("#boardIn"),bVal=keepB&&keepB.value,bFocus=keepB&&document.activeElement===keepB;
     if(!TITLES[tab])tab="home";
     $("#title").textContent=TITLES[tab];
     $("#subtitle").textContent=tab==="home"?hello():tab==="today"?new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"}):"";
-    $("#view").innerHTML=alarmBanner()+syncBar()+{home:viewHomeLive,today:viewToday,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,signups:viewSignups,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn,piano:viewPianoPage,alarms:viewAlarms}[tab]();
+    /* rows that swipe sideways keep their place when the page is drawn again, and an unchanged Happy page is not redrawn
+       at all, so a swipe that is still gliding is never cut short */
+    {const vw=$("#view"),xs=[...vw.querySelectorAll("[data-keepx]")].map(e=>[e.dataset.keepx,e.scrollLeft]),html=alarmBanner()+syncBar()+{happy:()=>window.viewHappy?viewHappy():"",home:viewHomeLive,today:viewToday,calendar:viewCalendar,lists:viewLists,money:viewMoney,more:viewMore,notes:viewNotes,calc:viewCalc,location:viewLocation,wallet:viewWallet,mood:viewMood,bills:viewBills,signups:viewSignups,meals:viewMeals,dates:viewDates,activities:viewActivities,learn:viewLearn,piano:viewPianoPage,alarms:viewAlarms}[tab]();
+     if(!(tab==="happy"&&vw._h===html&&vw.querySelector(".hp-page"))){vw.innerHTML=html;vw._h=html;xs.forEach(([k,x])=>{if(!x)return;const e=vw.querySelector('[data-keepx="'+k+'"]');if(e)e.scrollLeft=x})}}
     setActive();
     if(shopVal&&$("#shopInput"))$("#shopInput").value=shopVal; if(shopFocus&&$("#shopInput"))$("#shopInput").focus();
     if(noteVal&&$("#moodNote"))$("#moodNote").value=noteVal;if(qVal&&$("#qa")){$("#qa").value=qVal;showQuick()}if(qFocus&&$("#qa"))$("#qa").focus();if(bVal&&$("#boardIn"))$("#boardIn").value=bVal;if(bFocus&&$("#boardIn"))$("#boardIn").focus();
@@ -2030,6 +2035,7 @@ document.addEventListener("click",e=>{
   const g=e.target.closest("[data-go]");if(g){if(g.closest("#sheetHost"))closeSheet();if(g.dataset.list)listTab=g.dataset.list;go(g.dataset.go);return}
   const tb=e.target.closest(".tab");if(tb){go(tb.dataset.tab);return}
   const a=e.target.closest("[data-act]");if(!a)return;const id=a.dataset.id,act=a.dataset.act;
+  if(act.slice(0,2)==="hp"&&window.hpAct){hpAct(act,a,e);return}
   const flip=(col,msg)=>{const t=S()[col].find(x=>x.id===id);if(!t)return;ST.patch(col,id,{done:!t.done,doneAt:t.done?null:Date.now()});if(!t.done){if(msg)toast(msg);if(col!=="shopping")party()}return t};
   switch(act){
     case"close":return closeSheet();
@@ -2139,7 +2145,7 @@ document.addEventListener("click",e=>{
   }
   render();
 });
-$("#fab").onclick=()=>tab==="alarms"?alarmSheet():addSheet();
+$("#fab").onclick=()=>tab==="alarms"?alarmSheet():tab==="happy"&&window.hpFab?hpFab():addSheet();
 {const bs=$("#btnSettings");if(bs)bs.onclick=settingsSheet;const bp=$("#btnProfile");if(bp)bp.onclick=profileSheet}
 $("#btnSearch").onclick=searchSheet;
 addEventListener("hashchange",()=>{const h=routeOf(location.hash.slice(1));if(routes.includes(h)&&h!==tab){tab=h;render()}});
@@ -2187,6 +2193,8 @@ setInterval(()=>{if(tab==="mood"&&activeSession())render();moodTick()},1000);
 setInterval(()=>{if((tab==="home"||tab==="today")&&!document.hidden&&!$("#sheetHost").innerHTML&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||""))render()},20000);
 setInterval(()=>{try{alarmTick()}catch(e){console.error(e)}},15000);
 /* what the piano page may use from the app */
+/* what the Happy page (happy.js) borrows from here */
+window.HHK={S,ST,SET,people,peopleRaw,pname,esc,dot,openSheet,closeSheet,sheetHead,toast,render:()=>render(),viewId,meId,iso,addDays,TODAY,ago,nice,party:()=>party()};
 window.HH={S,ST,pianoFrom:()=>Object.assign({},pianoLd),esc,toast,openSheet,closeSheet,sheetHead,pname,learnerId,pref:(k,v)=>v===undefined?ST._localPref(k):ST._localPref(k,String(v)),star:(n,title)=>learnStar(n,title),pianoProgress:()=>pianoClean(pianoWho()),savePianoProgress:savePiano,delUndo,go:t=>go(t),dot,
   ...(typeof ST.merge==="function"?{people:()=>people().map(p=>({id:p.id,name:p.name})),playerId:pianoWho,setPlayer:setPianoWho,pianoPlayed,pianoMove,pianoSheet}:{})};
 let autoPayDay=null;setInterval(()=>{if(ST.phase==="ready"&&autoPayDay!==TODAY()&&Date.now()-bootAt>6000){autoPayDay=TODAY();try{autoPayBills()}catch(e){}}},3000);
