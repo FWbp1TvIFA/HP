@@ -1,11 +1,12 @@
 /* Happy Home service worker: makes the app open instantly and work offline. */
-const CACHE = "happyhome-v39";
+const CACHE = "happyhome-v40";
 const KEEP = "hh-keep-sounds-1"; // the piano recordings: they never change, so they stay across app updates
 const PCODE = "hh-piano-code-1"; // the piano's code when it comes from its own home: kept across app updates, refreshed whenever online
 // The piano's own home: the app learns its address only after sign-in, so here it is known only by its shape.
 const pianoUrl = u => /^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/.test(u.origin) && u.pathname.indexOf("/piano/") === 0;
 const FILES = ["./", "index.html", "app.css", "theme.css", "happy.css", "happy.js", "cute.js", "confetti.js", "push.js", "fonts/fredoka-latin.woff2", "fonts/nunito-latin.woff2", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
-self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
+// Each file is fetched fresh from the web (never from the phone's short-term copy), so a new version never saves an older file.
+self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: "reload" })))).then(() => self.skipWaiting())); });
 const PIANO = ["C4", "Ds4", "Fs4", "A4", "C5", "Ds5", "Fs5", "A5", "C6", "A3", "Fs3"];
 // The piano recordings most songs use, fetched from the piano's home once the app says where that is.
 const getSounds = base => caches.open(KEEP).then(c => Promise.all(PIANO.map(n => (base || "") + "sounds/piano/" + n + ".mp3").map(u => c.match(u).then(hit => hit || fetch(u, { mode: "cors" }).then(r => { if (r && r.ok) return c.put(u, r); })).catch(() => {}))));
@@ -28,7 +29,9 @@ self.addEventListener("fetch", e => {
   // Network first so updates show up, cache as fallback for offline.
   // If the network is down or very slow (over 4 seconds), open from the saved copy straight away.
   const fromCache = () => caches.match(e.request, { ignoreSearch: true }).then(r => r || (piano ? null : caches.match("index.html")));
-  const net = fetch(e.request).then(r => { if (r && r.ok) { const copy = r.clone(); caches.open(piano ? PCODE : CACHE).then(c => c.put(e.request, copy)); } return r; });
+  // The app's own files are checked with the web every time (a quick "has it changed?"), so a phone never mixes an old file with a new one.
+  const ask = url.origin === location.origin ? fetch(e.request, { cache: "no-cache" }).catch(() => fetch(e.request)) : fetch(e.request);
+  const net = ask.then(r => { if (r && r.ok) { const copy = r.clone(); caches.open(piano ? PCODE : CACHE).then(c => c.put(e.request, copy)); } return r; });
   e.respondWith(new Promise(resolve => {
     let done = false; const finish = r => { if (!done && r) { done = true; resolve(r); } };
     const t = setTimeout(() => fromCache().then(r => r ? finish(r) : null), 4000);

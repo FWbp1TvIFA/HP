@@ -2216,5 +2216,22 @@ window.HH={S,ST,pianoFrom:()=>Object.assign({},pianoLd),esc,toast,openSheet,clos
 let autoPayDay=null;setInterval(()=>{if(ST.phase==="ready"&&autoPayDay!==TODAY()&&Date.now()-bootAt>6000){autoPayDay=TODAY();try{autoPayBills()}catch(e){}}},3000);
 const bootAt=Date.now();
 ST.init();
-if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
+if("serviceWorker" in navigator&&location.protocol==="https:"){
+  // Updates: look for a new version when the app comes back to the screen or back online, and move to it at a quiet moment.
+  const SWC=navigator.serviceWorker;let hadSW=!!SWC.controller,newer=false,awayAt=0,backAt=Date.now(),touched=false;
+  const calm=()=>!document.hidden&&!document.body.classList.contains("sheet-open")&&!document.querySelector(".pn-rec-on,.pn-mic-on")&&!(document.activeElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
+  const fresh=()=>{if(newer&&calm()){newer=false;try{location.reload()}catch(e){}}};
+  SWC.register("sw.js").then(reg=>{
+    const check=()=>{try{reg.update().catch(()=>{})}catch(e){}};
+    document.addEventListener("visibilitychange",()=>{if(document.hidden){awayAt=Date.now();return}
+      const long=awayAt&&Date.now()-awayAt>=60000;awayAt=0;backAt=Date.now();touched=false;if(long){fresh();check()}});
+    addEventListener("online",check);
+    setInterval(()=>{if(!document.hidden)check()},30*60000);
+  }).catch(()=>{});
+  // A new version took over while this page was open: its code is older, so reload when back from a while away,
+  // or straight away if that happens in the first seconds after coming back, before anything was touched.
+  // (In the first 30 seconds after opening, the files were just fetched fresh, so nothing needs to happen.)
+  SWC.addEventListener("controllerchange",()=>{if(!hadSW){hadSW=true;return}if(Date.now()-bootAt<30000)return;newer=true;if(!touched&&Date.now()-backAt<10000)fresh()});
+  addEventListener("pointerdown",()=>{touched=true},true);
+}
 })();
