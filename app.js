@@ -1521,12 +1521,15 @@ function pianoLoad(){ // on every render once the family is in: start loading th
   if(pianoLd.state==="loading"||pianoLd.state==="ok"||(pianoLd.state&&pianoLd.want===want))return;
   if(want===null){pianoLd={want,state:"none"};return}
   pianoGet(want,want)}
+let pianoLen=null; // the size of the piano's code at its home when it loaded: a different size later means a new piano is out
+const pianoSize=()=>{const b=pianoLd.base;if(pianoLd.state!=="ok"||!b||b===PIANO_HERE||!PIANO_HOME_RE.test(b))return Promise.resolve(null);
+  return fetch(b+"piano.js",{method:"HEAD",cache:"no-cache",mode:"cors",credentials:"omit"}).then(r=>r.ok&&r.headers.get("content-length")||null).catch(()=>null)};
 function pianoGet(base,want){
   pianoLd={want,base,state:"loading"};
   const one=(tag,attrs)=>new Promise((ok,no)=>{const el=document.createElement(tag);el.crossOrigin="anonymous";Object.assign(el,attrs);el.onload=()=>ok(el);el.onerror=()=>{el.remove();no(new Error(attrs.href||attrs.src))};document.head.appendChild(el)});
   one("link",{rel:"stylesheet",href:base+"piano.css"}).then(()=>one("script",{src:base+"piano.js"})).then(()=>{
     if(!window.HHPiano)throw new Error("no piano in "+base);
-    pianoLd={want,base,state:"ok"};
+    pianoLd={want,base,state:"ok"};pianoSize().then(n=>{pianoLen=n});
     if(base&&base!==PIANO_HERE)try{const sw=navigator.serviceWorker&&navigator.serviceWorker.controller;if(sw)sw.postMessage({type:"hh-piano",base})}catch(e){}
     render()
   }).catch(e=>{console.warn("piano:",e&&e.message);
@@ -2222,7 +2225,9 @@ if("serviceWorker" in navigator&&location.protocol==="https:"){
   const calm=()=>!document.hidden&&!document.body.classList.contains("sheet-open")&&!document.querySelector(".pn-rec-on,.pn-mic-on")&&!(document.activeElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
   const fresh=()=>{if(newer&&calm()){newer=false;try{location.reload()}catch(e){}}};
   SWC.register("sw.js").then(reg=>{
-    const check=()=>{try{reg.update().catch(()=>{})}catch(e){}};
+    const check=()=>{try{reg.update().catch(()=>{})}catch(e){}
+      // the piano has its own home and its own versions: a new one there counts as a new version too
+      const was=pianoLen;if(was)pianoSize().then(n=>{if(n&&n!==was&&pianoLen===was){pianoLen=n;newer=true;if(!touched&&Date.now()-backAt<10000)fresh()}})};
     document.addEventListener("visibilitychange",()=>{if(document.hidden){awayAt=Date.now();return}
       const long=awayAt&&Date.now()-awayAt>=60000;awayAt=0;backAt=Date.now();touched=false;if(long){fresh();check()}});
     addEventListener("online",check);
