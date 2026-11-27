@@ -44,7 +44,11 @@
   const GUESS = [[/flower|rose|tulip|bouquet/i, "flower"], [/coffee|tea|latte|cuppa/i, "coffee"], [/cake|birthday|bake|cookie|muffin/i, "cake"], [/gift|present|surprise|buy her|buy him|jewel|ring|necklace/i, "gift"], [/book|read|story|study|learn|chinese|school|homework/i, "book"], [/music|song|piano|sing|cello|concert|dance/i, "music"], [/trip|travel|holiday|plane|fly|japan|weekend away|beach/i, "plane"], [/hug|cuddle|kiss|love you|hold hands/i, "hug"], [/dinner|cook|food|breakfast|lunch|meal|pizza|sushi|restaurant/i, "food"], [/sleep|nap|rest|lie in|sleep in|bed/i, "moon"], [/walk|run|steps|exercise|swim|gym|bike|park/i, "shoe"], [/win|trophy|goal|finish|pass|prize|medal/i, "trophy"], [/party|balloon|celebrat|friends/i, "balloon"], [/plant|garden|grow|tree/i, "plant"], [/spa|massage|bath|relax|nails|facial|foot rub/i, "spa"], [/photo|picture|selfie|album/i, "camera"], [/movie|film|cinema|tv|netflix|show/i, "film"], [/ice ?cream|dessert|chocolate|treat|sweet/i, "icecream"], [/clean|tidy|dishes|laundry|wash|vacuum|chores/i, "sparkle"], [/sun|outside|picnic|morning/i, "sun"], [/heart|love|smile|kind/i, "heart"]];
   const guessArt = (t, row) => { if (row === "bound") return /knock|door|room|privacy/i.test(t || "") ? "door" : /quiet|sleep|rest|night|nap/i.test(t || "") ? "moon" : "fence"; if (row === "never") return /forget|late|lie|break|storm/i.test(t || "") ? "storm" : /shout|yell|angry|rude/i.test(t || "") ? "angry" : "grr"; for (const [re, k] of GUESS) if (re.test(t || "")) return k; return "star"; };
   const artOf = k => ARTS[k] ? k : "star";
-  const artHtml = (k, cls) => { k = artOf(k); const a = ARTS[k]; return `<span class="hp-art a-${k} ${cls || ""}" style="--g1:${a[1][0]};--g2:${a[1][1]}">${svgw(a[2])}</span>`; };
+  /* "Make happiness more cute and good" (27 Nov 2026): most pictures get a little face (x, y, size in the picture) */
+  const FACEAT = { heart: [50, 50, 1.1], flower: [50, 37, .7], gift: [50, 68, .95], cake: [50, 73, .85], coffee: [46, 60, .95], food: [50, 66, .95], moon: [44, 50, .8], sun: [50, 50, .95], shoe: [62, 64, .6], trophy: [50, 36, .85], star: [50, 55, .85], balloon: [50, 38, .95], plant: [50, 77, .7], film: [50, 64, .8], icecream: [50, 38, .8], door: [50, 42, .7], sparkle: [50, 45, .6], book: [67, 52, .55], camera: [50, 70, .55] };
+  const kawaii = k => { const f = FACEAT[k]; if (!f) return ""; const [x, y, z] = f, e = 3.3 * z;
+    return `<g class="hp-face"><g class="ce"><ellipse cx="${x - 7 * z}" cy="${y}" rx="${e}" ry="${e * 1.18}" fill="#1E1A3C"/><ellipse cx="${x + 7 * z}" cy="${y}" rx="${e}" ry="${e * 1.18}" fill="#1E1A3C"/><circle cx="${x - 8 * z}" cy="${y - 1.5 * z}" r="${1.3 * z}" fill="#fff"/><circle cx="${x + 6 * z}" cy="${y - 1.5 * z}" r="${1.3 * z}" fill="#fff"/></g><ellipse cx="${x - 12.5 * z}" cy="${y + 5 * z}" rx="${3.6 * z}" ry="${2.2 * z}" fill="#FF6FA5" opacity=".7"/><ellipse cx="${x + 12.5 * z}" cy="${y + 5 * z}" rx="${3.6 * z}" ry="${2.2 * z}" fill="#FF6FA5" opacity=".7"/><path d="M${x - 3.4 * z} ${y + 4.6 * z}q${3.4 * z} ${3.6 * z} ${6.8 * z} 0" stroke="#1E1A3C" stroke-width="${2.2 * z}" fill="none" stroke-linecap="round"/></g>`; };
+  const artHtml = (k, cls) => { k = artOf(k); const a = ARTS[k]; return `<span class="hp-art a-${k} ${cls || ""}" style="--g1:${a[1][0]};--g2:${a[1][1]}">${svgw(a[2] + kawaii(k))}</span>`; };
 
   const ROWS = {
     like: { name: "Likes", head: n => "Things " + n + " loves", verb: "Did it!", sub: "Each time it's done, points again", pts: 15 },
@@ -107,6 +111,21 @@
     return `<section class="hp-sec"><div class="hp-h"><h2>Happy moments</h2><span class="sub">${list.length ? "Newest first" : "Every card that gets done lands here"}</span></div>
      <div class="hp-row" data-keepx="joy-${to}"><button class="hp-card add" data-act="hpLog"><span class="hp-art plus"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 30v40M30 50h40" stroke="currentColor" stroke-width="8" stroke-linecap="round"/></svg></span><b>Add a happy moment</b><span class="hp-meta"><span>Something that just happened</span></span></button>${list.map(momentCard).join("")}</div></section>`;
   }
+  /* the happy buddy beside the title: its face follows today's points for this person; a tap makes it dance and talk */
+  const BUDDY_SAY = ["You've got this! 💪", "Small things count the most 💗", "A hug is always a good idea 🤗", "Try a card from the row below ✨", "Every point is a smile 😊", "Let's make today lovely 🌈", "High five! ✋", "Kindness is a superpower 🦸"];
+  function buddy(to) {
+    const t = TODAY(), pts = C().filter(c => +c.to === +to && dayOf(c.at) === t).reduce((a, c) => a + (+c.pts || 0), 0);
+    const mood = pts > 0 ? "yay" : pts < 0 ? "oh" : "ok";
+    const mouth = mood === "yay" ? `<path d="M40 60q10 14 20 0z" fill="#E0365F" stroke="#4A1D3A" stroke-width="3" stroke-linejoin="round"/>` : mood === "oh" ? `<path d="M42 64q8-8 16 0" stroke="#4A1D3A" stroke-width="3.4" fill="none" stroke-linecap="round"/><path d="M72 30c4 6 4 10 0 12-4-2-4-6 0-12z" fill="#7FC8FF"/>` : `<path d="M43 60q7 7 14 0" stroke="#4A1D3A" stroke-width="3.4" fill="none" stroke-linecap="round"/>`;
+    const eyes = mood === "yay" ? `<path d="M30 48q6-8 12 0M58 48q6-8 12 0" stroke="#4A1D3A" stroke-width="3.6" fill="none" stroke-linecap="round"/>` : `<g class="ce"><ellipse cx="36" cy="48" rx="5.4" ry="6.6" fill="#4A1D3A"/><ellipse cx="64" cy="48" rx="5.4" ry="6.6" fill="#4A1D3A"/><circle cx="34" cy="45.5" r="2" fill="#fff"/><circle cx="62" cy="45.5" r="2" fill="#fff"/></g>`;
+    return `<button class="hp-buddy ${mood}" data-act="hpBuddy" aria-label="Happy buddy: ${mood === "yay" ? "happy today" : mood === "oh" ? "a bit worried today" : "ready to help"}"><svg viewBox="0 0 100 100" aria-hidden="true" class="hp-bsvg"><path d="M50 88C22 70 10 54 10 38c0-12 9-22 21-22 8 0 14 4 19 11 5-7 11-11 19-11 12 0 21 10 21 22 0 16-12 32-40 50z" fill="#FF8DB5" stroke="#4A1D3A" stroke-width="4" stroke-linejoin="round"/><path d="M22 34c2-7 7-10 12-10" stroke="#FFD0E2" stroke-width="5" fill="none" stroke-linecap="round"/>${eyes}<ellipse cx="26" cy="58" rx="6" ry="3.6" fill="#FF5C93" opacity=".7"/><ellipse cx="74" cy="58" rx="6" ry="3.6" fill="#FF5C93" opacity=".7"/>${mouth}</svg></button>`;
+  }
+  function buddyTap(b) {
+    const svgEl = b.querySelector("svg"); try { window.HHDance && HHDance.play(svgEl, { duration: 1100 }); HHDance.blink(svgEl); } catch (_) { }
+    const old = document.querySelector(".hp-say"); if (old) old.remove();
+    const say = document.createElement("span"); say.className = "hp-say"; say.setAttribute("role", "status"); say.textContent = BUDDY_SAY[Math.floor(Math.random() * BUDDY_SAY.length)];
+    b.parentNode.appendChild(say); setTimeout(() => say.remove(), 2600);
+  }
   function hero(to) {
     const me = viewId(), total = pointsTo(to), wk0 = addDays(TODAY(), -6), week = C().filter(c => +c.to === +to && dayOf(c.at) >= wk0);
     const days = [...Array(7)].map((_, i) => { const d = addDays(wk0, i); return { d, v: Math.max(0, week.filter(c => dayOf(c.at) === d).reduce((a, c) => a + (+c.pts || 0), 0)) }; });
@@ -114,7 +133,8 @@
     const mine = pointsBy(me), lv = level(mine), st = streak(me), pct = Math.round(100 * (mine - lv.from) / Math.max(1, lv.to - lv.from));
     return `<section class="hp-hero">
       <div class="hp-who" role="tablist">${order().map(id => `<button class="hp-person${id === +to ? " on" : ""}" role="tab" aria-selected="${id === +to}" data-act="hpWho" data-k="${id}">${dot(id)}<span>${esc(pname(id))}</span></button>`).join("")}</div>
-      <h2 class="hp-title">Making ${esc(pname(to))} happy</h2>
+      <div class="hp-titlerow"><h2 class="hp-title">Making ${esc(pname(to))} happy</h2>${buddy(to)}</div>
+      <div class="hp-floaty" aria-hidden="true">${["💗", "✨", "💖", "🌸", "💕", "⭐"].map((h, i) => `<i style="--i:${i}">${h}</i>`).join("")}</div>
       <div class="hp-score"><div><b class="num">${total}</b><span>happy points</span></div><div class="hp-week" aria-label="Points each day this week">${days.map(x => `<i style="height:${Math.round(8 + 52 * x.v / max)}%"${x.d === TODAY() ? ' class="today"' : ""} title="${esc(nice(x.d))}: ${x.v}"></i>`).join("")}</div></div>
       ${byWho.length ? `<div class="hp-by">${byWho.map(x => `<span>${dot(x.id)}${esc(pname(x.id))} <b class="num">${x.v}</b></span>`).join("")}</div>` : `<p class="sub hp-tip">Pick a card below, do it, then tap it and press the big button. Everyone who helps gets the points.</p>`}
       <div class="hp-level"><span class="hp-lvn">Lv ${lv.n}</span><div class="grow"><div class="row between"><b>${esc(pname(me))} · ${esc(lv.name)}</b><span class="sub num">${mine} pts${st ? " · 🔥 " + st + " day" + (st === 1 ? "" : "s") : ""}</span></div><div class="hp-bar"><i style="width:${pct}%"></i></div><span class="sub">${lv.to - mine} points to the next level</span></div></div>
@@ -293,6 +313,7 @@
       case "hpAgain": { const c0 = C().find(x => x.id === id); if (!c0) return; closeSheet(); const it = c0.item && H().find(x => x.id === c0.item); if (it && c0.row === "cross") return doItem(it.id, true); if (it && (it.row === "like" || it.row === "never" || it.row === "bound")) return doItem(it.id); return cheer({ to: +c0.to, item: c0.item || null, title: c0.title, row: c0.row || "joy", art: artOf(c0.art), pts: +c0.pts || 0 }); }
       case "hpDelMoment": { const c0 = C().find(x => x.id === id); if (!c0) return; return armDel(a, "m" + id, () => { const keep = Object.assign({}, c0); delete keep.id; ST.del("cheers", id); closeSheet(); toast("Moment removed", "Undo", () => ST.put("cheers", id, keep)); }); }
       case "hpLog": return logSheet();
+      case "hpBuddy": return buddyTap(a);
     }
   };
   window.hpFab = () => editSheet("like");

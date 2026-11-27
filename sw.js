@@ -1,10 +1,10 @@
 /* Happy Home service worker: makes the app open instantly and work offline. */
-const CACHE = "happyhome-v38";
+const CACHE = "happyhome-v39";
 const KEEP = "hh-keep-sounds-1"; // the piano recordings: they never change, so they stay across app updates
 const PCODE = "hh-piano-code-1"; // the piano's code when it comes from its own home: kept across app updates, refreshed whenever online
 // The piano's own home: the app learns its address only after sign-in, so here it is known only by its shape.
 const pianoUrl = u => /^https:\/\/[a-z0-9-]+\.(web\.app|firebaseapp\.com)$/.test(u.origin) && u.pathname.indexOf("/piano/") === 0;
-const FILES = ["./", "index.html", "app.css", "theme.css", "happy.css", "happy.js", "confetti.js", "push.js", "fonts/fredoka-latin.woff2", "fonts/nunito-latin.woff2", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
+const FILES = ["./", "index.html", "app.css", "theme.css", "happy.css", "happy.js", "cute.js", "confetti.js", "push.js", "fonts/fredoka-latin.woff2", "fonts/nunito-latin.woff2", "app.js", "store.js", "codes.js", "fb.js", "qr.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 const PIANO = ["C4", "Ds4", "Fs4", "A4", "C5", "Ds5", "Fs5", "A5", "C6", "A3", "Fs3"];
 // The piano recordings most songs use, fetched from the piano's home once the app says where that is.
