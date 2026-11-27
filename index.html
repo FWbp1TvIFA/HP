@@ -13,6 +13,7 @@
 <link rel="preload" href="fonts/nunito-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="happy.css">
 <style>html{color-scheme:light dark}body{margin:0}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}img{max-width:100%}[hidden]{display:none!important}</style>
 <style id="hh-only">/* Show only Happy Home's own screens: hide anything a web host adds over the tab bar. */
 body>:not(.wrap):not(.tabs):not(#sheetHost):not(#toast):not(script):not(style):not(link):not(noscript),html>:not(head):not(body){display:none!important}</style>
@@ -33,7 +34,7 @@ watch(document.documentElement);document.addEventListener("DOMContentLoaded",fun
 <nav class="tabs"><div class="in" style="grid-template-columns:repeat(6,1fr)">
   <button class="tab" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
   <button class="tab" data-tab="piano"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 13v7M15 13v7"/><path d="M7.5 4v9h3V4M13.5 4v9h3V4" fill="currentColor"/></svg>Piano</button>
-  <button class="tab" data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 7 2 2 4-4M4 17l2 2 4-4M14 7h7M14 17h7"/></svg>Lists</button>
+  <button class="tab" data-tab="happy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5C6.2 16.6 3 13.4 3 9.6 3 7 5 5 7.5 5c1.9 0 3.4 1 4.5 2.6C13.1 6 14.6 5 16.5 5 19 5 21 7 21 9.6c0 3.8-3.2 7-9 10.9z"/></svg>Happy</button>
   <button class="fab" id="fab" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
   <button class="tab" id="tabSlot" data-tab="calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</button>
   <button class="tab" data-tab="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>More</button>
@@ -49,5 +50,6 @@ watch(document.documentElement);document.addEventListener("DOMContentLoaded",fun
 <script src="codes.js"></script>
 <script src="push.js"></script>
 <script src="app.js"></script>
+<script src="happy.js"></script>
 <script src="confetti.js"></script>
 </body></html>

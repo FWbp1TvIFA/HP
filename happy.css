@@ -1,0 +1,147 @@
+/* Happy page: rows of big picture cards that swipe sideways, a points board, and the celebration */
+html[data-page="happy"],.tab[data-tab="happy"],.tile[data-go="happy"],[data-c="happy"]{--pop:var(--red);--tone:var(--red-t)}
+html[data-page="happy"]{--emoji:"💖"}
+.hp-page{display:flex;flex-direction:column;gap:18px}
+.hp-hero{background:var(--surface);border-radius:var(--radius);padding:14px 14px 16px;box-shadow:var(--shadow);border:2px solid color-mix(in srgb,var(--pop) 45%,transparent)}
+.hp-who{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -2px 10px;padding:2px}
+.hp-who::-webkit-scrollbar{display:none}
+.hp-person{display:flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:5px 14px 5px 5px;background:var(--sunk,var(--sunk0));font:600 1rem var(--display);color:var(--fg);white-space:nowrap;min-height:44px}
+.hp-person.on{background:var(--pop);color:var(--ink);box-shadow:0 3px 0 color-mix(in srgb,var(--pop) 60%,#000)}
+.hp-person .dot{width:34px;height:34px;font-size:.95rem}
+.hp-title{font:700 1.45rem/1.15 var(--display);margin:2px 0 10px}
+.hp-score{display:flex;align-items:flex-end;justify-content:space-between;gap:14px}
+.hp-score>div:first-child{display:flex;flex-direction:column}
+.hp-score b{font:700 2.6rem/1 var(--display);color:var(--tone)}
+.hp-score span{color:var(--muted);font-weight:600}
+.hp-week{display:flex;align-items:flex-end;gap:5px;height:54px;flex:0 0 auto}
+.hp-week i{display:block;width:11px;border-radius:6px;background:color-mix(in srgb,var(--pop) 55%,transparent)}
+.hp-week i.today{background:var(--pop)}
+.hp-by{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px}
+.hp-by>span{display:flex;align-items:center;gap:6px;font-weight:600}
+.hp-by .dot{width:24px;height:24px;font-size:.7rem}
+.hp-tip{margin:10px 0 0}
+.hp-level{display:flex;gap:12px;align-items:center;margin-top:14px;padding:10px 12px;border-radius:16px;background:color-mix(in srgb,var(--amber) 22%,var(--surface))}
+.hp-lvn{flex:0 0 auto;display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:var(--amber);color:var(--ink);font:700 1rem var(--display);box-shadow:0 3px 0 color-mix(in srgb,var(--amber) 60%,#000)}
+.hp-level .grow{min-width:0}
+.hp-level b{font-family:var(--display)}
+.hp-bar{height:10px;border-radius:6px;background:color-mix(in srgb,var(--amber) 30%,var(--sunk0));margin:6px 0 3px;overflow:hidden}
+.hp-bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--amber),var(--orange))}
+.hp-sec{display:flex;flex-direction:column;gap:8px}
+.hp-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.hp-h h2{font:700 1.25rem var(--display);margin:0;min-width:0}
+.hp-h .sub{min-width:0;flex:0 1 auto;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:48%}
+/* the sideways rows: native momentum scrolling, a gentle snap, nothing that would slow a swipe down */
+.hp-row{display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:none;
+  margin:0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:4px max(16px,env(safe-area-inset-left,0px)) 10px;scroll-padding-inline:max(16px,env(safe-area-inset-left,0px))}
+.hp-row::-webkit-scrollbar{display:none}
+.hp-card{flex:0 0 auto;width:min(42vw,176px);scroll-snap-align:start;display:flex;flex-direction:column;align-items:stretch;gap:6px;border:0;background:none;padding:0;text-align:left;color:var(--fg);position:relative;-webkit-tap-highlight-color:transparent}
+.hp-card>b{font:600 1rem/1.2 var(--display);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.4em}
+.hp-meta{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.82rem;min-width:0}
+.hp-meta>span:last-child:not(.hp-pts){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp-pts{flex:0 0 auto;background:color-mix(in srgb,var(--amber) 70%,#fff);color:var(--ink);font-weight:800;border-radius:999px;padding:1px 8px}
+.hp-art{display:block;aspect-ratio:1;border-radius:20px;background:linear-gradient(145deg,var(--g1),var(--g2));box-shadow:0 4px 0 color-mix(in srgb,var(--g2) 60%,#000);overflow:hidden}
+.hp-art svg{display:block;width:100%;height:100%}
+.hp-card:active .hp-art{transform:translateY(2px);box-shadow:0 2px 0 color-mix(in srgb,var(--g2) 60%,#000)}
+.hp-card.done .hp-art{filter:saturate(.75)}
+.hp-tick{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:var(--ink);font-weight:900;box-shadow:0 2px 0 rgba(0,0,0,.25)}
+.hp-card.add .hp-art{background:var(--sunk,var(--sunk0));box-shadow:none;border:3px dashed color-mix(in srgb,var(--pop) 70%,transparent);color:var(--tone);display:grid;place-items:center}
+.hp-card.add .hp-art svg{width:46%;height:46%}
+.hp-card.idea .hp-art{opacity:.62;box-shadow:none;outline:3px dashed color-mix(in srgb,var(--g2) 80%,#fff);outline-offset:-3px}
+.hp-card.idea>b{color:var(--muted)}
+/* sheets */
+.hp-big{display:flex;justify-content:center;margin:4px 0 2px}
+.hp-big .hp-art{width:min(62vw,230px)}
+.hp-big.small .hp-art{width:min(36vw,140px)}
+.hp-sheet-t{text-align:center;font:700 1.5rem var(--display);margin:4px 0 0}
+.hp-c{text-align:center;margin:0}
+.hp-note{text-align:center;margin:0;font-style:italic}
+.hp-go{font:700 1.2rem var(--display);padding:16px;background:var(--pop);color:var(--ink);box-shadow:0 4px 0 color-mix(in srgb,var(--pop) 60%,#000)}
+.hp-del.arm{background:var(--bad-fill);color:#fff;border-color:transparent}
+.hp-pics{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:8px;margin-top:6px}
+.hp-pics button{border:3px solid transparent;border-radius:16px;padding:0;background:none}
+.hp-pics button.on{border-color:var(--fg)}
+.hp-pics .hp-art{border-radius:12px;box-shadow:none}
+.hp-ptschips{flex-wrap:wrap;overflow:visible;align-items:center}
+.hp-ptschips .chip.on{background:var(--pop);color:var(--ink);font-weight:700}
+.hp-ptschips input{width:84px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:inherit}
+.fld>span{display:block;font-weight:600;margin-bottom:4px}
+/* the celebration */
+.hp-cele{position:fixed;inset:0;z-index:90;display:grid;place-items:center;background:color-mix(in srgb,var(--ink) 55%,transparent);animation:hpIn .25s ease both;-webkit-tap-highlight-color:transparent}
+.hp-cele.out{animation:hpOut .25s ease both}
+.hp-cele canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.hp-cele-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:22px 22px 16px;margin:0 20px;max-width:360px;border-radius:30px;background:var(--surface);color:var(--fg);box-shadow:0 8px 0 color-mix(in srgb,var(--pop) 70%,#000);animation:hpPop .5s cubic-bezier(.2,1.6,.4,1) both}
+.hp-cele .hp-art.huge{width:min(54vw,210px)}
+.hp-plus{font:700 3.2rem/1 var(--display);color:var(--tone);margin-top:6px}
+.hp-words{font:700 1.5rem var(--display);margin:0}
+.hp-sm{margin:0;color:var(--muted);font-weight:600}
+.hp-up{margin:4px 0 0;padding:6px 12px;border-radius:999px;background:var(--amber);color:var(--ink);font:700 1rem var(--display);animation:hpPop .5s .5s cubic-bezier(.2,1.6,.4,1) both}
+.hp-tapclose{font-size:.78rem;color:var(--muted);margin-top:4px}
+@keyframes hpIn{from{opacity:0}}@keyframes hpOut{to{opacity:0}}
+@keyframes hpPop{from{transform:scale(.4);opacity:0}}
+/* each picture's own little cartoon, only while it is "live" (in a sheet or the celebration) */
+.hp-art.live .hb{animation:hpBeat 1s ease-in-out infinite;transform-origin:50px 50px}
+.hp-art.live .tw{animation:hpTw 1.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.hp-art.live .tw.d2{animation-delay:.5s}.hp-art.live .tw.d3{animation-delay:.9s}
+.hp-art.live .spin{animation:hpSpin 6s linear infinite}
+.hp-art.live .spin2{animation:hpStar 2.4s ease-in-out infinite}
+.hp-art.live .lid{animation:hpLid 1.6s ease-in-out infinite;transform-origin:50px 40px}
+.hp-art.live .flk{animation:hpFlk .5s ease-in-out infinite alternate}
+.hp-art.live .steam{animation:hpSteam 1.8s ease-in-out infinite}
+.hp-art.live .flip{animation:hpFlip 2.2s ease-in-out infinite}
+.hp-art.live .float,.hp-art.live .floaty{animation:hpFloat 2s ease-in-out infinite}
+.hp-art.live .fly{animation:hpFly 2.4s ease-in-out infinite}
+.hp-art.live .hugl{animation:hpHugL 1.6s ease-in-out infinite}.hp-art.live .hugr{animation:hpHugR 1.6s ease-in-out infinite}
+.hp-art.live .bob{animation:hpFloat 3s ease-in-out infinite}
+.hp-art.live .zz{animation:hpZz 2s ease-in-out infinite}
+.hp-art.live .bounce{animation:hpBounce .7s ease-in-out infinite}
+.hp-art.live .dash{animation:hpDash .7s linear infinite}
+.hp-art.live .shine{animation:hpShine 1.8s ease-in-out infinite}
+.hp-art.live .grow{animation:hpGrow 2.4s ease-in-out infinite}
+.hp-art.live .bubble{animation:hpBubble 2.2s ease-in infinite}
+.hp-art.live .flash{animation:hpFlash 1.4s steps(1) infinite}
+.hp-art.live .pop{animation:hpPopc .9s ease-in-out infinite}
+.hp-art.live .wobble{animation:hpWob 1.4s ease-in-out infinite}
+@keyframes hpBeat{0%,100%{transform:scale(1)}15%{transform:scale(1.12)}30%{transform:scale(.97)}45%{transform:scale(1.08)}}
+@keyframes hpTw{0%,100%{transform:scale(.4);opacity:.4}50%{transform:scale(1.3);opacity:1}}
+@keyframes hpSpin{to{transform:rotate(360deg)}}
+@keyframes hpStar{0%,100%{transform:rotate(-8deg) scale(1)}50%{transform:rotate(8deg) scale(1.1)}}
+@keyframes hpLid{0%,40%,100%{transform:none}55%{transform:translateY(-12px) rotate(-8deg)}70%{transform:translateY(-4px) rotate(4deg)}}
+@keyframes hpFlk{from{transform:scale(.85,1.05) rotate(-4deg)}to{transform:scale(1.1,.95) rotate(4deg)}}
+@keyframes hpSteam{0%{transform:translateY(6px);opacity:0}40%{opacity:1}100%{transform:translateY(-8px);opacity:0}}
+@keyframes hpFlip{0%,30%{transform:scaleX(1)}55%,75%{transform:scaleX(-1)}100%{transform:scaleX(1)}}
+@keyframes hpFloat{0%,100%{transform:translateY(3px)}50%{transform:translateY(-5px)}}
+@keyframes hpFly{0%,100%{transform:translate(-4px,4px) rotate(-3deg)}50%{transform:translate(6px,-6px) rotate(3deg)}}
+@keyframes hpHugL{0%,100%{transform:none}50%{transform:translateX(5px) rotate(6deg)}}
+@keyframes hpHugR{0%,100%{transform:none}50%{transform:translateX(-5px) rotate(-6deg)}}
+@keyframes hpZz{0%{transform:translate(0,4px);opacity:0}50%{opacity:1}100%{transform:translate(6px,-8px);opacity:0}}
+@keyframes hpBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes hpDash{from{transform:translateX(6px);opacity:1}to{transform:translateX(-8px);opacity:0}}
+@keyframes hpShine{0%,100%{transform:translateX(-6px);opacity:0}50%{transform:translateX(22px);opacity:.9}}
+@keyframes hpGrow{0%,100%{transform:scale(.9)}50%{transform:scale(1.08)}}
+@keyframes hpBubble{0%{transform:translateY(14px);opacity:0}30%{opacity:1}100%{transform:translateY(-14px);opacity:0}}
+@keyframes hpFlash{0%,100%{opacity:.25}50%{opacity:1}}
+@keyframes hpPopc{0%,100%{transform:translateY(2px)}50%{transform:translateY(-6px)}}
+@keyframes hpWob{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+@media (prefers-reduced-motion: reduce){.hp-art.live *{animation:none!important}.hp-cele,.hp-cele-card,.hp-up{animation:none}}
+/* Never do and Boundaries */
+.hp-pts.neg{background:#E0101E;color:#fff}
+.hp-pts.both{background:linear-gradient(90deg,color-mix(in srgb,var(--amber) 70%,#fff) 50%,#FFB3B8 50%)}
+.hp-card.never .hp-art{box-shadow:0 4px 0 #7A0510}
+.hp-go.bad{background:#E0101E;color:#fff;box-shadow:0 4px 0 #7A0510}
+.hp-rowchips{flex-wrap:wrap;overflow:visible}
+.hp-rowchips .chip.on{background:var(--pop);color:var(--ink);font-weight:700}
+.hp-cele.grump{background:color-mix(in srgb,#E0101E 62%,transparent);animation:hpIn .2s ease both,hpRedPulse .9s ease-in-out 3}
+.hp-cele.grump .hp-cele-card{box-shadow:0 8px 0 #7A0510;border:3px solid #E0101E;animation:hpPop .45s cubic-bezier(.2,1.6,.4,1) both,hpShakeCard .5s .45s ease-in-out 2}
+.hp-cele.grump .hp-plus{color:#E0101E}
+.hp-cele.grump .hp-words{color:#C3101A}
+.hp-faces{display:flex;gap:8px;margin-top:-4px}
+.hp-faces .hp-art{width:44px;box-shadow:none;border-radius:12px}
+.hp-art.live .shake{animation:hpShake .35s ease-in-out infinite}
+.hp-art.live .puff{animation:hpPuff 1s ease-out infinite}
+.hp-art.live .knock{animation:hpKnock .9s ease-in-out infinite}
+@keyframes hpShake{0%,100%{transform:rotate(0)}25%{transform:rotate(-6deg) translateX(-2px)}75%{transform:rotate(6deg) translateX(2px)}}
+@keyframes hpPuff{0%{transform:translateY(4px);opacity:0}30%{opacity:1}100%{transform:translateY(-8px) scale(1.2);opacity:0}}
+@keyframes hpKnock{0%,60%,100%{opacity:0;transform:translateX(-4px)}20%,40%{opacity:1;transform:none}}
+@keyframes hpRedPulse{50%{background:color-mix(in srgb,#FF0000 75%,transparent)}}
+@keyframes hpShakeCard{0%,100%{transform:none}20%{transform:translateX(-10px) rotate(-2deg)}40%{transform:translateX(10px) rotate(2deg)}60%{transform:translateX(-7px)}80%{transform:translateX(7px)}}
+@media (prefers-reduced-motion: reduce){.hp-cele.grump,.hp-cele.grump .hp-cele-card{animation:none}}
